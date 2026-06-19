@@ -308,6 +308,15 @@ def _validate_port_qubit_count(
     kind: str,
 ) -> None:
     """Raise if the port declares a different number of qubits than the code's ``n``."""
+    if port.code_name not in codes:
+        known = sorted(codes)
+        known_str = ", ".join(repr(name) for name in known) if known else "(none)"
+        raise ValueError(
+            f"{kind} port in GADGET {gadget_name!r} references undefined "
+            f"CODE {port.code_name!r}. Known CODE names: {known_str}.\n"
+            f"  Hint: define a 'CODE {port.code_name} [[n,k,d]] {{ ... }}' "
+            f"block, or change the {kind} port to reference an existing code."
+        )
     code = codes[port.code_name]
     if len(port.qubit_indices) != code.n:
         raise ValueError(
@@ -350,7 +359,24 @@ def _build_jit_gadget_type(
     gtype: int,
     ptype_of_code: dict[str, int],
     codes: dict[str, CodeDefinition],
+    *,
+    check_override: tuple[
+        list[tuple[frozenset[int], bool]],
+        list[tuple[frozenset[int], bool]],
+    ]
+    | None = None,
 ) -> jit_pb.JitGadgetType:
+    """Build a ``JitGadgetType`` from a ``GadgetDefinition``.
+
+    When *check_override* is provided as ``(finished, unfinished)``, it
+    replaces what :func:`resolve_gadget_checks` would derive from the
+    gadget body.  The propagation matrices and noise-derived ERROR
+    rows are then computed against this externally supplied check basis
+    so all downstream check indices remain self-consistent.  This is
+    used by the ``@REPROPAGATE`` compose path to graft the merge()
+    pipeline's check structure onto a flat-circuit propagation /
+    error derivation.
+    """
     input_ports = gadget.input_ports
     output_ports = gadget.output_ports
 
@@ -402,9 +428,12 @@ def _build_jit_gadget_type(
         pb.GadgetType.Port(ptype=ptype_of_code[p.code_name]) for p in output_ports
     ]
 
-    check_result = resolve_gadget_checks(gadget, codes)
-    finished = check_result.finished
-    unfinished = check_result.unfinished
+    if check_override is not None:
+        finished, unfinished = check_override
+    else:
+        check_result = resolve_gadget_checks(gadget, codes)
+        finished = check_result.finished
+        unfinished = check_result.unfinished
     total = (
         input_virtual_count
         + internal_count
