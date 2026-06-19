@@ -2150,6 +2150,44 @@ impl CliffordUnitary {
             preimage_phase_exponents: phases,
         }
     }
+
+    /// Construct a `CliffordUnitary` from a symplectic matrix.
+    ///
+    /// The matrix must be square with even dimension `2n × 2n`.
+    /// Row `i` (for `i` in `0..n`) encodes the preimage of `X_i`:
+    /// columns `0..n` are the X bits, columns `n..2n` are the Z bits.
+    /// Row `n+i` (for `i` in `0..n`) encodes the preimage of `Z_i`:
+    /// columns `0..n` are the X bits, columns `n..2n` are the Z bits.
+    /// All phase exponents are set to `0`.
+    ///
+    /// Returns `None` if the dimensions are invalid or the matrix does not
+    /// represent a valid symplectic transformation.
+    #[must_use]
+    pub fn from_symplectic_matrix(matrix: &BitMatrix) -> Option<Self> {
+        let (rows, cols) = matrix.shape();
+        if rows != cols || rows % 2 != 0 {
+            return None;
+        }
+        let n = rows / 2;
+
+        let row_to_pauli = |row_index: usize| -> DensePauli {
+            let row = matrix.row(row_index);
+            let mut x_bits = AlignedBitVec::zeros(n);
+            let mut z_bits = AlignedBitVec::zeros(n);
+            for j in 0..n {
+                x_bits.assign_index(j, row.index(j));
+                z_bits.assign_index(j, row.index(n + j));
+            }
+            DensePauli::from_bits(x_bits, z_bits, 0u8)
+        };
+
+        let interleaved: Vec<DensePauli> = (0..n)
+            .flat_map(|i| [row_to_pauli(i), row_to_pauli(n + i)])
+            .collect();
+
+        let clifford = Self::from_preimages(&interleaved);
+        if clifford.is_valid() { Some(clifford) } else { None }
+    }
 }
 
 impl CliffordUnitaryModPauli {
