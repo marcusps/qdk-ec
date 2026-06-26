@@ -150,7 +150,10 @@ def _pauli_string_for_pair(
 
 
 def enumerate_noise_mechanisms(
-    instr: Instruction, num_qubits: int
+    instr: Instruction,
+    num_qubits: int,
+    *,
+    else_chain_remaining: float = 1.0,
 ) -> list[tuple[stim.PauliString, float]]:
     """Decompose a stim noise instruction into independent Pauli mechanisms.
 
@@ -160,10 +163,18 @@ def enumerate_noise_mechanisms(
     and zero-probability mechanisms are dropped.
 
     Notes:
-    - ``ELSE_CORRELATED_ERROR`` is treated as if it were a fresh
-      ``CORRELATED_ERROR`` with the literal probability (the conditional
-      structure of stim's else-chain is ignored — this is the standard
-      independent-error approximation that JIT decoders use).
+    - ``ELSE_CORRELATED_ERROR(p)`` is conditional on the preceding
+      ``CORRELATED_ERROR`` / ``ELSE_CORRELATED_ERROR`` chain not having
+      fired. The caller passes ``else_chain_remaining`` — the probability
+      that no error in the current else-chain has fired so far — and the
+      returned marginal probability is ``p * else_chain_remaining``.
+      ``CORRELATED_ERROR`` / ``E`` start a new chain and ignore
+      ``else_chain_remaining`` (their marginal is the literal ``p``).
+    - ``PAULI_CHANNEL_1`` / ``PAULI_CHANNEL_2`` arguments are taken
+      directly as independent mechanism probabilities. A general Pauli
+      channel has no exact independent-mechanism representation, so this
+      is the same independent-error approximation (unlike
+      ``DEPOLARIZE1/2``, which are converted exactly).
     - ``I_ERROR`` / ``II_ERROR`` produce no mechanisms.
     """
     name = instr.name.upper()
@@ -190,7 +201,13 @@ def enumerate_noise_mechanisms(
     if name == "DEPOLARIZE1":
         if len(args) != 1:
             raise ValueError("DEPOLARIZE1 expects exactly one probability argument")
-        prob = float(args[0]) / 3.0
+        p = float(args[0])
+        if p > 0.75:
+            raise ValueError("DEPOLARIZE1 probability must be at most 3/4")
+        # Exact conversion to independent mechanisms: three mechanisms of
+        # probability q compose (by XOR in the Pauli group) to a depolarizing
+        # channel with per-Pauli probability q(1-q); solve q(1-q) = p/3.
+        prob = (1.0 - (1.0 - 4.0 * p / 3.0) ** 0.5) / 2.0
         if prob <= 0:
             return []
         out: list[tuple[stim.PauliString, float]] = []
@@ -204,7 +221,12 @@ def enumerate_noise_mechanisms(
             raise ValueError("DEPOLARIZE2 expects exactly one probability argument")
         if len(qubits) % 2 != 0:
             raise ValueError("DEPOLARIZE2 requires an even number of qubit targets")
-        prob = float(args[0]) / 15.0
+        p = float(args[0])
+        if p > 15.0 / 16.0:
+            raise ValueError("DEPOLARIZE2 probability must be at most 15/16")
+        # Exact conversion (same identity as DEPOLARIZE1, over the 15
+        # non-identity two-qubit Paulis): solve via the n=2 Walsh inversion.
+        prob = (1.0 - (1.0 - 16.0 * p / 15.0) ** 0.125) / 2.0
         if prob <= 0:
             return []
         out = []
@@ -276,6 +298,8 @@ def enumerate_noise_mechanisms(
         if len(args) != 1:
             raise ValueError(f"{name} expects exactly one probability argument")
         prob = float(args[0])
+        if name == "ELSE_CORRELATED_ERROR":
+            prob *= else_chain_remaining
         if prob <= 0:
             return []
         # Targets are Pauli targets like X3 Y4 Z5 (parsed as PauliTarget).
@@ -911,10 +935,27 @@ def iter_noise_errors_with_origin(
         if row in pc_logical_rows:
             pc_logical_rows[row].add(col)
 
+    else_chain_remaining = 1.0
     for i, stmt in enumerate(body_flat):
         if not isinstance(stmt, Instruction):
+            else_chain_remaining = 1.0
             continue
         name = stmt.name.upper()
+
+        # Stim's correlated-error else-chain semantics: ELSE_CORRELATED_ERROR(p)
+        # fires with marginal probability ``p * remaining``, where ``remaining``
+        # is the probability that no error in the current chain has fired yet.
+        # CORRELATED_ERROR / E start a new chain; any other instruction breaks
+        # the chain.
+        current_else_remaining = else_chain_remaining
+        if name in {"E", "CORRELATED_ERROR"}:
+            else_chain_remaining = max(0.0, 1.0 - float(stmt.arguments[0]))
+        elif name == "ELSE_CORRELATED_ERROR":
+            else_chain_remaining = max(
+                0.0, current_else_remaining * (1.0 - float(stmt.arguments[0]))
+            )
+        else:
+            else_chain_remaining = 1.0
 
         # ── Pure noise instructions ──────────────────────────────────
         if name in NOISE_INSTRUCTIONS:
@@ -923,7 +964,10 @@ def iter_noise_errors_with_origin(
                 if i + 1 < len(orig_to_decomposed)
                 else len(decomposed.instructions)
             )
-            for pauli, prob in enumerate_noise_mechanisms(stmt, num_qubits):
+            mechanisms = enumerate_noise_mechanisms(
+                stmt, num_qubits, else_chain_remaining=current_else_remaining
+            )
+            for pauli, prob in mechanisms:
                 result = walk_pauli_forward(
                     decomposed,
                     start_index=walk_start,
@@ -1509,6 +1553,26 @@ def _propagation_row_vector(
     return v
 
 
+def _repropagate_hint(gadget_name: str) -> str:
+    """Suffix appended to PROPAGATE-mismatch errors.
+
+    A PROPAGATE row that disagrees with the canonical flow-derived
+    value typically means the gadget came from a COMPOSE block whose
+    matrix-composed propagation cannot be expressed as circuit flow
+    (e.g. teleportation-style conditional logical correction).  The
+    fix is to add ``@REPROPAGATE`` to the COMPOSE so it is built via
+    the flat-circuit pipeline.
+    """
+    return (
+        f"\n  Hint: if {gadget_name!r} was generated by 'deq annotate' "
+        f"from a COMPOSE block, add the @REPROPAGATE decorator to that "
+        f"COMPOSE.  @REPROPAGATE switches the COMPOSE build to the "
+        f"flat-circuit pipeline so its propagation matrices come from "
+        f"actual circuit flow on the inlined body, not from sub-gadget "
+        f"matrix composition."
+    )
+
+
 def _validate_and_apply_propagations(
     *,
     gadget_name: str,
@@ -1607,7 +1671,8 @@ def _validate_and_apply_propagations(
                 f"in GADGET {gadget_name!r}: PROPAGATE for output row {row} "
                 f"({resolved.statement.target}) does not match the unique "
                 f"flow-derived value and there is no basis-freedom available "
-                f"to absorb the difference"
+                f"to absorb the difference."
+                f"{_repropagate_hint(gadget_name)}"
             )
         alpha = solve(basis_matrix, delta)
         if alpha is None:
@@ -1617,7 +1682,8 @@ def _validate_and_apply_propagations(
                 f"basis-freedom span of that row; the spec differs from the "
                 f"canonical flow-derived value by {delta.weight} bit(s) "
                 f"that cannot be expressed as any XOR of input-stabilizers, "
-                f"output-stabilizer joint rows, or finished-check parities"
+                f"output-stabilizer joint rows, or finished-check parities."
+                f"{_repropagate_hint(gadget_name)}"
             )
 
         cp_entries -= {(row, c) for c in flow_cp_cols}

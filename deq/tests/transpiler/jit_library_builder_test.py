@@ -180,6 +180,73 @@ def test_compose_fan_out_consumes_all_dangling_outputs() -> None:
     assert len(dynamic1.base.outputs) == 3
 
 
+def test_compose_rejects_duplicate_output_wire() -> None:
+    """A COMPOSE that binds the same wire to multiple OUTPUT ports must
+    raise a structured ``ValueError`` rather than panicking inside the
+    Rust JIT compiler. Regression test for the duplicate-OUTPUT panic in
+    ``deq_runtime/src/jit/jit_compiler.rs``.
+    """
+    source = """
+    CODE Rep [[3,1,3]] {
+        LOGICAL X0*X1*X2 Z0
+        STABILIZER Z0*Z1 Z1*Z2
+    }
+
+    GADGET Id {
+        INPUT Rep 0 1 2
+        OUTPUT Rep 0 1 2
+    }
+
+    GADGET PrepareZ {
+        R 0 1 2
+        OUTPUT Rep 0 1 2
+    }
+
+    COMPOSE Chain {
+        INPUT Rep 0
+        Id 0
+        OUTPUT Rep 0
+        OUTPUT Rep 0
+    }
+    """
+    with pytest.raises(ValueError) as exc_info:
+        build_jit_library(parse(source))
+    msg = str(exc_info.value)
+    assert "COMPOSE 'Chain'" in msg
+    assert "OUTPUT" in msg
+    assert "wire 0" in msg
+
+
+def test_compose_rejects_duplicate_input_wire() -> None:
+    """A COMPOSE that binds the same wire to multiple INPUT ports must
+    raise a structured ``ValueError``.
+    """
+    source = """
+    CODE Rep [[3,1,3]] {
+        LOGICAL X0*X1*X2 Z0
+        STABILIZER Z0*Z1 Z1*Z2
+    }
+
+    GADGET Id {
+        INPUT Rep 0 1 2
+        OUTPUT Rep 0 1 2
+    }
+
+    COMPOSE Chain {
+        INPUT Rep 0
+        INPUT Rep 0
+        Id 0
+        OUTPUT Rep 0
+    }
+    """
+    with pytest.raises(ValueError) as exc_info:
+        build_jit_library(parse(source))
+    msg = str(exc_info.value)
+    assert "COMPOSE 'Chain'" in msg
+    assert "INPUT" in msg
+    assert "wire 0" in msg
+
+
 def test_compose_rejects_dangling_outputs() -> None:
     source = """
     CODE Rep [[3,1,3]] {
@@ -235,6 +302,41 @@ def test_compose_rejects_output_for_consumed_wire() -> None:
     msg = str(exc_info.value)
     assert "COMPOSE 'Closed'" in msg
     assert "Declared OUTPUT wires" in msg
+    assert "wire 0" in msg
+
+
+def test_compose_rejects_dangling_input_overwritten_by_gadget() -> None:
+    """Regression test for the dangling-INPUT hang (issue #67).
+
+    A COMPOSE that takes an INPUT wire which is then immediately
+    overwritten by a sub-gadget that does not consume it must be
+    rejected with a clear error.  Without this validation the JIT
+    compiler used to block forever inside ``static_jit_compile`` waiting
+    for a consumer of the input mock's output port (uninterruptible by
+    Ctrl+C — a single-line bad input produced an unkillable hang).
+    """
+    source = """
+    CODE Rep [[3,1,3]] {
+        LOGICAL X0*X1*X2 Z0
+        STABILIZER Z0*Z1 Z1*Z2
+    }
+
+    GADGET G {
+        OUTPUT Rep 0 1 2
+    }
+
+    COMPOSE C {
+        INPUT Rep 0
+        G 0
+        OUTPUT Rep 0
+    }
+    """
+    with pytest.raises(ValueError) as exc_info:
+        build_jit_library(parse(source))
+    msg = str(exc_info.value)
+    assert "COMPOSE 'C'" in msg
+    assert "Dangling wires" in msg
+    assert "COMPOSE INPUT" in msg
     assert "wire 0" in msg
 
 
@@ -713,7 +815,9 @@ def test_compose_rejects_non_gtype_decorator() -> None:
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with pytest.raises(ValueError, match="only @GTYPE is supported"):
+        with pytest.raises(
+            ValueError, match="only @GTYPE and @REPROPAGATE are supported"
+        ):
             build_jit_library(parse(source))
 
 
@@ -809,7 +913,9 @@ def test_unrecognized_compose_decorator_raises() -> None:
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with pytest.raises(ValueError, match="only @GTYPE is supported"):
+        with pytest.raises(
+            ValueError, match="only @GTYPE and @REPROPAGATE are supported"
+        ):
             build_jit_library(parse(source))
 
 
@@ -1001,3 +1107,135 @@ def test_conditional_invalid_logical_index() -> None:
     """
     with pytest.raises(ValueError, match="LX5 out of range"):
         build_jit_library(parse(source))
+
+
+# ── build_jit_program ──────────────────────────────────────────────────────
+
+
+def test_build_jit_program_populates_type_metadata_only() -> None:
+    """``build_jit_program`` produces the type / measurement / readout
+    metadata downstream PROGRAM compilation needs, and *omits* every
+    decoder-side field (checks, errors, propagation matrices)."""
+    from deq.transpiler.jit_library_builder import build_jit_program
+
+    source = """
+    CODE Rep [[3,1,3]] {
+        LOGICAL X0*X1*X2 Z0*Z1*Z2
+        STABILIZER Z0*Z1 Z1*Z2
+    }
+    GADGET PrepareZ {
+        R 0 1 2
+        X_ERROR(0.01) 0 1 2
+        OUTPUT Rep 0 1 2
+    }
+    GADGET MeasureZ {
+        INPUT Rep 0 1 2
+        M(0.01) 0 1 2
+        READOUT rec[-3] rec[-2] rec[-1]
+    }
+    """
+    qfile = parse(source)
+    full = build_jit_library(qfile)
+    program_lib = build_jit_program(qfile)
+
+    full_by_name = {gt.base.name: gt for gt in full.gadget_types}
+    program_by_name = {gt.base.name: gt for gt in program_lib.gadget_types}
+    assert program_by_name.keys() == full_by_name.keys()
+
+    for name, program_gt in program_by_name.items():
+        full_gt = full_by_name[name]
+        assert program_gt.base.gtype == full_gt.base.gtype
+        assert len(program_gt.base.inputs) == len(full_gt.base.inputs)
+        assert len(program_gt.base.outputs) == len(full_gt.base.outputs)
+        assert len(program_gt.base.measurements) == len(full_gt.base.measurements)
+        assert len(program_gt.base.readouts) == len(full_gt.base.readouts)
+        assert [p.ptype for p in program_gt.base.inputs] == [
+            p.ptype for p in full_gt.base.inputs
+        ]
+        assert [p.ptype for p in program_gt.base.outputs] == [
+            p.ptype for p in full_gt.base.outputs
+        ]
+
+        assert len(program_gt.finished_checks) == 0
+        assert len(program_gt.unfinished_checks) == 0
+        assert len(program_gt.errors) == 0
+        # ``correction_propagation`` is shape-only — rows/cols sized to
+        # support VIRTUAL toggles, but no entries populated.
+        assert len(program_gt.base.correction_propagation.i) == 0
+        assert len(program_gt.base.correction_propagation.j) == 0
+
+
+def test_build_jit_program_inlines_compose_as_synthetic_gadget() -> None:
+    """COMPOSE definitions are inlined into synthetic gadgets so the
+    lite library treats them uniformly with regular GADGETs — same
+    gtype namespace, same shape metadata."""
+    from deq.transpiler.jit_library_builder import build_jit_program
+
+    source = """
+    CODE Rep [[3,1,3]] {
+        LOGICAL X0*X1*X2 Z0*Z1*Z2
+        STABILIZER Z0*Z1 Z1*Z2
+    }
+    GADGET PrepareZ {
+        R 0 1 2
+        OUTPUT Rep 0 1 2
+    }
+    COMPOSE PrepareTrio {
+        PrepareZ 0
+        PrepareZ 1
+        PrepareZ 2
+        OUTPUT Rep 0
+        OUTPUT Rep 1
+        OUTPUT Rep 2
+    }
+    """
+    qfile = parse(source)
+    program_lib = build_jit_program(qfile)
+
+    by_name = {gt.base.name: gt for gt in program_lib.gadget_types}
+    assert by_name.keys() == {"PrepareZ", "PrepareTrio"}
+    trio = by_name["PrepareTrio"]
+    assert len(trio.base.outputs) == 3
+    assert len(trio.base.inputs) == 0
+    # COMPOSE inherits the lite-builder invariants — no decoder data.
+    assert len(trio.finished_checks) == 0
+    assert len(trio.unfinished_checks) == 0
+    assert len(trio.errors) == 0
+
+
+def test_build_jit_program_drives_compile_program_for_jit() -> None:
+    """The lite library has just enough metadata for
+    :func:`compile_program_for_jit` to produce a valid program."""
+    from deq.cli.jit import compile_program_for_jit
+    from deq.circuit.model import ProgramDefinition
+    from deq.transpiler.jit_library_builder import build_jit_program
+
+    source = """
+    CODE Rep [[3,1,3]] {
+        LOGICAL X0*X1*X2 Z0*Z1*Z2
+        STABILIZER Z0*Z1 Z1*Z2
+    }
+    GADGET PrepareZ {
+        R 0 1 2
+        OUTPUT Rep 0 1 2
+    }
+    GADGET MeasureZ {
+        INPUT Rep 0 1 2
+        M 0 1 2
+        READOUT rec[-3] rec[-2] rec[-1]
+    }
+    PROGRAM Run {
+        PrepareZ 0
+        MeasureZ 0
+    }
+    """
+    qfile = parse(source)
+    program_lib = build_jit_program(qfile)
+    program_def = next(
+        d for d in qfile.definitions if isinstance(d, ProgramDefinition)
+    )
+    compiled, _assertions = compile_program_for_jit(program_lib, program_def)
+    assert len(compiled) == 2
+    gtype_of_name = {gt.base.name: gt.base.gtype for gt in program_lib.gadget_types}
+    assert compiled[0][0].gadget.gtype == gtype_of_name["PrepareZ"]
+    assert compiled[1][0].gadget.gtype == gtype_of_name["MeasureZ"]

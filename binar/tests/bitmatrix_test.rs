@@ -4,7 +4,7 @@ use binar::matrix::{
     kernel_basis_matrix, row_stacked,
 };
 use binar::vec::AlignedBitVec;
-use binar::{Bitwise, BitwiseMut, BitwisePairMut};
+use binar::{BitBlock, BitLength, Bitwise, BitwiseMut, BitwisePairMut};
 use proptest::prelude::*;
 use rand::{RngExt, SeedableRng};
 use sorted_iter::SortedIterator;
@@ -302,6 +302,21 @@ prop_compose! {
 //         assert_eq!(profile, vec![0, 2, 5]);
 //     }
 // }
+
+#[test]
+fn matrix_row_is_unit_rejects_extra_bits_in_other_blocks() {
+    let first_bit_index = 0;
+    let second_block_bit_index = BitBlock::BLOCK_BIT_LEN;
+    let width = second_block_bit_index + 1;
+    let mut matrix = AlignedBitMatrix::zeros(1, width);
+    matrix.set((0, first_bit_index), true);
+    matrix.set((0, second_block_bit_index), true);
+
+    let row = matrix.row(0);
+    assert_eq!(row.weight(), 2);
+    assert!(!row.is_unit(first_bit_index));
+    assert!(!row.is_unit(second_block_bit_index));
+}
 
 #[test]
 fn test_echelon_form() {
@@ -770,6 +785,57 @@ fn row_stacked_respects_permute_rows() {
         for c in 0..3 {
             assert_eq!(stacked.get((r, c)), m.get((r, c)), "mismatch at ({r}, {c})");
         }
+    }
+}
+
+mod bitmatrix_echelon_form_accessors {
+    use binar::{BitMatrix, EchelonForm};
+    use proptest::prelude::*;
+
+    prop_compose! {
+        fn arbitrary_bitmatrix(max_dimension: usize)(
+            shape in (0..=max_dimension, 0..=max_dimension),
+            seed in any::<u64>()
+        ) -> BitMatrix {
+            super::seeded_bitmatrix(shape.0, shape.1, seed).into()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn echelon_form_accessors(matrix in arbitrary_bitmatrix(100)) {
+            let echelon = EchelonForm::new(matrix.clone());
+            let rref = echelon.matrix();
+            let transform = echelon.transform();
+            assert_eq!(transform.dot(&matrix), rref);
+        }
+
+        #[test]
+        fn pivots_match_echelonize(matrix in arbitrary_bitmatrix(100)) {
+            let mut cloned = matrix.clone();
+            let expected_pivots = cloned.echelonize();
+            let echelon = EchelonForm::new(matrix);
+            assert_eq!(echelon.pivots(), &expected_pivots[..]);
+        }
+    }
+
+    #[test]
+    fn zero_matrix_has_empty_pivots() {
+        let m = BitMatrix::zeros(5, 5);
+        let echelon = EchelonForm::new(m.clone());
+        assert!(echelon.pivots().is_empty());
+        assert_eq!(echelon.transform().dot(&m), echelon.matrix());
+    }
+
+    #[test]
+    fn identity_matrix_has_sequential_pivots() {
+        let n = 6;
+        let m = BitMatrix::identity(n);
+        let echelon = EchelonForm::new(m.clone());
+        let expected: Vec<usize> = (0..n).collect();
+        assert_eq!(echelon.pivots(), &expected[..]);
+        assert_eq!(echelon.matrix(), m);
+        assert_eq!(echelon.transform().dot(&m), echelon.matrix());
     }
 }
 
