@@ -137,6 +137,24 @@ pub trait Simulation: Default {
     /// Returns the outcome ID for the newly allocated outcome.
     fn allocate_random_bit(&mut self) -> OutcomeId;
 
+    /// Allocate a new outcome representing a *symbolic rotation angle*.
+    ///
+    /// A symbolic angle is the parameter of an exponential `exp(iαP)`, realised by applying `P`
+    /// conditioned on the returned outcome (e.g. `conditional_pauli(P, &[angle], true)`). It behaves
+    /// like a random bit during simulation, but it carries different *provenance*: symbolic angles
+    /// model the (unknown) continuous parameters of a circuit, whereas [`Self::allocate_random_bit`]
+    /// models genuine measurement randomness.
+    ///
+    /// Simulators that track this distinction (such as the phased outcome-complete simulator) use it
+    /// to require that symbolic angles correspond one-to-one between circuits being compared, while
+    /// genuine random bits may be affinely remapped. The default implementation simply defers to
+    /// [`Self::allocate_random_bit`], so simulators that do not track provenance are unaffected.
+    ///
+    /// Returns the outcome ID for the newly allocated symbolic angle.
+    fn allocate_symbolic_angle(&mut self) -> OutcomeId {
+        self.allocate_random_bit()
+    }
+
     // ========== Unitary Operations ==========
 
     /// Apply a Clifford unitary to specified qubits.

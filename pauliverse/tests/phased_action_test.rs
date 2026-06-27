@@ -1,4 +1,4 @@
-use paulimer::core::z;
+use paulimer::core::{x, z};
 use paulimer::pauli::SparsePauli;
 use paulimer::{PositionedPauliObservable, UnitaryOp};
 use pauliverse::action::{ActionsInequivalenceReason, phased_action_from_simulation, phased_action_of};
@@ -19,7 +19,7 @@ fn sparse(observable: &[PositionedPauliObservable]) -> SparsePauli {
 /// conditionally apply `Z₀Z₁` on the odd branch.
 fn zz_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
     let circuit = build_circuit(|builder| {
-        let branch = builder.allocate_random_bit();
+        let branch = builder.allocate_symbolic_angle();
         builder.conditional_pauli(&sparse(&[z(0), z(1)]), &[branch], true);
     });
     (circuit, vec![0, 1], vec![0, 1])
@@ -29,7 +29,7 @@ fn zz_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
 fn cnot_conjugated_z_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
     let circuit = build_circuit(|builder| {
         builder.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
-        let branch = builder.allocate_random_bit();
+        let branch = builder.allocate_symbolic_angle();
         builder.conditional_pauli(&sparse(&[z(1)]), &[branch], true);
         builder.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
     });
@@ -39,7 +39,7 @@ fn cnot_conjugated_z_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
 /// `exp(iα Z₁)` on its own, which differs from `exp(iα Z₀Z₁)` in symplectic action.
 fn z_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
     let circuit = build_circuit(|builder| {
-        let branch = builder.allocate_random_bit();
+        let branch = builder.allocate_symbolic_angle();
         builder.conditional_pauli(&sparse(&[z(1)]), &[branch], true);
     });
     (circuit, vec![0, 1], vec![0, 1])
@@ -49,7 +49,7 @@ fn z_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
 /// branch phase of the odd branch.
 fn signed_z_rotation(negate: bool) -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
     let circuit = build_circuit(|builder| {
-        let branch = builder.allocate_random_bit();
+        let branch = builder.allocate_symbolic_angle();
         let observable = if negate { -sparse(&[z(0)]) } else { sparse(&[z(0)]) };
         builder.conditional_pauli(&observable, &[branch], true);
     });
@@ -125,7 +125,7 @@ fn choi_simulation(
     for system_qubit in 0..system_qubit_count {
         simulation.unitary_op(UnitaryOp::PrepareBell, &[system_qubit, system_qubit + system_qubit_count]);
     }
-    let branch = simulation.allocate_random_bit();
+    let branch = simulation.allocate_symbolic_angle();
     build_gadget(&mut simulation, branch);
     simulation
 }
@@ -165,3 +165,181 @@ fn simulator_native_distinguishes_opposite_signs() {
         .expect_err("opposite signs differ only in relative phase");
     assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase]);
 }
+
+// ================================================================================================
+// "Ejection": remote/measurement-based execution of a Z-diagonal channel.
+//
+// A Z-diagonal channel on `n` system qubits is applied indirectly: `n` ancillas (prepared in |0⟩)
+// receive a transversal CNOT from the system qubits, the Z-diagonal channel acts on the ancillas,
+// each ancilla is destructively measured in the X basis, and a "−" outcome triggers a conditional Z
+// correction on the corresponding system qubit. The action must equal applying the same Z-diagonal
+// channel directly to the system qubits. The X-basis measurements introduce *true* random bits that
+// must be marginalized, while the channel's symbolic rotation angles are *virtual* bits that must
+// correspond one-to-one — exactly the mixed case the virtual/true distinction is built for.
+// ================================================================================================
+
+/// `Z` on each `qubits[i]`-th entry of `support` (a tensor product of `Z` operators).
+fn z_product(qubits: &[usize], support: &[QubitId]) -> SparsePauli {
+    let positioned: Vec<PositionedPauliObservable> = qubits.iter().map(|&qubit| z(support[qubit])).collect();
+    (&positioned[..]).into()
+}
+
+/// Applies the symbolic Z-rotations indexed by `angle_supports` (each a tensor product of `Z`s, with
+/// its own symbolic angle) to the qubits named by `support`, in allocation order.
+fn apply_symbolic_z_rotations(builder: &mut CircuitBuilder, angle_supports: &[Vec<usize>], support: &[QubitId]) {
+    for qubits in angle_supports {
+        let angle = builder.allocate_symbolic_angle();
+        builder.conditional_pauli(&z_product(qubits, support), &[angle], true);
+    }
+}
+
+/// The direct circuit: the symbolic Z-rotations applied straight to the `n` system qubits.
+fn direct_z_channel(n: usize, angle_supports: &[Vec<usize>]) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    build_circuit(|builder| {
+        apply_symbolic_z_rotations(builder, angle_supports, &system);
+    })
+}
+
+/// The ejection circuit: the same symbolic Z-rotations executed remotely on `n` ancillas.
+fn z_ejection_channel(n: usize, angle_supports: &[Vec<usize>]) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    let ancillas: Vec<QubitId> = (n..2 * n).collect();
+    build_circuit(|builder| {
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            builder.unitary_op(UnitaryOp::ControlledX, &[system_qubit, ancilla]);
+        }
+        apply_symbolic_z_rotations(builder, angle_supports, &ancillas);
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            let outcome = builder.measure(&sparse(&[x(ancilla)]));
+            builder.conditional_pauli(&sparse(&[z(system_qubit)]), &[outcome], true);
+        }
+    })
+}
+
+fn check_z_ejection(n: usize, angle_supports: &[Vec<usize>]) {
+    let system: Vec<QubitId> = (0..n).collect();
+    let direct = direct_z_channel(n, angle_supports);
+    let ejection = z_ejection_channel(n, angle_supports);
+
+    let direct_action = phased_action_of(&direct, &system, &system).expect("direct channel action");
+    let ejection_action = phased_action_of(&ejection, &system, &system).expect("ejection channel action");
+
+    direct_action.is_equivalent(&ejection_action).unwrap_or_else(|reasons| {
+        panic!("ejection of {angle_supports:?} on {n} qubits must equal the direct channel: {reasons:?}")
+    });
+    ejection_action
+        .is_equivalent(&direct_action)
+        .expect("ejection equivalence must be symmetric");
+}
+
+#[test]
+fn single_qubit_z_rotation_ejection() {
+    check_z_ejection(1, &[vec![0]]);
+}
+
+#[test]
+fn two_qubit_z_rotation_ejections() {
+    check_z_ejection(2, &[vec![0]]);
+    check_z_ejection(2, &[vec![1]]);
+    check_z_ejection(2, &[vec![0, 1]]);
+    check_z_ejection(2, &[vec![0], vec![1], vec![0, 1]]);
+}
+
+#[test]
+fn three_qubit_all_z_products_ejection() {
+    let all_nontrivial: Vec<Vec<usize>> = (1u32..8)
+        .map(|mask| (0..3).filter(|bit| mask & (1 << bit) != 0).collect())
+        .collect();
+    check_z_ejection(3, &all_nontrivial);
+}
+
+#[test]
+fn repeated_angles_ejection() {
+    check_z_ejection(2, &[vec![0], vec![0], vec![0, 1], vec![0, 1]]);
+}
+
+/// A wrong correction (conditioning on the wrong measurement outcome) must be detected: the branch
+/// phase then depends on a true measurement bit that the direct channel cannot reproduce.
+#[test]
+fn miscorrected_ejection_is_detected() {
+    let n = 2;
+    let angle_supports = [vec![0, 1]];
+    let system: Vec<QubitId> = (0..n).collect();
+    let ancillas: Vec<QubitId> = (n..2 * n).collect();
+    let broken = build_circuit(|builder| {
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            builder.unitary_op(UnitaryOp::ControlledX, &[system_qubit, ancilla]);
+        }
+        apply_symbolic_z_rotations(builder, &angle_supports, &ancillas);
+        let mut outcomes = Vec::new();
+        for &ancilla in &ancillas {
+            outcomes.push(builder.measure(&sparse(&[x(ancilla)])));
+        }
+        // Apply only the first correction, dropping the second: leaves a residual outcome dependence.
+        builder.conditional_pauli(&sparse(&[z(system[0])]), &[outcomes[0]], true);
+    });
+
+    let direct = direct_z_channel(n, &angle_supports);
+    let direct_action = phased_action_of(&direct, &system, &system).expect("direct action");
+    let broken_action = phased_action_of(&broken, &system, &system).expect("broken action");
+
+    direct_action
+        .is_equivalent(&broken_action)
+        .expect_err("a missing correction must make the ejection inequivalent");
+}
+
+// A Z-diagonal *Clifford* (here `S` on each ancilla plus a `CZ`) carries a non-trivial phase but no
+// symbolic angles. Ejecting it must equal applying it directly — the **no-angle** case, where the
+// phased equivalence reduces exactly to the phaseless `OutcomeCompleteSimulation` behaviour: the only
+// random bits are the corrected true X-measurement outcomes, so the relative-phase check is vacuous
+// and the residual `|±⟩` ancillas (left uncleaned, exactly as in the phaseless ejection precedent)
+// do not affect the comparison.
+
+fn apply_z_diagonal_clifford(builder: &mut CircuitBuilder, support: &[QubitId]) {
+    for &qubit in support {
+        builder.unitary_op(UnitaryOp::SqrtZ, &[qubit]);
+    }
+    for window in support.windows(2) {
+        builder.unitary_op(UnitaryOp::ControlledZ, &[window[0], window[1]]);
+    }
+}
+
+fn direct_z_clifford_channel(n: usize) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    build_circuit(|builder| apply_z_diagonal_clifford(builder, &system))
+}
+
+fn z_clifford_ejection_channel(n: usize) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    let ancillas: Vec<QubitId> = (n..2 * n).collect();
+    build_circuit(|builder| {
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            builder.unitary_op(UnitaryOp::ControlledX, &[system_qubit, ancilla]);
+        }
+        apply_z_diagonal_clifford(builder, &ancillas);
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            let outcome = builder.measure(&sparse(&[x(ancilla)]));
+            builder.conditional_pauli(&sparse(&[z(system_qubit)]), &[outcome], true);
+        }
+    })
+}
+
+#[test]
+fn z_diagonal_clifford_ejection_without_angles() {
+    for n in 1..=3 {
+        let system: Vec<QubitId> = (0..n).collect();
+        let direct = direct_z_clifford_channel(n);
+        let ejection = z_clifford_ejection_channel(n);
+        let direct_action = phased_action_of(&direct, &system, &system).expect("direct clifford action");
+        let ejection_action = phased_action_of(&ejection, &system, &system).expect("ejection clifford action");
+
+        direct_action
+            .is_equivalent(&ejection_action)
+            .unwrap_or_else(|reasons| panic!("no-angle Z-diagonal Clifford ejection on {n} qubits must equal direct: {reasons:?}"));
+        ejection_action
+            .is_equivalent(&direct_action)
+            .expect("no-angle ejection equivalence must be symmetric");
+    }
+}
+

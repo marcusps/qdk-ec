@@ -295,6 +295,16 @@ impl_simulation!(
             self.inner.output_phase_exponent(&random_bits)
         }
 
+        /// Allocates a random bit tagged as a *symbolic rotation angle* (a virtual bit).
+        ///
+        /// Conditioning a Pauli `P` on the returned bit models the symbolic rotation `e^{iα P}`.
+        /// Unlike [`allocate_random_bit`], which introduces a *true* (measurement-like) random bit,
+        /// symbolic-angle bits must correspond one to one when phased actions are compared for
+        /// equivalence; they are never marginalized or affinely remapped.
+        pub fn allocate_symbolic_angle(&mut self) -> usize {
+            self.inner.allocate_symbolic_angle()
+        }
+
         #[allow(clippy::needless_pass_by_value)]
         /// # Errors
         ///

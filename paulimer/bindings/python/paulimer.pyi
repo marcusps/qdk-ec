@@ -1143,6 +1143,17 @@ class PhasedOutcomeCompleteSimulation:
         """
         ...
 
+    def allocate_symbolic_angle(self) -> int:
+        """Allocate a random bit tagged as a *symbolic rotation angle* (a virtual bit).
+
+        Conditioning a Pauli ``P`` on the returned bit models the symbolic rotation
+        ``e^{i alpha P}``. Unlike :meth:`allocate_random_bit`, which introduces a *true*
+        (measurement-like) random bit, symbolic-angle bits must correspond one to one when
+        phased actions are compared for equivalence; they are never marginalized or affinely
+        remapped.
+        """
+        ...
+
     def phased_action(
         self, input_qubits: Sequence[int], output_qubits: Sequence[int]
     ) -> PhasedCircuitAction:

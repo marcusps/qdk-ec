@@ -82,6 +82,7 @@ pub struct PhasedOutcomeCompleteSimulation {
     linear_i_phase: AlignedBitVec,          // p
     linear_sign_phase: AlignedBitVec,       // s
     random_outcome_indicator: Vec<bool>,    // vec(q), [j] is true iff vec(q)_j = 1/2
+    symbolic_angle_indicator: Vec<bool>,    // [k] is true iff random bit k is a symbolic rotation angle
     random_bit_count: usize,
     qubit_count: usize,
 }
@@ -97,6 +98,7 @@ impl std::fmt::Debug for PhasedOutcomeCompleteSimulation {
             .field("linear_i_phase", &self.linear_i_phase().iter().collect::<Vec<bool>>())
             .field("linear_sign_phase", &self.linear_sign_phase().iter().collect::<Vec<bool>>())
             .field("random_outcome_indicator", &self.random_outcome_indicator)
+            .field("symbolic_angle_indicator", &self.symbolic_angle_indicator)
             .field("random_bit_count", &self.random_bit_count)
             .field("qubit_count", &self.qubit_count)
             .finish()
@@ -345,6 +347,7 @@ impl PhasedOutcomeCompleteSimulation {
             linear_i_phase: AlignedBitVec::zeros(random_capacity),
             linear_sign_phase: AlignedBitVec::zeros(random_capacity),
             random_outcome_indicator: Vec::with_capacity(outcome_count),
+            symbolic_angle_indicator: Vec::with_capacity(random_outcome_count),
             random_bit_count: 0,
             qubit_count,
         }
@@ -433,18 +436,37 @@ impl PhasedOutcomeCompleteSimulation {
     pub fn random_outcome_indicator(&self) -> &[bool] {
         &self.random_outcome_indicator
     }
-}
 
-impl Simulation for PhasedOutcomeCompleteSimulation {
-    fn allocate_random_bit(&mut self) -> usize {
+    /// Get indicators for which random bits are symbolic rotation angles.
+    ///
+    /// The returned slice is indexed by random-bit index (`0..random_outcome_count()`). Entry `k` is
+    /// `true` iff random bit `k` was allocated via [`Simulation::allocate_symbolic_angle`] (a virtual
+    /// rotation parameter) rather than [`Simulation::allocate_random_bit`] or a genuine measurement.
+    #[must_use]
+    pub fn symbolic_angle_indicator(&self) -> &[bool] {
+        &self.symbolic_angle_indicator
+    }
+
+    fn allocate_random_bit_with_provenance(&mut self, is_symbolic_angle: bool) -> usize {
         self.ensure_outcome_capacity(true);
         let outcome_pos = self.random_outcome_indicator.len();
         self.outcome_matrix
             .row_mut(outcome_pos)
             .assign_index(self.random_bit_count, true);
         self.random_outcome_indicator.push(true);
+        self.symbolic_angle_indicator.push(is_symbolic_angle);
         self.random_bit_count += 1;
         self.random_bit_count - 1
+    }
+}
+
+impl Simulation for PhasedOutcomeCompleteSimulation {
+    fn allocate_random_bit(&mut self) -> usize {
+        self.allocate_random_bit_with_provenance(false)
+    }
+
+    fn allocate_symbolic_angle(&mut self) -> usize {
+        self.allocate_random_bit_with_provenance(true)
     }
 
     fn clifford(&mut self, _clifford: &crate::Unitary, _support: &[crate::QubitId]) {

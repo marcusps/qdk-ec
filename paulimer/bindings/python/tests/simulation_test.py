@@ -318,7 +318,7 @@ def _choi_action(build_gadget, n=1):
     sim = PhasedOutcomeCompleteSimulation(2 * n)
     for q in range(n):
         sim.apply_unitary(UnitaryOpcode.PrepareBell, [q, q + n])
-    angle = sim.allocate_random_bit()
+    angle = sim.allocate_symbolic_angle()
     build_gadget(sim, angle)
     return sim.phased_action(list(range(n)), list(range(n)))
 
@@ -363,3 +363,63 @@ class TestPhasedCircuitAction:
     def test_action_is_self_equivalent(self):
         action = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0 Z_1"), [a]), n=2)
         assert action.is_equivalent(action)
+
+
+def _direct_z_action(n, angle_supports):
+    """Phased action of symbolic Z-rotations applied directly to ``n`` system qubits.
+
+    Layout: system qubits ``0..n``, reference qubits ``n..2n``. Each entry of
+    ``angle_supports`` is a list of system-qubit indices naming one symbolic rotation
+    ``e^{i alpha Z...}`` about the tensor product of ``Z`` on those qubits.
+    """
+    sim = PhasedOutcomeCompleteSimulation(2 * n)
+    for q in range(n):
+        sim.apply_unitary(UnitaryOpcode.PrepareBell, [q, n + q])
+    for support in angle_supports:
+        pauli = SparsePauli(" ".join(f"Z_{q}" for q in support))
+        angle = sim.allocate_symbolic_angle()
+        sim.apply_conditional_pauli(pauli, [angle])
+    return sim.phased_action(list(range(n)), list(range(n)))
+
+
+def _z_ejection_action(n, angle_supports):
+    """Phased action of the same symbolic Z-rotations executed remotely via ejection.
+
+    Layout: system qubits ``0..n``, reference qubits ``n..2n``, ancillas ``2n..3n``. The
+    system qubits drive transversal CNOTs onto the ancillas, the symbolic rotations act on
+    the ancillas, each ancilla is measured in the X basis (a *true* random bit), and a
+    ``-`` outcome triggers a conditional Z correction on the system qubit. Mixing the virtual
+    angle bits with the true measurement bits, the action must equal :func:`_direct_z_action`.
+    """
+    sim = PhasedOutcomeCompleteSimulation(3 * n)
+    for q in range(n):
+        sim.apply_unitary(UnitaryOpcode.PrepareBell, [q, n + q])
+    for q in range(n):
+        sim.apply_unitary(UnitaryOpcode.ControlledX, [q, 2 * n + q])
+    for support in angle_supports:
+        pauli = SparsePauli(" ".join(f"Z_{2 * n + q}" for q in support))
+        angle = sim.allocate_symbolic_angle()
+        sim.apply_conditional_pauli(pauli, [angle])
+    for q in range(n):
+        outcome = sim.measure(SparsePauli(f"X_{2 * n + q}"))
+        sim.apply_conditional_pauli(SparsePauli(f"Z_{q}"), [outcome])
+    return sim.phased_action(list(range(n)), list(range(n)))
+
+
+class TestPhasedEjection:
+    """Measurement-based "ejection" of a Z-diagonal channel, mixing virtual and true bits."""
+
+    @pytest.mark.parametrize(
+        "n, angle_supports",
+        [
+            (1, [[0]]),
+            (2, [[0]]),
+            (2, [[0, 1]]),
+            (2, [[0], [1], [0, 1]]),
+        ],
+    )
+    def test_ejection_matches_direct(self, n, angle_supports):
+        direct = _direct_z_action(n, angle_supports)
+        ejection = _z_ejection_action(n, angle_supports)
+        assert direct.is_equivalent(ejection)
+        assert ejection.is_equivalent(direct)
