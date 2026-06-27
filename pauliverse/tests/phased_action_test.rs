@@ -440,3 +440,172 @@ fn repeated_x_angles_ejection() {
     check_x_ejection(2, &[vec![0], vec![0], vec![0, 1], vec![0, 1]]);
 }
 
+// ================================================================================================
+// Ejection of a *general* Z-diagonal channel: symbolic Z-rotations (virtual bits) mixed with
+// non-destructive Z-basis measurements (true observed bits). Ejecting the channel onto ancillas adds
+// a third kind of bit, the destructive X-readout outcomes (true auxiliary bits, marginalized). The
+// default `is_equivalent` resolves all three automatically: the virtual angle bits correspond one to
+// one, the observed measurement bits map identity-by-allocation-order, and the readout bits are
+// projected out. This is the first gadget that exercises all three provenance classes at once.
+// ================================================================================================
+
+/// Applies a Z-diagonal *channel* to `support`: first the symbolic Z-rotations indexed by
+/// `angle_supports`, then non-destructive Z-basis measurements of the tensor products indexed by
+/// `measure_supports`, all in allocation order.
+fn apply_z_diagonal_channel(
+    builder: &mut CircuitBuilder,
+    angle_supports: &[Vec<usize>],
+    measure_supports: &[Vec<usize>],
+    support: &[QubitId],
+) {
+    apply_symbolic_z_rotations(builder, angle_supports, support);
+    for qubits in measure_supports {
+        let _ = builder.measure(&z_product(qubits, support));
+    }
+}
+
+fn direct_z_channel_with_measurements(n: usize, angle_supports: &[Vec<usize>], measure_supports: &[Vec<usize>]) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    build_circuit(|builder| {
+        apply_z_diagonal_channel(builder, angle_supports, measure_supports, &system);
+    })
+}
+
+fn z_ejection_channel_with_measurements(
+    n: usize,
+    angle_supports: &[Vec<usize>],
+    measure_supports: &[Vec<usize>],
+) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    let ancillas: Vec<QubitId> = (n..2 * n).collect();
+    build_circuit(|builder| {
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            builder.unitary_op(UnitaryOp::ControlledX, &[system_qubit, ancilla]);
+        }
+        apply_z_diagonal_channel(builder, angle_supports, measure_supports, &ancillas);
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            let outcome = builder.measure(&sparse(&[x(ancilla)]));
+            builder.conditional_pauli(&sparse(&[z(system_qubit)]), &[outcome], true);
+        }
+    })
+}
+
+fn check_z_ejection_with_measurements(n: usize, angle_supports: &[Vec<usize>], measure_supports: &[Vec<usize>]) {
+    let system: Vec<QubitId> = (0..n).collect();
+    let direct = direct_z_channel_with_measurements(n, angle_supports, measure_supports);
+    let ejection = z_ejection_channel_with_measurements(n, angle_supports, measure_supports);
+
+    let direct_action = phased_action_of(&direct, &system, &system).expect("direct channel action");
+    let ejection_action = phased_action_of(&ejection, &system, &system).expect("ejection channel action");
+
+    direct_action.is_equivalent(&ejection_action).unwrap_or_else(|reasons| {
+        panic!("Z ejection of angles {angle_supports:?} and measurements {measure_supports:?} on {n} qubits must equal the direct channel: {reasons:?}")
+    });
+    ejection_action
+        .is_equivalent(&direct_action)
+        .expect("Z channel ejection equivalence must be symmetric");
+}
+
+#[test]
+fn single_qubit_z_channel_ejection() {
+    check_z_ejection_with_measurements(1, &[vec![0]], &[vec![0]]);
+    check_z_ejection_with_measurements(1, &[], &[vec![0]]);
+}
+
+#[test]
+fn two_qubit_z_channel_ejections() {
+    check_z_ejection_with_measurements(2, &[vec![0]], &[vec![1]]);
+    check_z_ejection_with_measurements(2, &[vec![0], vec![1]], &[vec![0, 1]]);
+    check_z_ejection_with_measurements(2, &[vec![0, 1]], &[vec![0], vec![1]]);
+    check_z_ejection_with_measurements(2, &[], &[vec![0], vec![1], vec![0, 1]]);
+}
+
+#[test]
+fn three_qubit_z_channel_ejection() {
+    check_z_ejection_with_measurements(3, &[vec![0, 1, 2]], &[vec![0], vec![1, 2]]);
+}
+
+// ================================================================================================
+// X-basis dual of the general-channel ejection above: symbolic X-rotations mixed with
+// non-destructive X-basis measurements, ejected through `|+⟩` ancillas with reversed CNOTs,
+// destructive Z-readout, and conditional X corrections.
+// ================================================================================================
+
+/// Applies an X-diagonal *channel* to `support`: the symbolic X-rotations indexed by
+/// `angle_supports`, then non-destructive X-basis measurements indexed by `measure_supports`.
+fn apply_x_diagonal_channel(
+    builder: &mut CircuitBuilder,
+    angle_supports: &[Vec<usize>],
+    measure_supports: &[Vec<usize>],
+    support: &[QubitId],
+) {
+    apply_symbolic_x_rotations(builder, angle_supports, support);
+    for qubits in measure_supports {
+        let _ = builder.measure(&x_product(qubits, support));
+    }
+}
+
+fn direct_x_channel_with_measurements(n: usize, angle_supports: &[Vec<usize>], measure_supports: &[Vec<usize>]) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    build_circuit(|builder| {
+        apply_x_diagonal_channel(builder, angle_supports, measure_supports, &system);
+    })
+}
+
+fn x_ejection_channel_with_measurements(
+    n: usize,
+    angle_supports: &[Vec<usize>],
+    measure_supports: &[Vec<usize>],
+) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    let ancillas: Vec<QubitId> = (n..2 * n).collect();
+    build_circuit(|builder| {
+        for &ancilla in &ancillas {
+            builder.unitary_op(UnitaryOp::Hadamard, &[ancilla]);
+        }
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            builder.unitary_op(UnitaryOp::ControlledX, &[ancilla, system_qubit]);
+        }
+        apply_x_diagonal_channel(builder, angle_supports, measure_supports, &ancillas);
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            let outcome = builder.measure(&sparse(&[z(ancilla)]));
+            builder.conditional_pauli(&sparse(&[x(system_qubit)]), &[outcome], true);
+        }
+    })
+}
+
+fn check_x_ejection_with_measurements(n: usize, angle_supports: &[Vec<usize>], measure_supports: &[Vec<usize>]) {
+    let system: Vec<QubitId> = (0..n).collect();
+    let direct = direct_x_channel_with_measurements(n, angle_supports, measure_supports);
+    let ejection = x_ejection_channel_with_measurements(n, angle_supports, measure_supports);
+
+    let direct_action = phased_action_of(&direct, &system, &system).expect("direct channel action");
+    let ejection_action = phased_action_of(&ejection, &system, &system).expect("ejection channel action");
+
+    direct_action.is_equivalent(&ejection_action).unwrap_or_else(|reasons| {
+        panic!("X ejection of angles {angle_supports:?} and measurements {measure_supports:?} on {n} qubits must equal the direct channel: {reasons:?}")
+    });
+    ejection_action
+        .is_equivalent(&direct_action)
+        .expect("X channel ejection equivalence must be symmetric");
+}
+
+#[test]
+fn single_qubit_x_channel_ejection() {
+    check_x_ejection_with_measurements(1, &[vec![0]], &[vec![0]]);
+    check_x_ejection_with_measurements(1, &[], &[vec![0]]);
+}
+
+#[test]
+fn two_qubit_x_channel_ejections() {
+    check_x_ejection_with_measurements(2, &[vec![0]], &[vec![1]]);
+    check_x_ejection_with_measurements(2, &[vec![0], vec![1]], &[vec![0, 1]]);
+    check_x_ejection_with_measurements(2, &[vec![0, 1]], &[vec![0], vec![1]]);
+    check_x_ejection_with_measurements(2, &[], &[vec![0], vec![1], vec![0, 1]]);
+}
+
+#[test]
+fn three_qubit_x_channel_ejection() {
+    check_x_ejection_with_measurements(3, &[vec![0, 1, 2]], &[vec![0], vec![1, 2]]);
+}
+

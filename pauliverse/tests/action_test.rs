@@ -144,6 +144,37 @@ proptest! {
     }
 
     #[test]
+    fn diagonal_measure_x_ejection_proptest(z_diagonal_paulis in arbitrary_independent_z_paulis(1..6usize, 1..3usize)) {
+        let x_diagonal_paulis = x_paulis_from_z_paulis(&z_diagonal_paulis);
+        let (ejection_circuit, input_output, outcome_map) = diagonal_measure_x_ejection_circuit_with_io(&x_diagonal_paulis);
+        let ejection_action =
+            action_of(&ejection_circuit, &input_output, &input_output).expect("diagonal X measure ejection action");
+
+        check_multi_pauli_action(&x_diagonal_paulis, &input_output, &input_output, &ejection_action);
+
+        let (measure_circuit, measure_input_output) = multi_measure_circuit_with_io(&x_diagonal_paulis);
+        let measure_action =
+            action_of(&measure_circuit, &measure_input_output, &measure_input_output).expect("diagonal X measure action");
+
+        check_multi_pauli_action(
+            &x_diagonal_paulis,
+            &measure_input_output,
+            &measure_input_output,
+            &measure_action,
+        );
+        let map = affine_map_from_sparse(
+            ejection_action.outcome_count(),
+            measure_action.outcome_count(),
+            outcome_map,
+        );
+        measure_action
+            .is_equivalent_with_map(&ejection_action, Some(&map))
+            .expect(
+                "diagonal X measure ejection action should be equivalent to diagonal X measure action with outcome mapping",
+            );
+    }
+
+    #[test]
     fn diagonal_measure_injection_proptest(z_diagonal_paulis in arbitrary_independent_z_paulis(1..6usize, 1..3usize)) {
         let (injection_circuit, input_output, _) = diagonal_measure_injection_circuit_with_io(&z_diagonal_paulis);
         let injection_action =
@@ -545,6 +576,54 @@ fn diagonal_measure_ejection_circuit_with_io(
     let x_outcome_ids = next_outcome_id..(next_outcome_id + targets.len());
     for (id, (&target, &reference)) in x_outcome_ids.zip(targets.iter().zip(references.iter())) {
         b = b.measure_x(reference, id).conditional_z(target, &[id], true);
+    }
+
+    let outcome_map = pauli_outcome_ids.map(|id| (id, false, vec![id])).collect::<Vec<_>>();
+    (b.into_circuit(), targets, outcome_map)
+}
+
+/// X-basis dual of [`x_paulis_from_z_paulis`]'s input: turns each Z-Pauli into the X-Pauli with the
+/// same support (swapping the `Z` and `X` bits), so independent Z-Paulis become independent X-Paulis.
+fn x_paulis_from_z_paulis(z_diagonal_paulis: &[SparsePauli]) -> Vec<SparsePauli> {
+    z_diagonal_paulis
+        .iter()
+        .map(|pauli| SparsePauli::from_bits(pauli.z_bits().clone(), IndexSet::new(), 0))
+        .collect()
+}
+
+/// Implements measurement of `x_diagonal_paulis` via the X-basis dual of the diagonal measure
+/// ejection of Figure 9 in <https://arxiv.org/pdf/2506.15130v1>: the whole gadget is the conjugation
+/// of [`diagonal_measure_ejection_circuit_with_io`] by a transversal Hadamard. Each reference is
+/// prepared in `|+⟩`, the CNOTs run from references into the targets, the X-diagonal Paulis are
+/// measured (non-destructively) on the references, and each reference is destructively measured in
+/// the Z basis with a conditional X correction on a `1` outcome.
+fn diagonal_measure_x_ejection_circuit_with_io(
+    x_diagonal_paulis: &[SparsePauli],
+) -> (Circuit, Vec<QubitId>, OutcomeMapping) {
+    let qubit_count = max_qubit_id_of(x_diagonal_paulis) + 1;
+
+    let targets = (0..qubit_count).collect::<Vec<QubitId>>();
+    let references = (qubit_count..2 * qubit_count).collect::<Vec<QubitId>>();
+
+    let mut b = empty_builder();
+    for &reference in &references {
+        b = b.h(reference);
+    }
+    for (&target, &reference) in targets.iter().zip(references.iter()) {
+        b = b.cnot(reference, target);
+    }
+
+    let next_outcome_id = b.next_outcome_id();
+    let pauli_outcome_ids = next_outcome_id..(next_outcome_id + x_diagonal_paulis.len());
+    for (pauli, outcome_id) in x_diagonal_paulis.iter().zip(pauli_outcome_ids.clone()) {
+        let reference_pauli = remapped_sparse(pauli, &references);
+        b = b.measure_sparse(&reference_pauli, outcome_id);
+    }
+
+    let next_outcome_id = b.next_outcome_id();
+    let z_outcome_ids = next_outcome_id..(next_outcome_id + targets.len());
+    for (id, (&target, &reference)) in z_outcome_ids.zip(targets.iter().zip(references.iter())) {
+        b = b.measure_z(reference, id).conditional_x(target, &[id], true);
     }
 
     let outcome_map = pauli_outcome_ids.map(|id| (id, false, vec![id])).collect::<Vec<_>>();
