@@ -21,7 +21,8 @@ pub use py_noise::{PyFault, PyOutcomeCondition, PyPauliDistribution};
 pub use py_pauli_group::{py_centralizer_of, py_symplectic_form_of, PyPauliGroup};
 pub use py_sparse_pauli::PySparsePauli;
 pub use simulation::{
-    PyOutcomeCompleteSimulation, PyOutcomeFreeSimulation, PyOutcomeSpecificSimulation, PyPhasedOutcomeCompleteSimulation,
+    PyOutcomeCompleteSimulation, PyOutcomeFreeSimulation, PyOutcomeSpecificSimulation, PyPhasedCircuitAction,
+    PyPhasedOutcomeCompleteSimulation,
 };
 
 /// # Errors
@@ -36,6 +37,7 @@ pub fn paulimer(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyUnitaryOp>()?;
     m.add_class::<PyOutcomeCompleteSimulation>()?;
     m.add_class::<PyPhasedOutcomeCompleteSimulation>()?;
+    m.add_class::<PyPhasedCircuitAction>()?;
     m.add_class::<PyOutcomeSpecificSimulation>()?;
     m.add_class::<PyOutcomeFreeSimulation>()?;
     m.add_class::<PyFaultySimulation>()?;

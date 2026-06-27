@@ -26,6 +26,7 @@ __all__ = [
     "PauliDistribution",
     "PauliFault",
     "PauliGroup",
+    "PhasedCircuitAction",
     "PhasedOutcomeCompleteSimulation",
     "SparsePauli",
     "UnitaryOpcode",
@@ -1139,6 +1140,74 @@ class PhasedOutcomeCompleteSimulation:
         Args:
             random_bits: Boolean assignment for each random outcome (length at least
                 ``random_outcome_count``).
+        """
+        ...
+
+    def phased_action(
+        self, input_qubits: Sequence[int], output_qubits: Sequence[int]
+    ) -> PhasedCircuitAction:
+        """Compute the phased Choi action of the circuit recorded in this simulation.
+
+        Returns a :class:`PhasedCircuitAction` capturing how the circuit acts on every
+        input at once, including the exact relative phases between measurement branches.
+        This is the global-phase-resolving counterpart of the (phaseless) circuit action
+        used to compare stabilizer circuits.
+
+        Before calling this, the Choi state must already be prepared: entangle each
+        ``input_qubits[k]`` with a fresh reference qubit via
+        ``UnitaryOpcode.PrepareBell`` and then apply the circuit to the system qubits
+        only. The reference qubit for ``input_qubits[k]`` is ``system_qubit_count + k``,
+        where ``system_qubit_count`` is one past the largest index in ``input_qubits`` or
+        ``output_qubits`` (so for ``n`` system qubits ``0..n`` the references are
+        ``n..2n``).
+
+        Each random bit is treated as a **symbolic rotation angle**: the resulting action
+        compares two circuits only under a one-to-one correspondence of these bits (see
+        :meth:`PhasedCircuitAction.is_equivalent`).
+
+        Args:
+            input_qubits: System qubits entangled with reference qubits.
+            output_qubits: System qubits carrying the circuit's output.
+
+        Raises:
+            ValueError: If the non-output system qubits remain entangled with the rest of
+                the state.
+        """
+        ...
+
+@final
+class PhasedCircuitAction:
+    """The action of a circuit on every input, with exact relative branch phases.
+
+    Produced by :meth:`PhasedOutcomeCompleteSimulation.phased_action`. Two actions are
+    compared up to a single overall global phase; the *relative* phases between branches
+    are retained, so circuits that act identically on the Pauli group but differ by a
+    branch-dependent phase (for example ``e^{i a Z}`` versus ``e^{-i a Z}``, whose
+    conditioned Paulis ``+Z`` and ``-Z`` share a symplectic action) are distinguished.
+
+    Each random bit is treated as a symbolic rotation angle, mapped one-to-one between the
+    two compared actions (no affine remapping of these bits is permitted).
+    """
+
+    @property
+    def choi_state_stabilizers(self) -> list[SparsePauli]:
+        """Canonical stabilizers of the circuit's Choi state."""
+        ...
+
+    def is_equivalent(self, other: PhasedCircuitAction) -> bool:
+        """Whether two circuits implement the same operator on every input.
+
+        Compares both the stabilizer (symplectic) action and the exact relative branch
+        phases, up to a single global phase. Each random bit is treated as a symbolic
+        rotation angle and matched one-to-one with the corresponding bit of ``other``.
+        """
+        ...
+
+    def is_equivalent_up_to_signs(self, other: PhasedCircuitAction) -> bool:
+        """Whether two circuits agree on their stabilizer action, ignoring all phases.
+
+        This is the phaseless comparison; use :meth:`is_equivalent` to additionally
+        require the relative branch phases to match.
         """
         ...
 

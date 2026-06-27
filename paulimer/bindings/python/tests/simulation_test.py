@@ -7,6 +7,7 @@ from paulimer import (
     OutcomeCompleteSimulation,
     OutcomeFreeSimulation,
     OutcomeSpecificSimulation,
+    PhasedCircuitAction,
     PhasedOutcomeCompleteSimulation,
 )
 
@@ -306,3 +307,59 @@ class TestPhasedOutcomeCompleteSimulationSpecific:
         assert 0 <= exponent < 8
         # The trivial assignment never contributes a phase.
         assert sim.output_phase_exponent([False]) == 0
+
+def _choi_action(build_gadget, n=1):
+    """Phased Choi action of a symbolic-rotation gadget on ``n`` system qubits.
+
+    Bell-pairs every system qubit ``q`` in ``0..n`` with its reference ``q + n``, allocates
+    one symbolic-angle random bit, applies the gadget to the system qubits, and returns the
+    resulting :class:`PhasedCircuitAction`.
+    """
+    sim = PhasedOutcomeCompleteSimulation(2 * n)
+    for q in range(n):
+        sim.apply_unitary(UnitaryOpcode.PrepareBell, [q, q + n])
+    angle = sim.allocate_random_bit()
+    build_gadget(sim, angle)
+    return sim.phased_action(list(range(n)), list(range(n)))
+
+
+class TestPhasedCircuitAction:
+
+    def test_phased_action_returns_action(self):
+        action = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0"), [a]))
+        assert isinstance(action, PhasedCircuitAction)
+
+    def test_choi_state_stabilizers_are_sparse_paulis(self):
+        action = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0"), [a]))
+        stabilizers = action.choi_state_stabilizers
+        assert len(stabilizers) == 2
+        assert all(isinstance(stabilizer, SparsePauli) for stabilizer in stabilizers)
+
+    def test_entangling_rotation_equivalence(self):
+        def zz_direct(sim, a):
+            sim.apply_conditional_pauli(SparsePauli("Z_0 Z_1"), [a])
+
+        def zz_via_cnot(sim, a):
+            sim.apply_unitary(UnitaryOpcode.ControlledX, [0, 1])
+            sim.apply_conditional_pauli(SparsePauli("Z_1"), [a])
+            sim.apply_unitary(UnitaryOpcode.ControlledX, [0, 1])
+
+        direct = _choi_action(zz_direct, n=2)
+        via_cnot = _choi_action(zz_via_cnot, n=2)
+        assert direct.is_equivalent(via_cnot)
+        assert via_cnot.is_equivalent(direct)
+
+    def test_dropping_conjugation_breaks_equivalence(self):
+        direct = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0 Z_1"), [a]), n=2)
+        bare = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_1"), [a]), n=2)
+        assert not direct.is_equivalent(bare)
+
+    def test_opposite_signs_distinguished_only_by_phase(self):
+        positive = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0"), [a]))
+        negative = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("-Z_0"), [a]))
+        assert positive.is_equivalent_up_to_signs(negative)
+        assert not positive.is_equivalent(negative)
+
+    def test_action_is_self_equivalent(self):
+        action = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0 Z_1"), [a]), n=2)
+        assert action.is_equivalent(action)

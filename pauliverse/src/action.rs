@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    OutcomeCompleteSimulation, Simulation,
+    OutcomeCompleteSimulation, PhasedOutcomeCompleteSimulation, Simulation,
     circuit::{Circuit, SimulationError},
 };
 use binar::{AffineMap, BitMatrix, BitVec, Bitwise, BitwiseMut, IndexSet};
@@ -84,6 +84,9 @@ pub enum ActionsInequivalenceReason {
     ChoiState,
     /// See [`CircuitAction::signed_choi_state_stabilizers`] for details.
     ChoiStateSigns,
+    /// The relative `ζ₈` phases between branches of the Choi state differ.
+    /// Only produced by [`PhasedCircuitAction`]; see its documentation for details.
+    RelativePhase,
 }
 
 /// [`Circuit`]s in pauliverse include fixed number of qubits and do not have prepare and destroy instructions.
@@ -99,22 +102,96 @@ pub fn action_of(
     input_qubits: &[QubitId],
     output_qubits: &[QubitId],
 ) -> Result<CircuitAction, ActionError> {
+    build_action::<OutcomeCompleteSimulation>(circuit, input_qubits, output_qubits).map(|(action, _)| action)
+}
+
+/// Stabilizer simulators that expose the encoder data required to compute a [`CircuitAction`].
+///
+/// The method names differ from the inherent accessors of the same purpose to avoid shadowing them
+/// inside the forwarding implementations.
+trait ActionSimulation: Simulation {
+    fn encoder(&self) -> CliffordUnitary;
+    fn signs(&self) -> BitMatrix;
+    fn random_indicator(&self) -> &[bool];
+    fn outcomes(&self) -> BitMatrix;
+    fn outcome_offset(&self) -> BitVec;
+}
+
+impl ActionSimulation for OutcomeCompleteSimulation {
+    fn encoder(&self) -> CliffordUnitary {
+        self.state_encoder()
+    }
+    fn signs(&self) -> BitMatrix {
+        self.sign_matrix()
+    }
+    fn random_indicator(&self) -> &[bool] {
+        self.random_outcome_indicator()
+    }
+    fn outcomes(&self) -> BitMatrix {
+        self.outcome_matrix()
+    }
+    fn outcome_offset(&self) -> BitVec {
+        self.outcome_shift()
+    }
+}
+
+impl ActionSimulation for PhasedOutcomeCompleteSimulation {
+    fn encoder(&self) -> CliffordUnitary {
+        self.state_encoder()
+    }
+    fn signs(&self) -> BitMatrix {
+        self.sign_matrix()
+    }
+    fn random_indicator(&self) -> &[bool] {
+        self.random_outcome_indicator()
+    }
+    fn outcomes(&self) -> BitMatrix {
+        self.outcome_matrix()
+    }
+    fn outcome_offset(&self) -> BitVec {
+        self.outcome_shift()
+    }
+}
+
+/// Computes a [`CircuitAction`] using simulator `S`, returning both the action and the consumed
+/// simulator so that phase-aware callers can additionally read out its phase data.
+fn build_action<S: ActionSimulation>(
+    circuit: &Circuit,
+    input_qubits: &[QubitId],
+    output_qubits: &[QubitId],
+) -> Result<(CircuitAction, S), ActionError> {
     let qubit_count = circuit
         .qubit_count()
         .max(input_qubits.iter().max().map_or(0, |&q| q + 1))
         .max(output_qubits.iter().max().map_or(0, |&q| q + 1));
     let reference_qubits: Vec<QubitId> = (qubit_count..qubit_count + input_qubits.len()).collect();
     let outcome_count = circuit.outcome_count();
-    let mut simulation =
-        OutcomeCompleteSimulation::with_capacity(qubit_count + input_qubits.len(), outcome_count, outcome_count);
+    let mut simulation = S::with_capacity(qubit_count + input_qubits.len(), outcome_count, outcome_count);
 
     for (input_qubit, reference_qubit) in input_qubits.iter().zip(reference_qubits.iter()) {
         simulation.unitary_op(paulimer::UnitaryOp::PrepareBell, &[*input_qubit, *reference_qubit]);
     }
 
     circuit.simulate(&mut simulation)?;
-    let sign_matrix = simulation.sign_matrix();
-    let state_encoder = simulation.state_encoder();
+    let action = action_from_simulation(&simulation, input_qubits, output_qubits, &reference_qubits, qubit_count)?;
+    Ok((action, simulation))
+}
+
+/// Canonicalizes the Choi state recorded in `simulation` into a [`CircuitAction`].
+///
+/// This is the post-simulation core shared by [`build_action`] (which prepares the Bell pairs and
+/// replays a [`Circuit`]) and [`phased_action_from_simulation`] (which canonicalizes a Choi state the
+/// caller has already prepared). The caller is responsible for having entangled `input_qubits[k]`
+/// with `reference_qubits[k]` via a Bell pair before applying the circuit.
+fn action_from_simulation<S: ActionSimulation>(
+    simulation: &S,
+    input_qubits: &[QubitId],
+    output_qubits: &[QubitId],
+    reference_qubits: &[QubitId],
+    qubit_count: usize,
+) -> Result<CircuitAction, ActionError> {
+    let sign_matrix = simulation.signs();
+    let state_encoder = simulation.encoder();
 
     let auxiliary_qubits: Vec<QubitId> = output_qubits
         .iter()
@@ -132,7 +209,7 @@ pub fn action_of(
         });
     }
 
-    let observables = GeneratorsWithSigns::from_restriction(&state_encoder, &sign_matrix, &reference_qubits, true);
+    let observables = GeneratorsWithSigns::from_restriction(&state_encoder, &sign_matrix, reference_qubits, true);
     let stabilizers = GeneratorsWithSigns::from_restriction(&state_encoder, &sign_matrix, output_qubits, false);
     let choi_state_stabilizers = GeneratorsWithSigns::from_restriction(
         &state_encoder,
@@ -145,13 +222,13 @@ pub fn action_of(
         false,
     );
 
-    let indicators = simulation.random_outcome_indicator();
+    let indicators = simulation.random_indicator();
     let random_bit_map_matrix = random_bit_map_matrix(indicators);
-    let random_bit_map_shift = &random_bit_map_matrix * &simulation.outcome_shift().as_view();
+    let random_bit_map_shift = &random_bit_map_matrix * &simulation.outcome_offset().as_view();
     let outcome_to_random_bit_map = AffineMap::affine(random_bit_map_matrix.clone(), random_bit_map_shift.clone());
-    let outcomes_from_random = AffineMap::affine(simulation.outcome_matrix(), simulation.outcome_shift().clone());
+    let outcomes_from_random = AffineMap::affine(simulation.outcomes(), simulation.outcome_offset().clone());
 
-    let action = CircuitAction {
+    Ok(CircuitAction {
         observables,
         stabilizers,
         choi_state_stabilizers,
@@ -159,8 +236,7 @@ pub fn action_of(
         random_from_outcomes: outcome_to_random_bit_map,
         outcomes_from_random,
         input_qubit_ids: input_qubits.to_vec(),
-    };
-    Ok(action)
+    })
 }
 
 impl CircuitAction {
@@ -325,9 +401,266 @@ impl CircuitAction {
     }
 }
 
+/// The exact-global-phase analog of [`CircuitAction`], computed with a
+/// [`PhasedOutcomeCompleteSimulation`] so that the **relative `ζ₈` phases between branches** of the
+/// circuit's Choi state are retained in addition to the phaseless stabilizer data.
+///
+/// A [`CircuitAction`] determines the Choi state only up to phase, so it cannot distinguish circuits
+/// that act identically on the Pauli group but differ by branch-dependent phases — for example
+/// `e^{iα Z}` and `e^{-iα Z}`, whose conditioned Paulis `+Z` and `-Z` share a symplectic action.
+/// [`PhasedCircuitAction`] additionally compares the per-branch phase function
+/// `φ(r) = i^⟨p, r⟩ (-1)^⟨B r + s, r⟩`, capturing exactly that information.
+///
+/// The comparison is *up to a single global phase* common to all branches: the encoder's absolute
+/// phase is not exposed, so two Choi states that differ only by an overall scalar are reported as
+/// equivalent. Pinning down that absolute phase as well requires the auxiliary-qubit separation of
+/// §4.5 of [arXiv:2603.24717](https://arxiv.org/abs/2603.24717), a planned follow-up.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhasedCircuitAction {
+    action: CircuitAction,
+    phase: PhaseData,
+}
+
+/// Computes a [`PhasedCircuitAction`] for `circuit` with the given input and output qubits.
+///
+/// Behaves exactly like [`action_of`] but uses a [`PhasedOutcomeCompleteSimulation`], additionally
+/// recording the branch phase function of the circuit's Choi state.
+///
+/// # Errors
+///
+/// Returns [`ActionError`] if action calculation fails.
+pub fn phased_action_of(
+    circuit: &Circuit,
+    input_qubits: &[QubitId],
+    output_qubits: &[QubitId],
+) -> Result<PhasedCircuitAction, ActionError> {
+    let (action, simulation) = build_action::<PhasedOutcomeCompleteSimulation>(circuit, input_qubits, output_qubits)?;
+    let phase = PhaseData {
+        linear_i: simulation.linear_i_phase(),
+        linear_sign: simulation.linear_sign_phase(),
+        quadratic: simulation.quadratic_phase_matrix(),
+    };
+    Ok(PhasedCircuitAction { action, phase })
+}
+
+/// Computes a [`PhasedCircuitAction`] directly from a [`PhasedOutcomeCompleteSimulation`] whose Choi
+/// state the caller has already prepared.
+///
+/// This is the simulator-native counterpart of [`phased_action_of`], matching the convention used by
+/// the Python bindings where the simulator itself records the circuit. The caller must, before
+/// applying the circuit, have entangled each `input_qubits[k]` with a reference qubit via
+/// `UnitaryOp::PrepareBell`, following the same layout as [`phased_action_of`]: the reference qubit
+/// for `input_qubits[k]` is `system_qubit_count + k`, where `system_qubit_count` is one past the
+/// largest index appearing in `input_qubits` or `output_qubits`.
+///
+/// # Errors
+///
+/// Returns [`ActionError::AuxiliaryQubitsEntangled`] if the non-output system qubits remain
+/// entangled with the rest of the state.
+pub fn phased_action_from_simulation(
+    simulation: &PhasedOutcomeCompleteSimulation,
+    input_qubits: &[QubitId],
+    output_qubits: &[QubitId],
+) -> Result<PhasedCircuitAction, ActionError> {
+    let system_qubit_count = input_qubits
+        .iter()
+        .chain(output_qubits.iter())
+        .copied()
+        .max()
+        .map_or(0, |qubit| qubit + 1);
+    let reference_qubits: Vec<QubitId> =
+        (system_qubit_count..system_qubit_count + input_qubits.len()).collect();
+    let action = action_from_simulation(simulation, input_qubits, output_qubits, &reference_qubits, system_qubit_count)?;
+    let phase = PhaseData {
+        linear_i: simulation.linear_i_phase(),
+        linear_sign: simulation.linear_sign_phase(),
+        quadratic: simulation.quadratic_phase_matrix(),
+    };
+    Ok(PhasedCircuitAction { action, phase })
+}
+
+impl PhasedCircuitAction {
+    /// The underlying phaseless [`CircuitAction`].
+    #[must_use]
+    pub fn action(&self) -> &CircuitAction {
+        &self.action
+    }
+
+    /// Canonical choi state stabilizers; see [`CircuitAction::choi_state_stabilizers`].
+    pub fn choi_state_stabilizers(&self) -> &[SparsePauli] {
+        self.action.choi_state_stabilizers()
+    }
+
+    /// Returns `Ok(())` if the phaseless actions are equivalent up to signs, otherwise the reasons.
+    ///
+    /// This ignores phase entirely; use [`Self::is_equivalent_with_map`] to additionally compare the
+    /// relative branch phases.
+    ///
+    /// # Errors
+    ///
+    /// Returns a list of [`ActionsInequivalenceReason`] if the phaseless actions differ.
+    pub fn is_equivalent_up_to_signs(
+        &self,
+        other: &PhasedCircuitAction,
+    ) -> Result<(), Vec<ActionsInequivalenceReason>> {
+        self.action.is_equivalent_up_to_signs(&other.action)
+    }
+
+    /// Verifies that two phased actions implement the same operator on every input, treating each
+    /// random bit as a **symbolic angle** (a "virtual" random bit) that must correspond *one to one*
+    /// between the two actions.
+    ///
+    /// This is the comparison to use for symbolic-rotation verification: a rotation `e^{iα P}` is
+    /// modelled by conditioning `P` on a freshly allocated random bit, and two encodings of the same
+    /// parameterised circuit are equivalent only when their angle bits match up identically — angle
+    /// `α_k` of one must map to angle `α_k` of the other, with no affine mixing. Unlike the
+    /// phaseless [`CircuitAction::is_equivalent_with_map`], which may affinely remap *true*
+    /// (measurement-derived) random bits, the symbolic angles admit no such freedom.
+    ///
+    /// The two actions must therefore have the same number of random bits; the identity
+    /// correspondence is used. (Mixing genuine measurement randomness with symbolic angles is out of
+    /// scope here — use [`Self::is_equivalent_with_map`] with an explicit correspondence in that
+    /// case, keeping the angle bits fixed.)
+    ///
+    /// # Errors
+    ///
+    /// Returns a list of [`ActionsInequivalenceReason`] if the actions differ.
+    pub fn is_equivalent(&self, other: &PhasedCircuitAction) -> Result<(), Vec<ActionsInequivalenceReason>> {
+        if self.action.outcome_count() == other.action.outcome_count() {
+            let identity = AffineMap::linear(BitMatrix::identity(other.action.outcome_count()));
+            self.is_equivalent_with_map(other, Some(&identity))
+        } else {
+            self.is_equivalent_with_map(other, None)
+        }
+    }
+
+    /// Check if two phased actions are equivalent (up to a single global phase) when outcomes are
+    /// remapped, comparing both the [`CircuitAction`] data and the relative branch phases.
+    ///
+    /// The outcome remapping `self_outcomes_from_other_outcomes` follows the same convention as
+    /// [`CircuitAction::is_equivalent_with_map`]: outcomes of `self` equal `A(o_other)`. When the map
+    /// is `None`, the zero map is used, as is common for circuits with unitary action.
+    ///
+    /// This is the lower-level escape hatch behind [`Self::is_equivalent`]. The supplied map may
+    /// affinely remap *true* random bits, but **symbolic-angle (virtual) random bits must be mapped
+    /// one to one** (identity or a permutation) — affinely combining angle bits, or mixing them with
+    /// true random bits, does not correspond to any operator equality and must be avoided. Prefer
+    /// [`Self::is_equivalent`] unless you specifically need to relabel true random bits.
+    ///
+    /// # Errors
+    ///
+    /// Returns a list of [`ActionsInequivalenceReason`] if the actions differ; the additional
+    /// [`ActionsInequivalenceReason::RelativePhase`] is returned when only the branch phases differ.
+    pub fn is_equivalent_with_map(
+        &self,
+        other: &PhasedCircuitAction,
+        self_outcomes_from_other_outcomes: Option<&AffineMap>,
+    ) -> Result<(), Vec<ActionsInequivalenceReason>> {
+        self.action
+            .is_equivalent_with_map(&other.action, self_outcomes_from_other_outcomes)?;
+
+        let zero = zero_map(&self.action, &other.action);
+        let outcome_map = self_outcomes_from_other_outcomes.unwrap_or(&zero);
+        let self_outcomes_from_other_random = outcome_map.dot(&other.action.outcomes_from_random);
+        let self_random_from_other_random = self.action.random_from_outcomes.dot(&self_outcomes_from_other_random);
+
+        if self.relative_phase_matches(other, &self_random_from_other_random) {
+            Ok(())
+        } else {
+            Err(vec![ActionsInequivalenceReason::RelativePhase])
+        }
+    }
+
+    /// Checks that the branch phase functions of `self` and `other` agree up to a global phase, where
+    /// branch `r` of `other` corresponds to branch `self_random_from_other_random(r)` of `self`.
+    ///
+    /// The phase function `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)` is a degree-≤2 polynomial in `r`
+    /// over `ℤ₈`, so it is fully determined by its values on the zero vector, the unit vectors, and
+    /// the pairwise sums of unit vectors. Equality up to a global phase is therefore equivalent to
+    /// equality of the linear coefficients `φ(e_i) − φ(0)` and the quadratic coefficients
+    /// `φ(e_i + e_j) − φ(e_i) − φ(e_j) + φ(0)`, which we compare directly (ignoring the constant
+    /// `φ(0)`, i.e. the global phase).
+    fn relative_phase_matches(&self, other: &PhasedCircuitAction, self_random_from_other_random: &AffineMap) -> bool {
+        let random_count = self_random_from_other_random.input_dimension();
+        let phase_self = |branch: &BitVec| self.phase.phase_exponent(&self_random_from_other_random.apply(branch));
+        let phase_other = |branch: &BitVec| other.phase.phase_exponent(branch);
+
+        let zero = BitVec::zeros(random_count);
+        let constant_self = i32::from(phase_self(&zero));
+        let constant_other = i32::from(phase_other(&zero));
+
+        let mut linear_self = vec![0i32; random_count];
+        let mut linear_other = vec![0i32; random_count];
+        for index in 0..random_count {
+            let unit = unit_vector(random_count, &[index]);
+            linear_self[index] = (i32::from(phase_self(&unit)) - constant_self).rem_euclid(8);
+            linear_other[index] = (i32::from(phase_other(&unit)) - constant_other).rem_euclid(8);
+        }
+        if linear_self != linear_other {
+            return false;
+        }
+
+        for first in 0..random_count {
+            for second in (first + 1)..random_count {
+                let unit = unit_vector(random_count, &[first, second]);
+                let quadratic_self = (i32::from(phase_self(&unit)) - constant_self - linear_self[first]
+                    - linear_self[second])
+                    .rem_euclid(8);
+                let quadratic_other = (i32::from(phase_other(&unit)) - constant_other - linear_other[first]
+                    - linear_other[second])
+                    .rem_euclid(8);
+                if quadratic_self != quadratic_other {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+}
+
 // ================================================================================================
 // Private Types
 // ================================================================================================
+
+/// Branch phase function of a Choi state, indexed by the inner random bits.
+///
+/// The `ζ₈` phase of branch `r` is `ζ₈^φ(r)` with `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)`, matching
+/// [`PhasedOutcomeCompleteSimulation::output_phase_exponent`].
+#[derive(Debug, Clone, PartialEq)]
+struct PhaseData {
+    /// `p`: linear `i` phase.
+    linear_i: BitVec,
+    /// `s`: linear `-1` phase.
+    linear_sign: BitVec,
+    /// `B`: quadratic `-1` phase.
+    quadratic: BitMatrix,
+}
+
+impl PhaseData {
+    fn random_count(&self) -> usize {
+        self.linear_i.len()
+    }
+
+    /// The `ζ₈` exponent `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)` for the branch `random_bits`.
+    fn phase_exponent(&self, random_bits: &BitVec) -> u8 {
+        let random_count = self.random_count();
+        let mut linear_i = false;
+        let mut sign = false;
+        for column in 0..random_count {
+            if !random_bits.index(column) {
+                continue;
+            }
+            linear_i ^= self.linear_i.index(column);
+            sign ^= self.linear_sign.index(column);
+            for row in 0..random_count {
+                if random_bits.index(row) && self.quadratic.get((row, column)) {
+                    sign = !sign;
+                }
+            }
+        }
+        (2 * u8::from(linear_i) + 4 * u8::from(sign)) % 8
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 struct GeneratorsWithSigns {
@@ -420,4 +753,13 @@ fn adjust_phase_to_canonical(pauli: &mut SparsePauli) -> bool {
 
 fn zero_map(to: &CircuitAction, from: &CircuitAction) -> AffineMap {
     AffineMap::zero(from.outcome_count(), to.outcome_count())
+}
+
+/// Returns the length-`dimension` bit vector with the bits in `set_indices` set to one.
+fn unit_vector(dimension: usize, set_indices: &[usize]) -> BitVec {
+    let mut vector = BitVec::zeros(dimension);
+    for &index in set_indices {
+        vector.assign_index(index, true);
+    }
+    vector
 }

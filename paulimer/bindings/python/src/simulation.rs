@@ -2,11 +2,13 @@ use std::ops::{Deref, DerefMut};
 
 use binar::{BitMatrix, BitVec};
 use paulimer::clifford::CliffordUnitary;
+use pauliverse::action::{PhasedCircuitAction, phased_action_from_simulation};
 use pauliverse::outcome_complete_simulation::OutcomeCompleteSimulation;
 use pauliverse::outcome_free_simulation::OutcomeFreeSimulation;
 use pauliverse::outcome_specific_simulation::OutcomeSpecificSimulation;
 use pauliverse::phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 use pauliverse::Simulation;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::enums::PyUnitaryOp;
@@ -292,4 +294,48 @@ impl_simulation!(
         pub fn output_phase_exponent(&self, random_bits: Vec<bool>) -> u8 {
             self.inner.output_phase_exponent(&random_bits)
         }
+
+        #[allow(clippy::needless_pass_by_value)]
+        /// # Errors
+        ///
+        /// Returns a `ValueError` if the non-output system qubits remain entangled.
+        pub fn phased_action(
+            &self,
+            input_qubits: Vec<usize>,
+            output_qubits: Vec<usize>,
+        ) -> PyResult<PyPhasedCircuitAction> {
+            phased_action_from_simulation(&self.inner, &input_qubits, &output_qubits)
+                .map(|action| PyPhasedCircuitAction { inner: action })
+                .map_err(|error| PyValueError::new_err(format!("{error:?}")))
+        }
 });
+
+#[derive(derive_more::From)]
+#[must_use]
+#[pyclass(name = "PhasedCircuitAction", module = "paulimer")]
+pub struct PyPhasedCircuitAction {
+    inner: PhasedCircuitAction,
+}
+
+#[pymethods]
+impl PyPhasedCircuitAction {
+    #[getter]
+    #[must_use]
+    pub fn choi_state_stabilizers(&self) -> Vec<PySparsePauli> {
+        self.inner
+            .choi_state_stabilizers()
+            .iter()
+            .map(|pauli| PySparsePauli { inner: pauli.clone() })
+            .collect()
+    }
+
+    #[must_use]
+    pub fn is_equivalent(&self, other: &PyPhasedCircuitAction) -> bool {
+        self.inner.is_equivalent(&other.inner).is_ok()
+    }
+
+    #[must_use]
+    pub fn is_equivalent_up_to_signs(&self, other: &PyPhasedCircuitAction) -> bool {
+        self.inner.is_equivalent_up_to_signs(&other.inner).is_ok()
+    }
+}
