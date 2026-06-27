@@ -99,6 +99,13 @@ proptest! {
     }
 
     #[test]
+    fn diagonal_unitary_x_ejection_proptest(z_diagonal_unitary in arbitrary_diagonal_clifford(1..6usize)) {
+        let x_diagonal_unitary = x_diagonal_from_z_diagonal(&z_diagonal_unitary);
+        let (circuit, input) = diagonal_unitary_x_ejection_circuit_with_io(&x_diagonal_unitary);
+        check_and_compare_unitary_x(&x_diagonal_unitary, &circuit, &input);
+    }
+
+    #[test]
     fn diagonal_unitary_injection_proptest(z_diagonal_unitary in arbitrary_diagonal_clifford(1..6usize)) {
         let (circuit, input) = diagonal_unitary_injection_circuit_with_io(&z_diagonal_unitary);
         check_and_compare_unitary(&z_diagonal_unitary, &circuit, &input);
@@ -175,6 +182,29 @@ fn check_and_compare_unitary(
     unitary_action
         .is_equivalent_with_map(&action, None)
         .expect("diagonal ejection action should be equivalent to unitary action");
+}
+
+fn check_and_compare_unitary_x(
+    x_diagonal_unitary: &CliffordUnitary,
+    circuit: &Circuit,
+    input_and_output_qubits: &[usize],
+) {
+    assert!(x_diagonal_unitary.is_diagonal(XOrZ::X));
+    let action =
+        action_of(circuit, input_and_output_qubits, input_and_output_qubits).expect("X diagonal ejection action");
+    check_unitary_action(
+        x_diagonal_unitary,
+        input_and_output_qubits,
+        input_and_output_qubits,
+        &action,
+    );
+
+    let (unitary_circuit, unitary_input, unitary_output) = one_unitary_circuit_with_io(x_diagonal_unitary);
+    let unitary_action =
+        action_of(&unitary_circuit, &unitary_input, &unitary_output).expect("X diagonal unitary action");
+    unitary_action
+        .is_equivalent_with_map(&action, None)
+        .expect("X diagonal ejection action should be equivalent to unitary action");
 }
 
 /// Validation of some common kinds of action
@@ -439,6 +469,50 @@ fn diagonal_unitary_ejection_circuit_with_io(z_diagonal_unitary: &CliffordUnitar
     b = b.clifford(z_diagonal_unitary, &references);
     for (id, (&target, &reference)) in targets.iter().zip(references.iter()).enumerate() {
         b = b.measure_x(reference, id).conditional_z(target, &[id], true);
+    }
+
+    (b.into_circuit(), targets)
+}
+
+/// A transversal Hadamard layer on `qubit_count` qubits, used to map between the Z- and X-diagonal
+/// Clifford subgroups by conjugation.
+fn hadamard_layer(qubit_count: usize) -> CliffordUnitary {
+    let mut layer = CliffordUnitary::identity(qubit_count);
+    for qubit in 0..qubit_count {
+        layer.left_mul(UnitaryOp::Hadamard, &[qubit]);
+    }
+    layer
+}
+
+/// Conjugates a Z-diagonal Clifford by a transversal Hadamard to obtain an X-diagonal Clifford
+/// `H^n · U · H^n`. (The result is independent of association since `H` is its own inverse.)
+fn x_diagonal_from_z_diagonal(z_diagonal_unitary: &CliffordUnitary) -> CliffordUnitary {
+    let hadamards = hadamard_layer(z_diagonal_unitary.num_qubits());
+    &(&hadamards * z_diagonal_unitary) * &hadamards
+}
+
+/// Implements `x_diagonal_unitary` via the X-basis dual of the diagonal ejection of Figure 9 in
+/// <https://arxiv.org/pdf/2506.15130v1>: the whole gadget is the conjugation of
+/// [`diagonal_unitary_ejection_circuit_with_io`] by a transversal Hadamard on every system and
+/// reference qubit. Each reference (ancilla) is prepared in `|+⟩`, the CNOTs run from references into
+/// the targets, an X-diagonal Clifford acts on the references, and the references are measured in the
+/// Z basis with a conditional X correction on a `1` outcome.
+fn diagonal_unitary_x_ejection_circuit_with_io(x_diagonal_unitary: &CliffordUnitary) -> (Circuit, Vec<QubitId>) {
+    assert!(x_diagonal_unitary.is_diagonal(XOrZ::X));
+    let qubit_count = x_diagonal_unitary.num_qubits();
+    let targets = (0..qubit_count).collect::<Vec<QubitId>>();
+    let references = (qubit_count..2 * qubit_count).collect::<Vec<QubitId>>();
+
+    let mut b = empty_builder();
+    for &reference in &references {
+        b = b.h(reference);
+    }
+    for (&target, &reference) in targets.iter().zip(references.iter()) {
+        b = b.cnot(reference, target);
+    }
+    b = b.clifford(x_diagonal_unitary, &references);
+    for (id, (&target, &reference)) in targets.iter().zip(references.iter()).enumerate() {
+        b = b.measure_z(reference, id).conditional_x(target, &[id], true);
     }
 
     (b.into_circuit(), targets)

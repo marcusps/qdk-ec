@@ -343,3 +343,100 @@ fn z_diagonal_clifford_ejection_without_angles() {
     }
 }
 
+// ================================================================================================
+// X-basis "ejection": the Hadamard dual of the Z-basis gadget above.
+//
+// An X-diagonal channel on `n` system qubits is applied indirectly: `n` ancillas (prepared in |+⟩)
+// drive a transversal CNOT *into* the system qubits (control = ancilla, target = system), the
+// X-diagonal channel acts on the ancillas, each ancilla is destructively measured in the Z basis,
+// and a `1` outcome triggers a conditional X correction on the corresponding system qubit. Because
+// this whole gadget is the conjugation of the (already verified) Z-basis gadget by a Hadamard on
+// every system and ancilla qubit, it must equal applying the same X-diagonal channel directly. As in
+// the Z case, the Z-basis measurements introduce *true* random bits that must be marginalized, while
+// the symbolic rotation angles are *virtual* bits that correspond one-to-one.
+// ================================================================================================
+
+/// `X` on each `qubits[i]`-th entry of `support` (a tensor product of `X` operators).
+fn x_product(qubits: &[usize], support: &[QubitId]) -> SparsePauli {
+    let positioned: Vec<PositionedPauliObservable> = qubits.iter().map(|&qubit| x(support[qubit])).collect();
+    (&positioned[..]).into()
+}
+
+/// Applies the symbolic X-rotations indexed by `angle_supports` (each a tensor product of `X`s, with
+/// its own symbolic angle) to the qubits named by `support`, in allocation order.
+fn apply_symbolic_x_rotations(builder: &mut CircuitBuilder, angle_supports: &[Vec<usize>], support: &[QubitId]) {
+    for qubits in angle_supports {
+        let angle = builder.allocate_symbolic_angle();
+        builder.conditional_pauli(&x_product(qubits, support), &[angle], true);
+    }
+}
+
+/// The direct circuit: the symbolic X-rotations applied straight to the `n` system qubits.
+fn direct_x_channel(n: usize, angle_supports: &[Vec<usize>]) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    build_circuit(|builder| {
+        apply_symbolic_x_rotations(builder, angle_supports, &system);
+    })
+}
+
+/// The ejection circuit: the same symbolic X-rotations executed remotely on `n` ancillas.
+fn x_ejection_channel(n: usize, angle_supports: &[Vec<usize>]) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    let ancillas: Vec<QubitId> = (n..2 * n).collect();
+    build_circuit(|builder| {
+        for &ancilla in &ancillas {
+            builder.unitary_op(UnitaryOp::Hadamard, &[ancilla]);
+        }
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            builder.unitary_op(UnitaryOp::ControlledX, &[ancilla, system_qubit]);
+        }
+        apply_symbolic_x_rotations(builder, angle_supports, &ancillas);
+        for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
+            let outcome = builder.measure(&sparse(&[z(ancilla)]));
+            builder.conditional_pauli(&sparse(&[x(system_qubit)]), &[outcome], true);
+        }
+    })
+}
+
+fn check_x_ejection(n: usize, angle_supports: &[Vec<usize>]) {
+    let system: Vec<QubitId> = (0..n).collect();
+    let direct = direct_x_channel(n, angle_supports);
+    let ejection = x_ejection_channel(n, angle_supports);
+
+    let direct_action = phased_action_of(&direct, &system, &system).expect("direct channel action");
+    let ejection_action = phased_action_of(&ejection, &system, &system).expect("ejection channel action");
+
+    direct_action.is_equivalent(&ejection_action).unwrap_or_else(|reasons| {
+        panic!("X ejection of {angle_supports:?} on {n} qubits must equal the direct channel: {reasons:?}")
+    });
+    ejection_action
+        .is_equivalent(&direct_action)
+        .expect("X ejection equivalence must be symmetric");
+}
+
+#[test]
+fn single_qubit_x_rotation_ejection() {
+    check_x_ejection(1, &[vec![0]]);
+}
+
+#[test]
+fn two_qubit_x_rotation_ejections() {
+    check_x_ejection(2, &[vec![0]]);
+    check_x_ejection(2, &[vec![1]]);
+    check_x_ejection(2, &[vec![0, 1]]);
+    check_x_ejection(2, &[vec![0], vec![1], vec![0, 1]]);
+}
+
+#[test]
+fn three_qubit_all_x_products_ejection() {
+    let all_nontrivial: Vec<Vec<usize>> = (1u32..8)
+        .map(|mask| (0..3).filter(|bit| mask & (1 << bit) != 0).collect())
+        .collect();
+    check_x_ejection(3, &all_nontrivial);
+}
+
+#[test]
+fn repeated_x_angles_ejection() {
+    check_x_ejection(2, &[vec![0], vec![0], vec![0, 1], vec![0, 1]]);
+}
+
