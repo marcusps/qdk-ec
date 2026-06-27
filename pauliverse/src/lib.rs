@@ -4,17 +4,23 @@
 //! for different use cases in quantum computing and quantum error correction.
 //!
 //! These simulation algorithms are based on the framework described in
-//! [arXiv:2309.08676](https://arxiv.org/abs/2309.08676).
+//! [arXiv:2309.08676](https://arxiv.org/abs/2309.08676), extended with exact
+//! global-phase tracking from [arXiv:2603.24717](https://arxiv.org/abs/2603.24717).
 //!
 //! # Overview
 //!
-//! This crate offers four simulation modes:
+//! This crate offers five simulation modes:
 //!
 //! - **[`OutcomeSpecificSimulation`]**: Traditional simulation with random (or caller-supplied) measurement outcomes.
 //!   Best for Monte Carlo sampling and estimating error rates.
 //!
 //! - **[`OutcomeCompleteSimulation`]**: Tracks all possible measurement outcomes simultaneously.
 //!   Achieves asymptotic speedup when enumerating outcomes.
+//!
+//! - **[`PhasedOutcomeCompleteSimulation`]**: Like [`OutcomeCompleteSimulation`], but additionally
+//!   tracks the *exact* global phase of the encoded state (Algorithm 4.2 of
+//!   [arXiv:2603.24717](https://arxiv.org/abs/2603.24717)). Enables exact equality checking of
+//!   non-stabilizer circuits.
 //!
 //! - **[`OutcomeFreeSimulation`]**: Simulation without tracking specific outcomes.
 //!   Minimal overhead when you only care about stabilizer state evolution up to global phase.
@@ -51,6 +57,7 @@
 //! |-----------|----------|---------------|
 //! | [`OutcomeSpecificSimulation`] | Monte Carlo sampling with few shots | Single concrete execution path |
 //! | [`OutcomeCompleteSimulation`] | Whole-circuit analysis, enumerating outcomes | Avoids re-simulating for each outcome sample |
+//! | [`PhasedOutcomeCompleteSimulation`] | Exact equality checking of non-stabilizer circuits | Tracks the exact global phase, not just up to phase |
 //! | [`OutcomeFreeSimulation`] | Stabilizer queries without outcomes | Minimal overhead, no outcome tracking |
 //! | [`FaultySimulation`] | Noisy simulation with error correction | Efficient frame-based noise propagation |
 //!
@@ -97,6 +104,7 @@ pub mod outcome_complete_simulation;
 
 pub mod outcome_free_simulation;
 pub mod outcome_specific_simulation;
+pub mod phased_outcome_complete_simulation;
 pub mod sampling;
 #[cfg(test)]
 pub(crate) mod statistical_testing;
@@ -107,6 +115,7 @@ pub use noise::{OutcomeCondition, PauliDistribution, PauliFault};
 pub use outcome_complete_simulation::OutcomeCompleteSimulation;
 pub use outcome_free_simulation::OutcomeFreeSimulation;
 pub use outcome_specific_simulation::OutcomeSpecificSimulation;
+pub use phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 
 type Pauli = paulimer::pauli::SparsePauli;
 type Unitary = paulimer::clifford::CliffordUnitary;

@@ -5,6 +5,7 @@ use paulimer::clifford::CliffordUnitary;
 use pauliverse::outcome_complete_simulation::OutcomeCompleteSimulation;
 use pauliverse::outcome_free_simulation::OutcomeFreeSimulation;
 use pauliverse::outcome_specific_simulation::OutcomeSpecificSimulation;
+use pauliverse::phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 use pauliverse::Simulation;
 use pyo3::prelude::*;
 
@@ -31,6 +32,13 @@ pub struct PyOutcomeSpecificSimulation {
 #[pyclass(name = "OutcomeFreeSimulation", module = "paulimer")]
 pub struct PyOutcomeFreeSimulation {
     inner: OutcomeFreeSimulation,
+}
+
+#[derive(derive_more::Deref, derive_more::DerefMut, derive_more::From)]
+#[must_use]
+#[pyclass(name = "PhasedOutcomeCompleteSimulation", module = "paulimer")]
+pub struct PyPhasedOutcomeCompleteSimulation {
+    inner: PhasedOutcomeCompleteSimulation,
 }
 
 macro_rules! impl_simulation {
@@ -236,5 +244,52 @@ impl_simulation!(
         #[pyo3(signature=(num_qubits, seed = 0))]
         pub fn new_with_seeded_random_outcomes(num_qubits: usize, seed: u64) -> Self {
             OutcomeSpecificSimulation::new_with_seeded_random_outcomes(num_qubits, seed).into()
+        }
+});
+
+impl_simulation!(
+    PhasedOutcomeCompleteSimulation,
+    PyPhasedOutcomeCompleteSimulation {
+        #[getter]
+        pub fn clifford(&self) -> PyCliffordUnitary {
+            PyCliffordUnitary {
+                inner: self.deref().state_encoder(),
+            }
+        }
+
+        #[getter]
+        pub fn sign_matrix(&self) -> BitMatrix {
+            self.inner.sign_matrix()
+        }
+
+        #[getter]
+        pub fn quadratic_phase_matrix(&self) -> BitMatrix {
+            self.inner.quadratic_phase_matrix()
+        }
+
+        #[getter]
+        pub fn outcome_matrix(&self) -> BitMatrix {
+            self.inner.outcome_matrix()
+        }
+
+        #[getter]
+        pub fn outcome_shift(&self) -> BitVec {
+            self.inner.outcome_shift()
+        }
+
+        #[getter]
+        pub fn linear_i_phase(&self) -> BitVec {
+            self.inner.linear_i_phase()
+        }
+
+        #[getter]
+        pub fn linear_sign_phase(&self) -> BitVec {
+            self.inner.linear_sign_phase()
+        }
+
+        #[allow(clippy::needless_pass_by_value)]
+        #[must_use]
+        pub fn output_phase_exponent(&self, random_bits: Vec<bool>) -> u8 {
+            self.inner.output_phase_exponent(&random_bits)
         }
 });

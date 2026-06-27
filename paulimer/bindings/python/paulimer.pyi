@@ -26,6 +26,7 @@ __all__ = [
     "PauliDistribution",
     "PauliFault",
     "PauliGroup",
+    "PhasedOutcomeCompleteSimulation",
     "SparsePauli",
     "UnitaryOpcode",
     "centralizer_of",
@@ -978,6 +979,166 @@ class OutcomeCompleteSimulation:
         provides the base value that gets XORed with the linear combination of random bits.
 
         Length: outcome_count
+        """
+        ...
+
+@final
+class PhasedOutcomeCompleteSimulation:
+    """Outcome-complete stabilizer simulation that also tracks the exact global phase.
+
+    This is the global-phase-resolving generalization of
+    :class:`OutcomeCompleteSimulation`, implementing Algorithm 4.2 of
+    arXiv:2603.24717 ("phased outcome-complete simulation"). Like its phaseless
+    counterpart it tracks all ``2^n_random`` measurement branches simultaneously,
+    but the encoded state is maintained with its *exact* global phase rather than
+    only up to a global phase. This enables exact equality checking of non-stabilizer
+    circuits (e.g. circuits with symbolic single-qubit rotations).
+
+    For a random-bit assignment ``r`` the encoded state is
+
+        ``i^<p, r> (-1)^<B r + s, r> R|A r>``
+
+    where ``R`` is the phased state encoder, ``A`` the sign matrix, ``B`` the quadratic
+    phase matrix, ``p`` the linear ``i``-phase vector, and ``s`` the linear ``-1``-phase
+    vector. The scalar prefactor is exposed via :meth:`output_phase_exponent`.
+
+    Examples:
+        >>> sim = PhasedOutcomeCompleteSimulation(2)
+        >>> sim.apply_unitary(UnitaryOpcode.Hadamard, [0])
+        >>> sim.apply_unitary(UnitaryOpcode.ControlledX, [0, 1])
+        >>> sim.measure(SparsePauli("X_0"))
+        >>> exponent = sim.output_phase_exponent([True])  # zeta_8 exponent for r = (1,)
+    """
+
+    def __new__(cls, qubit_count: int = 0) -> "PhasedOutcomeCompleteSimulation":
+        """Create a simulation with the specified number of qubits."""
+        ...
+
+    @property
+    def qubit_count(self) -> int: ...
+    @property
+    def qubit_capacity(self) -> int: ...
+    @property
+    def outcome_count(self) -> int: ...
+    @property
+    def outcome_capacity(self) -> int: ...
+    @property
+    def random_outcome_count(self) -> int: ...
+    @property
+    def random_outcome_capacity(self) -> int: ...
+    @property
+    def random_bit_count(self) -> int: ...
+    def apply_unitary(
+        self, unitary_op: UnitaryOpcode, support: Sequence[int]
+    ) -> None: ...
+    def apply_pauli_exp(self, observable: SparsePauli) -> None: ...
+    def apply_pauli(
+        self, observable: SparsePauli, controlled_by: SparsePauli | None = None
+    ) -> None: ...
+    def apply_conditional_pauli(
+        self,
+        observable: SparsePauli,
+        outcomes: Sequence[int],
+        parity: bool = True,
+    ) -> None: ...
+    def apply_permutation(
+        self, permutation: Sequence[int], supported_by: Sequence[int] | None = None
+    ) -> None: ...
+    def apply_clifford(
+        self, clifford: CliffordUnitary, supported_by: Sequence[int] | None = None
+    ) -> None: ...
+    def measure(
+        self, observable: SparsePauli, hint: SparsePauli | None = None
+    ) -> int: ...
+    def allocate_random_bit(self) -> int: ...
+    def reserve_qubits(self, new_qubit_capacity: int) -> None: ...
+    def reserve_outcomes(
+        self, new_outcome_capacity: int, new_random_outcome_capacity: int
+    ) -> None: ...
+    def is_stabilizer(
+        self,
+        observable: SparsePauli,
+        ignore_sign: bool = False,
+        sign_parity: Sequence[int] = ...,  # type: ignore[assignment]
+    ) -> bool:
+        """Check if an observable is a stabilizer of the current state."""
+        ...
+
+    @staticmethod
+    def with_capacity(
+        num_qubits: int, num_outcomes: int, num_random_outcomes: int
+    ) -> "PhasedOutcomeCompleteSimulation":
+        """Create simulation with pre-allocated capacity."""
+        ...
+
+    @property
+    def random_outcome_indicator(self) -> BitVector:
+        """Indicator of which outcomes are random (vs deterministic)."""
+        ...
+
+    @property
+    def clifford(self) -> CliffordUnitary:
+        """Clifford unitary encoding the current stabilizer state (global phase discarded)."""
+        ...
+
+    @property
+    def sign_matrix(self) -> BitMatrix:
+        """Sign matrix A mapping random outcomes to the computational-basis register.
+
+        Shape: (qubit_count, random_outcome_count)
+        """
+        ...
+
+    @property
+    def quadratic_phase_matrix(self) -> BitMatrix:
+        """Quadratic phase matrix B contributing the (-1)^<B r, r> factor.
+
+        Shape: (random_outcome_count, random_outcome_count)
+        """
+        ...
+
+    @property
+    def outcome_matrix(self) -> BitMatrix:
+        """Outcome matrix M encoding all 2^k measurement branches.
+
+        Shape: (outcome_count, random_outcome_count)
+        """
+        ...
+
+    @property
+    def outcome_shift(self) -> BitVector:
+        """Outcome shift vector v_0 representing deterministic outcome contributions.
+
+        Length: outcome_count
+        """
+        ...
+
+    @property
+    def linear_i_phase(self) -> BitVector:
+        """Linear i-phase vector p contributing the i^<p, r> factor.
+
+        Length: random_outcome_count
+        """
+        ...
+
+    @property
+    def linear_sign_phase(self) -> BitVector:
+        """Linear sign-phase vector s contributing the (-1)^<s, r> factor.
+
+        Length: random_outcome_count
+        """
+        ...
+
+    def output_phase_exponent(self, random_bits: Sequence[bool]) -> int:
+        """Return the zeta_8 = e^{i pi/4} exponent of the scalar prefactor.
+
+        For the given random-bit assignment ``r`` this is the exponent (modulo 8) of
+        the scalar ``i^<p, r> (-1)^<B r + s, r>`` multiplying ``R|A r>`` in the output
+        state. The phase of ``R|A r>`` itself is carried by the phased encoder.
+
+        Args:
+            random_bits: Boolean assignment for each random outcome (length at least
+                ``random_outcome_count``).
         """
         ...
 

@@ -7,6 +7,7 @@ from paulimer import (
     OutcomeCompleteSimulation,
     OutcomeFreeSimulation,
     OutcomeSpecificSimulation,
+    PhasedOutcomeCompleteSimulation,
 )
 
 SIMULATION_CLASSES = [
@@ -258,3 +259,50 @@ class TestOutcomeSpecificSimulationSpecific:
     def test_new_with_seeded_random_outcomes(self):
         sim = OutcomeSpecificSimulation.new_with_seeded_random_outcomes(3, seed=42)
         assert sim.qubit_count == 3
+
+
+class TestPhasedOutcomeCompleteSimulationSpecific:
+
+    def test_default_construction(self):
+        sim = PhasedOutcomeCompleteSimulation()
+        assert isinstance(sim.qubit_count, int)
+
+    def test_construction_with_qubit_count(self):
+        sim = PhasedOutcomeCompleteSimulation(4)
+        assert sim.qubit_count == 4
+        assert sim.qubit_capacity >= 4
+
+    def test_with_capacity(self):
+        sim = PhasedOutcomeCompleteSimulation.with_capacity(3, 10, 5)
+        assert sim.outcome_capacity >= 10
+        assert sim.random_outcome_capacity >= 5
+
+    def test_clifford_returns_clifford_unitary(self):
+        sim = PhasedOutcomeCompleteSimulation(2)
+        assert isinstance(sim.clifford, CliffordUnitary)
+
+    def test_phase_matrices_return_expected_types(self):
+        sim = PhasedOutcomeCompleteSimulation(2)
+        assert isinstance(sim.sign_matrix, BitMatrix)
+        assert isinstance(sim.quadratic_phase_matrix, BitMatrix)
+        assert isinstance(sim.outcome_matrix, BitMatrix)
+        assert isinstance(sim.outcome_shift, BitVector)
+        assert isinstance(sim.linear_i_phase, BitVector)
+        assert isinstance(sim.linear_sign_phase, BitVector)
+
+    def test_operations_and_measurement(self):
+        sim = PhasedOutcomeCompleteSimulation(2)
+        sim.apply_unitary(UnitaryOpcode.Hadamard, [0])
+        sim.apply_unitary(UnitaryOpcode.ControlledX, [0, 1])
+        outcome = sim.measure(SparsePauli("X_0"))
+        assert isinstance(outcome, int)
+        assert sim.random_outcome_count == 1
+
+    def test_output_phase_exponent(self):
+        sim = PhasedOutcomeCompleteSimulation(1)
+        sim.measure(SparsePauli("X_0"))
+        exponent = sim.output_phase_exponent([True])
+        assert isinstance(exponent, int)
+        assert 0 <= exponent < 8
+        # The trivial assignment never contributes a phase.
+        assert sim.output_phase_exponent([False]) == 0

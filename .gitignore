@@ -11,3 +11,5 @@ Cargo.lock
 **/.hypothesis/*
 *.pyc
 *.bin
+# Local copies of reference papers (TeX sources)
+references/
