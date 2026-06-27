@@ -1144,13 +1144,24 @@ class PhasedOutcomeCompleteSimulation:
         ...
 
     def allocate_symbolic_angle(self) -> int:
-        """Allocate a random bit tagged as a *symbolic rotation angle* (a virtual bit).
+        """Allocate a fresh symbolic rotation angle ``alpha``.
 
-        Conditioning a Pauli ``P`` on the returned bit models the symbolic rotation
-        ``e^{i alpha P}``. Unlike :meth:`allocate_random_bit`, which introduces a *true*
-        (measurement-like) random bit, symbolic-angle bits must correspond one to one when
-        phased actions are compared for equivalence; they are never marginalized or affinely
-        remapped.
+        Pass the returned angle to :meth:`apply_symbolic_pauli_exp` to apply ``e^{i alpha P}``.
+        Allocate one angle per rotation; a single angle may drive several rotations to model a
+        shared ``alpha``. When two circuits are compared with :meth:`phased_action`, their symbolic
+        angles are matched one to one in allocation order, so allocate them in the same order on
+        both sides for the comparison to be meaningful.
+        """
+        ...
+
+    def apply_symbolic_pauli_exp(self, observable: SparsePauli, angle: int) -> None:
+        """Apply a symbolic Pauli rotation ``e^{i alpha P}`` parameterised by ``angle``.
+
+        ``angle`` must be a symbolic angle returned by :meth:`allocate_symbolic_angle`. This is
+        the high-level way to add a free-angle rotation ``e^{i alpha P}`` for an arbitrary Pauli
+        ``P``. The same ``angle`` may parameterise several rotations (a shared ``alpha``), and
+        angles allocated in the same order in two circuits are what make those circuits' rotations
+        correspond when their phased actions are compared.
         """
         ...
 

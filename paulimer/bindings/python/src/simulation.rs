@@ -295,14 +295,27 @@ impl_simulation!(
             self.inner.output_phase_exponent(&random_bits)
         }
 
-        /// Allocates a random bit tagged as a *symbolic rotation angle* (a virtual bit).
+        /// Allocate a fresh symbolic rotation angle `α`.
         ///
-        /// Conditioning a Pauli `P` on the returned bit models the symbolic rotation `e^{iα P}`.
-        /// Unlike [`allocate_random_bit`], which introduces a *true* (measurement-like) random bit,
-        /// symbolic-angle bits must correspond one to one when phased actions are compared for
-        /// equivalence; they are never marginalized or affinely remapped.
+        /// Pass the returned angle to [`apply_symbolic_pauli_exp`] to apply `e^{iα P}`. Allocate one
+        /// angle per rotation; a single angle may drive several rotations to model a shared `α`.
+        /// When two circuits are compared with `phased_action`, their symbolic angles are matched
+        /// one to one in allocation order, so allocate them in the same order on both sides for the
+        /// comparison to be meaningful.
         pub fn allocate_symbolic_angle(&mut self) -> usize {
             self.inner.allocate_symbolic_angle()
+        }
+
+        /// Apply a symbolic Pauli rotation `e^{iα P}` parameterised by `angle`.
+        ///
+        /// `angle` must be a symbolic angle returned by [`allocate_symbolic_angle`]. This is the
+        /// high-level way to add a free-angle rotation `e^{iα P}` for an arbitrary Pauli `P`. The
+        /// same `angle` may parameterise several rotations (a shared `α`), and angles allocated in
+        /// the same order in two circuits are what make those circuits' rotations correspond when
+        /// their phased actions are compared.
+        #[allow(clippy::needless_pass_by_value)]
+        pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: usize) {
+            self.inner.symbolic_pauli_exp(&observable.inner, angle);
         }
 
         #[allow(clippy::needless_pass_by_value)]

@@ -155,6 +155,21 @@ pub trait Simulation: Default {
         self.allocate_random_bit()
     }
 
+    /// Apply a symbolic Pauli rotation `exp(iα P)`, parameterised by the symbolic `angle` `α`.
+    ///
+    /// This is the high-level way to add a parameterised rotation to a circuit: allocate the angle
+    /// with [`Self::allocate_symbolic_angle`], then call this with the Pauli `P`. Prefer it over
+    /// manually conditioning `P` on the angle bit via [`Self::conditional_pauli`] — it states the
+    /// intent (a symbolic rotation) directly and keeps the angle's special provenance explicit.
+    ///
+    /// Because the comparison of two circuits matches symbolic angles one-to-one, the same `angle`
+    /// can parameterise several rotations to model a *shared* parameter `α`, and labelling the
+    /// rotations of two circuits with angles allocated in the same order is what makes them
+    /// correspond when the circuits are compared for equivalence.
+    fn symbolic_pauli_exp(&mut self, observable: &Pauli, angle: OutcomeId) {
+        self.conditional_pauli(observable, &[angle], true);
+    }
+
     // ========== Unitary Operations ==========
 
     /// Apply a Clifford unitary to specified qubits.

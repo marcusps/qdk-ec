@@ -22,7 +22,7 @@ fn sparse(observable: &[PositionedPauliObservable]) -> SparsePauli {
 fn zz_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
     let circuit = build_circuit(|builder| {
         let branch = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&sparse(&[z(0), z(1)]), &[branch], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(0), z(1)]), branch);
     });
     (circuit, vec![0, 1], vec![0, 1])
 }
@@ -32,7 +32,7 @@ fn cnot_conjugated_z_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
     let circuit = build_circuit(|builder| {
         builder.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
         let branch = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&sparse(&[z(1)]), &[branch], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(1)]), branch);
         builder.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
     });
     (circuit, vec![0, 1], vec![0, 1])
@@ -42,7 +42,7 @@ fn cnot_conjugated_z_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
 fn z_rotation() -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
     let circuit = build_circuit(|builder| {
         let branch = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&sparse(&[z(1)]), &[branch], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(1)]), branch);
     });
     (circuit, vec![0, 1], vec![0, 1])
 }
@@ -53,7 +53,7 @@ fn signed_z_rotation(negate: bool) -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
     let circuit = build_circuit(|builder| {
         let branch = builder.allocate_symbolic_angle();
         let observable = if negate { -sparse(&[z(0)]) } else { sparse(&[z(0)]) };
-        builder.conditional_pauli(&observable, &[branch], true);
+        builder.symbolic_pauli_exp(&observable, branch);
     });
     (circuit, vec![0], vec![0])
 }
@@ -138,7 +138,7 @@ fn simulator_native_action_matches_circuit_action() {
     let circuit_action = phased_action_of(&zz, &zz_input, &zz_output).expect("circuit action");
 
     let simulation = choi_simulation(2, |simulation, branch| {
-        simulation.conditional_pauli(&sparse(&[z(0), z(1)]), &[branch], true);
+        simulation.symbolic_pauli_exp(&sparse(&[z(0), z(1)]), branch);
     });
     let simulation_action = phased_action_from_simulation(&simulation, &[0, 1], &[0, 1]).expect("simulation action");
 
@@ -150,10 +150,10 @@ fn simulator_native_action_matches_circuit_action() {
 #[test]
 fn simulator_native_distinguishes_opposite_signs() {
     let positive = choi_simulation(1, |simulation, branch| {
-        simulation.conditional_pauli(&sparse(&[z(0)]), &[branch], true);
+        simulation.symbolic_pauli_exp(&sparse(&[z(0)]), branch);
     });
     let negative = choi_simulation(1, |simulation, branch| {
-        simulation.conditional_pauli(&-sparse(&[z(0)]), &[branch], true);
+        simulation.symbolic_pauli_exp(&-sparse(&[z(0)]), branch);
     });
 
     let positive_action = phased_action_from_simulation(&positive, &[0], &[0]).expect("positive action");
@@ -191,7 +191,7 @@ fn z_product(qubits: &[usize], support: &[QubitId]) -> SparsePauli {
 fn apply_symbolic_z_rotations(builder: &mut CircuitBuilder, angle_supports: &[Vec<usize>], support: &[QubitId]) {
     for qubits in angle_supports {
         let angle = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&z_product(qubits, support), &[angle], true);
+        builder.symbolic_pauli_exp(&z_product(qubits, support), angle);
     }
 }
 
@@ -369,7 +369,7 @@ fn x_product(qubits: &[usize], support: &[QubitId]) -> SparsePauli {
 fn apply_symbolic_x_rotations(builder: &mut CircuitBuilder, angle_supports: &[Vec<usize>], support: &[QubitId]) {
     for qubits in angle_supports {
         let angle = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&x_product(qubits, support), &[angle], true);
+        builder.symbolic_pauli_exp(&x_product(qubits, support), angle);
     }
 }
 
@@ -624,7 +624,7 @@ fn three_qubit_x_channel_ejection() {
 // pins down the rotation phase for every α. This needs no dedicated verification entry point: the
 // check is exactly `phased_action_of` + `PhasedCircuitAction::is_equivalent`, the phased analog of
 // how `OutcomeCompleteSimulation` performs phaseless equality checking. `Z^a` is realized by an
-// `allocate_symbolic_angle` bit feeding a conditional `Z`.
+// `allocate_symbolic_angle` angle applied with `symbolic_pauli_exp`.
 // ================================================================================================
 
 /// Records a state-preparation gadget `C₁ (∏ₖ Z_k^{a_k}) C₂ |0…0>` as a phased action with no input
@@ -650,13 +650,13 @@ fn verifies_equal_state_preparation_factorizations() {
     let direct = prepared_state_action(2, |builder| {
         prepare_plus(builder, 2);
         let angle = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&sparse(&[z(0), z(1)]), &[angle], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(0), z(1)]), angle);
     });
     let conjugated = prepared_state_action(2, |builder| {
         prepare_plus(builder, 2);
         builder.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
         let angle = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&sparse(&[z(1)]), &[angle], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(1)]), angle);
         builder.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
     });
 
@@ -675,12 +675,12 @@ fn detects_phase_only_state_preparation_difference() {
     let positive = prepared_state_action(1, |builder| {
         prepare_plus(builder, 1);
         let angle = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&sparse(&[z(0)]), &[angle], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), angle);
     });
     let negative = prepared_state_action(1, |builder| {
         prepare_plus(builder, 1);
         let angle = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&-sparse(&[z(0)]), &[angle], true);
+        builder.symbolic_pauli_exp(&-sparse(&[z(0)]), angle);
     });
 
     positive
@@ -702,20 +702,20 @@ fn verifies_multi_angle_state_preparation() {
         prepared_state_action(2, move |builder| {
             prepare_plus(builder, 2);
             let first = builder.allocate_symbolic_angle();
-            builder.conditional_pauli(&sparse(&[z(0), z(1)]), &[first], true);
+            builder.symbolic_pauli_exp(&sparse(&[z(0), z(1)]), first);
             let second = builder.allocate_symbolic_angle();
             let pauli = if negate_second { -sparse(&[z(0)]) } else { sparse(&[z(0)]) };
-            builder.conditional_pauli(&pauli, &[second], true);
+            builder.symbolic_pauli_exp(&pauli, second);
         })
     };
     let conjugated = prepared_state_action(2, |builder| {
         prepare_plus(builder, 2);
         builder.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
         let first = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&sparse(&[z(1)]), &[first], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(1)]), first);
         builder.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
         let second = builder.allocate_symbolic_angle();
-        builder.conditional_pauli(&sparse(&[z(0)]), &[second], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), second);
     });
 
     direct(false)
