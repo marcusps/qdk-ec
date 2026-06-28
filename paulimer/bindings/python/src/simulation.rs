@@ -8,7 +8,7 @@ use pauliverse::outcome_free_simulation::OutcomeFreeSimulation;
 use pauliverse::outcome_specific_simulation::OutcomeSpecificSimulation;
 use pauliverse::phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 use pauliverse::Simulation;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
 
 use crate::enums::PyUnitaryOp;
@@ -86,7 +86,7 @@ impl PySymbolicAngle {
 }
 
 macro_rules! impl_simulation {
-    ($struct_name:ty, $wrapper_struct:ty { $($inside:tt)* }) => {
+    ($struct_name:ty, $wrapper_struct:ty, clifford_supported = $clifford_supported:literal { $($inside:tt)* }) => {
         #[pymethods]
         impl $wrapper_struct {
             #[new]
@@ -168,11 +168,19 @@ macro_rules! impl_simulation {
                 Simulation::permute(self.deref_mut(), &permutation, &support);
             }
 
-            #[allow(clippy::needless_pass_by_value)]
+            #[allow(clippy::needless_pass_by_value, clippy::missing_errors_doc)]
             #[pyo3(signature=(clifford, supported_by=None))]
-            pub fn apply_clifford(&mut self, clifford: &PyCliffordUnitary, supported_by: Option<Vec<usize>>) {
+            pub fn apply_clifford(&mut self, clifford: &PyCliffordUnitary, supported_by: Option<Vec<usize>>) -> PyResult<()> {
+                if !$clifford_supported {
+                    return Err(PyNotImplementedError::new_err(
+                        "this simulator tracks the exact global phase, which a phaseless CliffordUnitary \
+                         does not determine; apply Cliffords through apply_unitary, apply_pauli, or \
+                         apply_pauli_exp instead",
+                    ));
+                }
                 let support = supported_by.unwrap_or_else(|| (0..self.deref().qubit_count()).collect());
                 Simulation::clifford(self.deref_mut(), &clifford.inner, &support);
+                Ok(())
             }
 
             #[pyo3(signature=(observable, hint=None))]
@@ -229,7 +237,8 @@ macro_rules! impl_simulation {
 
 impl_simulation!(
     OutcomeCompleteSimulation,
-    PyOutcomeCompleteSimulation {
+    PyOutcomeCompleteSimulation,
+    clifford_supported = true {
         #[getter]
         pub fn clifford(&self) -> PyCliffordUnitary {
             PyCliffordUnitary {
@@ -255,7 +264,8 @@ impl_simulation!(
 
 impl_simulation!(
     OutcomeFreeSimulation,
-    PyOutcomeFreeSimulation {
+    PyOutcomeFreeSimulation,
+    clifford_supported = true {
         #[getter]
         pub fn clifford(&self) -> PyCliffordUnitary {
             let c: CliffordUnitary = self.deref().state_encoder().clone().into();
@@ -265,7 +275,8 @@ impl_simulation!(
 
 impl_simulation!(
     OutcomeSpecificSimulation,
-    PyOutcomeSpecificSimulation {
+    PyOutcomeSpecificSimulation,
+    clifford_supported = true {
         #[getter]
         pub fn clifford(&self) -> PyCliffordUnitary {
             PyCliffordUnitary {
@@ -293,7 +304,8 @@ impl_simulation!(
 
 impl_simulation!(
     PhasedOutcomeCompleteSimulation,
-    PyPhasedOutcomeCompleteSimulation {
+    PyPhasedOutcomeCompleteSimulation,
+    clifford_supported = false {
         #[getter]
         pub fn clifford(&self) -> PyCliffordUnitary {
             PyCliffordUnitary {

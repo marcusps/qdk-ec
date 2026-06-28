@@ -1018,7 +1018,7 @@ class PhasedOutcomeCompleteSimulation:
     counterpart it tracks all ``2^n_random`` measurement branches simultaneously,
     but the encoded state is maintained with its *exact* global phase rather than
     only up to a global phase. This enables exact equality checking of non-stabilizer
-    circuits (e.g. circuits with symbolic single-qubit rotations).
+    circuits (e.g. circuits with symbolic single-qubit Pauli exponents).
 
     For a random-bit assignment ``r`` the encoded state is
 
@@ -1072,7 +1072,17 @@ class PhasedOutcomeCompleteSimulation:
     ) -> None: ...
     def apply_clifford(
         self, clifford: CliffordUnitary, supported_by: Sequence[int] | None = None
-    ) -> None: ...
+    ) -> None:
+        """Unsupported on the phased simulator.
+
+        A phaseless :class:`CliffordUnitary` does not determine the exact global phase that this
+        simulator tracks. Apply Cliffords through :meth:`apply_unitary`, :meth:`apply_pauli`, or
+        :meth:`apply_pauli_exp` instead.
+
+        Raises:
+            NotImplementedError: Always.
+        """
+        ...
     def measure(
         self, observable: SparsePauli, hint: SparsePauli | None = None
     ) -> int: ...
@@ -1224,9 +1234,9 @@ class PhasedOutcomeCompleteSimulation:
         ``output_qubits`` (so for ``n`` system qubits ``0..n`` the references are
         ``n..2n``).
 
-        Each random bit is treated as a **symbolic rotation angle**: the resulting action
-        compares two circuits only under a one-to-one correspondence of these bits (see
-        :meth:`PhasedCircuitAction.is_equivalent`).
+        Symbolic angles (allocated with :meth:`allocate_symbolic_angle`) are matched
+        one-to-one by index between the two compared actions, while genuine measurement
+        randomness is marginalized over (see :meth:`PhasedCircuitAction.is_equivalent`).
 
         Args:
             input_qubits: System qubits entangled with reference qubits.
@@ -1248,8 +1258,8 @@ class PhasedCircuitAction:
     branch-dependent phase (for example ``e^{i a Z}`` versus ``e^{-i a Z}``, whose
     conditioned Paulis ``+Z`` and ``-Z`` share a symplectic action) are distinguished.
 
-    Each random bit is treated as a symbolic rotation angle, mapped one-to-one between the
-    two compared actions (no affine remapping of these bits is permitted).
+    Symbolic angles are matched one-to-one by index between the two compared actions, while
+    genuine measurement random bits are marginalized over (as in the phaseless comparison).
     """
 
     @property
@@ -1261,8 +1271,8 @@ class PhasedCircuitAction:
         """Whether two circuits implement the same operator on every input.
 
         Compares both the stabilizer (symplectic) action and the exact relative branch
-        phases, up to a single global phase. Each random bit is treated as a symbolic
-        rotation angle and matched one-to-one with the corresponding bit of ``other``.
+        phases, up to a single global phase. Symbolic angles are matched one-to-one by
+        index with those of ``other``, while genuine measurement randomness is marginalized.
         """
         ...
 
