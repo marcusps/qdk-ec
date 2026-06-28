@@ -29,6 +29,7 @@ __all__ = [
     "PhasedCircuitAction",
     "PhasedOutcomeCompleteSimulation",
     "SparsePauli",
+    "SymbolicAngle",
     "UnitaryOpcode",
     "centralizer_of",
     "encoding_clifford_of",
@@ -984,6 +985,30 @@ class OutcomeCompleteSimulation:
         ...
 
 @final
+class SymbolicAngle:
+    """An opaque handle to a symbolic angle ``alpha`` of a parameterised circuit.
+
+    A symbolic angle is the free parameter of a Pauli exponent ``e^{i alpha P}``. Obtain one from
+    :meth:`PhasedOutcomeCompleteSimulation.allocate_symbolic_angle` (or a batch from
+    :meth:`PhasedOutcomeCompleteSimulation.allocate_symbolic_angles`) and pass it to
+    :meth:`PhasedOutcomeCompleteSimulation.apply_symbolic_pauli_exp`. The handle is opaque: its only
+    observable feature is its :attr:`index`, the angle's subscript ``k`` in ``alpha_k``, fixed by the
+    order in which angles are allocated. When two circuits are compared with
+    :meth:`PhasedOutcomeCompleteSimulation.phased_action`, angles with the same index are required to
+    correspond, so describing both circuits in terms of the ``k``-th angle is what makes the
+    comparison meaningful -- regardless of how the rest of each circuit is written.
+    """
+
+    @property
+    def index(self) -> int:
+        """The subscript ``k`` identifying this angle as ``alpha_k``, set by allocation order."""
+        ...
+
+    def __eq__(self, other: object, /) -> bool: ...
+    def __hash__(self) -> int: ...
+    def __repr__(self) -> str: ...
+
+@final
 class PhasedOutcomeCompleteSimulation:
     """Outcome-complete stabilizer simulation that also tracks the exact global phase.
 
@@ -1143,25 +1168,41 @@ class PhasedOutcomeCompleteSimulation:
         """
         ...
 
-    def allocate_symbolic_angle(self) -> int:
-        """Allocate a fresh symbolic rotation angle ``alpha``.
+    def allocate_symbolic_angle(self) -> SymbolicAngle:
+        """Allocate a fresh symbolic angle ``alpha``.
 
-        Pass the returned angle to :meth:`apply_symbolic_pauli_exp` to apply ``e^{i alpha P}``.
-        Allocate one angle per rotation; a single angle may drive several rotations to model a
-        shared ``alpha``. When two circuits are compared with :meth:`phased_action`, their symbolic
-        angles are matched one to one in allocation order, so allocate them in the same order on
-        both sides for the comparison to be meaningful.
+        Returns an opaque :class:`SymbolicAngle` handle; pass it to
+        :meth:`apply_symbolic_pauli_exp` to apply ``e^{i alpha P}``. Angles are numbered by
+        allocation order (the handle's :attr:`SymbolicAngle.index`), and when two circuits are
+        compared with :meth:`phased_action` the angle with a given index in one must correspond to
+        the same index in the other. To allocate several at once, use
+        :meth:`allocate_symbolic_angles`.
         """
         ...
 
-    def apply_symbolic_pauli_exp(self, observable: SparsePauli, angle: int) -> None:
-        """Apply a symbolic Pauli rotation ``e^{i alpha P}`` parameterised by ``angle``.
+    def allocate_symbolic_angles(self, count: int) -> list[SymbolicAngle]:
+        """Allocate ``count`` fresh symbolic angles ``alpha_0, ..., alpha_{count-1}`` at once.
 
-        ``angle`` must be a symbolic angle returned by :meth:`allocate_symbolic_angle`. This is
-        the high-level way to add a free-angle rotation ``e^{i alpha P}`` for an arbitrary Pauli
-        ``P``. The same ``angle`` may parameterise several rotations (a shared ``alpha``), and
-        angles allocated in the same order in two circuits are what make those circuits' rotations
-        correspond when their phased actions are compared.
+        Returns the :class:`SymbolicAngle` handles in order, so ``angles[k]`` is ``alpha_k``.
+        Allocating all of a circuit's angles up front and referring to them by index keeps the
+        correspondence between two circuits explicit and independent of how either is otherwise
+        written.
+        """
+        ...
+
+    @property
+    def symbolic_angles(self) -> list[SymbolicAngle]:
+        """All symbolic angles allocated so far, in order (``angles[k]`` is ``alpha_k``)."""
+        ...
+
+    def apply_symbolic_pauli_exp(self, observable: SparsePauli, angle: SymbolicAngle) -> None:
+        """Apply a symbolic Pauli exponent ``e^{i alpha P}`` parameterised by ``angle``.
+
+        ``angle`` must be a :class:`SymbolicAngle` obtained from :meth:`allocate_symbolic_angle`
+        or :meth:`allocate_symbolic_angles`. This is the high-level way to add a free-angle
+        exponent ``e^{i alpha P}`` for an arbitrary Pauli ``P``. The same ``angle`` may parameterise
+        several exponents (a shared ``alpha``), and angles with matching index in two circuits are
+        what make those circuits' exponents correspond when their phased actions are compared.
         """
         ...
 

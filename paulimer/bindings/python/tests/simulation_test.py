@@ -326,22 +326,22 @@ def _choi_action(build_gadget, n=1):
 class TestPhasedCircuitAction:
 
     def test_phased_action_returns_action(self):
-        action = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0"), [a]))
+        action = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0"), a))
         assert isinstance(action, PhasedCircuitAction)
 
     def test_choi_state_stabilizers_are_sparse_paulis(self):
-        action = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0"), [a]))
+        action = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0"), a))
         stabilizers = action.choi_state_stabilizers
         assert len(stabilizers) == 2
         assert all(isinstance(stabilizer, SparsePauli) for stabilizer in stabilizers)
 
     def test_entangling_rotation_equivalence(self):
         def zz_direct(sim, a):
-            sim.apply_conditional_pauli(SparsePauli("Z_0 Z_1"), [a])
+            sim.apply_symbolic_pauli_exp(SparsePauli("Z_0 Z_1"), a)
 
         def zz_via_cnot(sim, a):
             sim.apply_unitary(UnitaryOpcode.ControlledX, [0, 1])
-            sim.apply_conditional_pauli(SparsePauli("Z_1"), [a])
+            sim.apply_symbolic_pauli_exp(SparsePauli("Z_1"), a)
             sim.apply_unitary(UnitaryOpcode.ControlledX, [0, 1])
 
         direct = _choi_action(zz_direct, n=2)
@@ -350,18 +350,18 @@ class TestPhasedCircuitAction:
         assert via_cnot.is_equivalent(direct)
 
     def test_dropping_conjugation_breaks_equivalence(self):
-        direct = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0 Z_1"), [a]), n=2)
-        bare = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_1"), [a]), n=2)
+        direct = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0 Z_1"), a), n=2)
+        bare = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_1"), a), n=2)
         assert not direct.is_equivalent(bare)
 
     def test_opposite_signs_distinguished_only_by_phase(self):
-        positive = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0"), [a]))
-        negative = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("-Z_0"), [a]))
+        positive = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0"), a))
+        negative = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("-Z_0"), a))
         assert positive.is_equivalent_up_to_signs(negative)
         assert not positive.is_equivalent(negative)
 
     def test_action_is_self_equivalent(self):
-        action = _choi_action(lambda sim, a: sim.apply_conditional_pauli(SparsePauli("Z_0 Z_1"), [a]), n=2)
+        action = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0 Z_1"), a), n=2)
         assert action.is_equivalent(action)
 
 
@@ -378,7 +378,7 @@ def _direct_z_action(n, angle_supports):
     for support in angle_supports:
         pauli = SparsePauli(" ".join(f"Z_{q}" for q in support))
         angle = sim.allocate_symbolic_angle()
-        sim.apply_conditional_pauli(pauli, [angle])
+        sim.apply_symbolic_pauli_exp(pauli, angle)
     return sim.phased_action(list(range(n)), list(range(n)))
 
 
@@ -399,7 +399,7 @@ def _z_ejection_action(n, angle_supports):
     for support in angle_supports:
         pauli = SparsePauli(" ".join(f"Z_{2 * n + q}" for q in support))
         angle = sim.allocate_symbolic_angle()
-        sim.apply_conditional_pauli(pauli, [angle])
+        sim.apply_symbolic_pauli_exp(pauli, angle)
     for q in range(n):
         outcome = sim.measure(SparsePauli(f"X_{2 * n + q}"))
         sim.apply_conditional_pauli(SparsePauli(f"Z_{q}"), [outcome])

@@ -43,6 +43,48 @@ pub struct PyPhasedOutcomeCompleteSimulation {
     inner: PhasedOutcomeCompleteSimulation,
 }
 
+/// An opaque handle to a symbolic angle `α` of a parameterised circuit.
+///
+/// A symbolic angle is the free parameter of a Pauli exponent `e^{iα P}`. Obtain one from
+/// [`PhasedOutcomeCompleteSimulation.allocate_symbolic_angle`] (or a batch from
+/// `allocate_symbolic_angles`) and pass it to `apply_symbolic_pauli_exp`. The handle is opaque:
+/// its only observable feature is its [`index`], the angle's subscript `k` in `α_k`, fixed by the
+/// order in which angles are allocated. When two circuits are compared with `phased_action`, angles
+/// with the same `index` are required to correspond, so describing both circuits in terms of the
+/// `k`-th angle is what makes the comparison meaningful -- regardless of how the rest of each
+/// circuit is written.
+#[derive(Clone)]
+#[pyclass(name = "SymbolicAngle", module = "paulimer", frozen)]
+pub struct PySymbolicAngle {
+    outcome: usize,
+    index: usize,
+}
+
+#[pymethods]
+impl PySymbolicAngle {
+    /// The subscript `k` identifying this angle as `α_k`, set by allocation order.
+    #[getter]
+    #[must_use]
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    #[must_use]
+    pub fn __repr__(&self) -> String {
+        format!("SymbolicAngle(index={})", self.index)
+    }
+
+    #[must_use]
+    pub fn __eq__(&self, other: &Self) -> bool {
+        self.outcome == other.outcome
+    }
+
+    #[must_use]
+    pub fn __hash__(&self) -> u64 {
+        self.outcome as u64
+    }
+}
+
 macro_rules! impl_simulation {
     ($struct_name:ty, $wrapper_struct:ty { $($inside:tt)* }) => {
         #[pymethods]
@@ -295,27 +337,52 @@ impl_simulation!(
             self.inner.output_phase_exponent(&random_bits)
         }
 
-        /// Allocate a fresh symbolic rotation angle `α`.
+        /// Allocate a fresh symbolic angle `α`.
         ///
-        /// Pass the returned angle to [`apply_symbolic_pauli_exp`] to apply `e^{iα P}`. Allocate one
-        /// angle per rotation; a single angle may drive several rotations to model a shared `α`.
-        /// When two circuits are compared with `phased_action`, their symbolic angles are matched
-        /// one to one in allocation order, so allocate them in the same order on both sides for the
-        /// comparison to be meaningful.
-        pub fn allocate_symbolic_angle(&mut self) -> usize {
-            self.inner.allocate_symbolic_angle()
+        /// Returns an opaque [`SymbolicAngle`] handle; pass it to [`apply_symbolic_pauli_exp`] to
+        /// apply `e^{iα P}`. Angles are numbered by allocation order (the returned handle's
+        /// `index`), and when two circuits are compared with `phased_action` the angle with a given
+        /// `index` in one must correspond to the same `index` in the other. To allocate several at
+        /// once, use [`allocate_symbolic_angles`].
+        pub fn allocate_symbolic_angle(&mut self) -> PySymbolicAngle {
+            let index = self.inner.symbolic_angle_indicator().iter().filter(|&&is_angle| is_angle).count();
+            let outcome = self.inner.allocate_symbolic_angle();
+            PySymbolicAngle { outcome, index }
         }
 
-        /// Apply a symbolic Pauli rotation `e^{iα P}` parameterised by `angle`.
+        /// Allocate `count` fresh symbolic angles `α_0, ..., α_{count-1}` at once.
         ///
-        /// `angle` must be a symbolic angle returned by [`allocate_symbolic_angle`]. This is the
-        /// high-level way to add a free-angle rotation `e^{iα P}` for an arbitrary Pauli `P`. The
-        /// same `angle` may parameterise several rotations (a shared `α`), and angles allocated in
-        /// the same order in two circuits are what make those circuits' rotations correspond when
-        /// their phased actions are compared.
+        /// Returns the [`SymbolicAngle`] handles in order, so `angles[k]` is `α_k`. Allocating all of
+        /// a circuit's angles up front and then referring to them by index keeps the correspondence
+        /// between two circuits explicit and independent of how either circuit is otherwise written.
+        pub fn allocate_symbolic_angles(&mut self, count: usize) -> Vec<PySymbolicAngle> {
+            (0..count).map(|_| self.allocate_symbolic_angle()).collect()
+        }
+
+        /// All symbolic angles allocated on this simulation so far, in order (`angles[k]` is `α_k`).
+        #[getter]
+        #[must_use]
+        pub fn symbolic_angles(&self) -> Vec<PySymbolicAngle> {
+            self.inner
+                .symbolic_angle_indicator()
+                .iter()
+                .enumerate()
+                .filter(|(_, &is_angle)| is_angle)
+                .enumerate()
+                .map(|(index, (outcome, _))| PySymbolicAngle { outcome, index })
+                .collect()
+        }
+
+        /// Apply a symbolic Pauli exponent `e^{iα P}` parameterised by `angle`.
+        ///
+        /// `angle` must be a [`SymbolicAngle`] obtained from [`allocate_symbolic_angle`] or
+        /// [`allocate_symbolic_angles`]. This is the high-level way to add a free-angle exponent
+        /// `e^{iα P}` for an arbitrary Pauli `P`. The same `angle` may parameterise several exponents
+        /// to model a shared `α`, and angles with matching `index` in two circuits are what make those
+        /// circuits' exponents correspond when their phased actions are compared.
         #[allow(clippy::needless_pass_by_value)]
-        pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: usize) {
-            self.inner.symbolic_pauli_exp(&observable.inner, angle);
+        pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: &PySymbolicAngle) {
+            self.inner.symbolic_pauli_exp(&observable.inner, angle.outcome);
         }
 
         #[allow(clippy::needless_pass_by_value)]
