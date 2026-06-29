@@ -6,6 +6,9 @@ use pauliverse::action::{
 };
 use pauliverse::phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 use pauliverse::{Circuit, CircuitBuilder, QubitId, Simulation};
+use std::ops::Range;
+use proptest::prelude::*;
+use rand::SeedableRng;
 
 fn build_circuit(build: impl FnOnce(&mut CircuitBuilder)) -> Circuit {
     let mut builder = CircuitBuilder::new();
@@ -725,4 +728,141 @@ fn verifies_multi_angle_state_preparation() {
         .is_equivalent(&conjugated)
         .expect_err("negating one rotation must produce a detectable branch-phase difference");
     assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase]);
+}
+
+// ================================================================================================
+// Negative and randomized tests: a phased equivalence is exact, so any sign flip on a symbolic Pauli
+// exponent or any permutation of the symbolic angles on the right-hand side must be detected. The
+// phaseless action is unchanged (the symplectic content is identical), so the failure is a pure
+// `RelativePhase` (sign flips) or a support/phase mismatch (permutations). Random instances exercise
+// the same invariants over many angle supports, qubit counts, and qubit assignments.
+// ================================================================================================
+
+/// Direct Z-channel, but the `k`-th symbolic Z-rotation is `exp(±iα Z…)` according to `signs[k]`.
+fn signed_z_channel(n: usize, angle_supports: &[Vec<usize>], signs: &[bool]) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    build_circuit(|builder| {
+        for (qubits, &negate) in angle_supports.iter().zip(signs.iter()) {
+            let angle = builder.allocate_symbolic_angle();
+            let pauli = if negate { -z_product(qubits, &system) } else { z_product(qubits, &system) };
+            builder.symbolic_pauli_exp(&pauli, angle);
+        }
+    })
+}
+
+/// Direct Z-channel whose `k`-th allocated angle drives the rotation on `angle_supports[perm[k]]`.
+fn permuted_z_channel(n: usize, angle_supports: &[Vec<usize>], perm: &[usize]) -> Circuit {
+    let system: Vec<QubitId> = (0..n).collect();
+    build_circuit(|builder| {
+        for &target in perm {
+            let angle = builder.allocate_symbolic_angle();
+            builder.symbolic_pauli_exp(&z_product(&angle_supports[target], &system), angle);
+        }
+    })
+}
+
+/// All non-trivial Z products on `n` qubits, in ascending-mask order: distinct, independent supports.
+fn distinct_z_supports(n: usize) -> Vec<Vec<usize>> {
+    (1u32..(1 << n)).map(|mask| (0..n).filter(|bit| mask & (1 << bit) != 0).collect()).collect()
+}
+
+#[test]
+fn flipping_any_sign_yields_relative_phase() {
+    let n = 2;
+    let supports = distinct_z_supports(n);
+    let system: Vec<QubitId> = (0..n).collect();
+    let baseline = signed_z_channel(n, &supports, &vec![false; supports.len()]);
+    let baseline_action = phased_action_of(&baseline, &system, &system).expect("baseline action");
+    for mask in 1u32..(1 << supports.len()) {
+        let signs: Vec<bool> = (0..supports.len()).map(|k| mask & (1 << k) != 0).collect();
+        let flipped = signed_z_channel(n, &supports, &signs);
+        let flipped_action = phased_action_of(&flipped, &system, &system).expect("flipped action");
+        baseline_action
+            .is_equivalent_up_to_signs(&flipped_action)
+            .expect("sign flips leave the phaseless action unchanged");
+        let reasons = baseline_action
+            .is_equivalent(&flipped_action)
+            .expect_err("sign mask must be detected");
+        assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase], "mask {mask:b}");
+    }
+}
+
+#[test]
+fn permuting_distinct_angles_is_detected() {
+    let n = 2;
+    let supports = distinct_z_supports(n);
+    let system: Vec<QubitId> = (0..n).collect();
+    let identity: Vec<usize> = (0..supports.len()).collect();
+    let base = permuted_z_channel(n, &supports, &identity);
+    let base_action = phased_action_of(&base, &system, &system).expect("identity action");
+    base_action
+        .is_equivalent(&base_action)
+        .expect("identity permutation is self-equivalent");
+    let swapped = [1usize, 0, 2];
+    let swapped_action = phased_action_of(&permuted_z_channel(n, &supports, &swapped), &system, &system).expect("swap");
+    base_action
+        .is_equivalent(&swapped_action)
+        .expect_err("permuting distinct angles must be inequivalent");
+}
+
+prop_compose! {
+    fn arbitrary_signed_z_channel(qubit_range: Range<usize>)
+        (n in qubit_range)(signs in proptest::collection::vec(any::<bool>(), 1..(1usize << n)), n in Just(n))
+        -> (usize, Vec<bool>)
+    { (n, signs) }
+}
+
+proptest! {
+    #[test]
+    fn random_sign_flip_is_pure_relative_phase((n, signs) in arbitrary_signed_z_channel(2..4usize)) {
+        let supports = distinct_z_supports(n);
+        let mut signs: Vec<bool> = signs.into_iter().take(supports.len()).collect();
+        signs.resize(supports.len(), false);
+        let system: Vec<QubitId> = (0..n).collect();
+        let baseline = signed_z_channel(n, &supports, &vec![false; supports.len()]);
+        let flipped = signed_z_channel(n, &supports, &signs);
+        let a = phased_action_of(&baseline, &system, &system).expect("baseline");
+        let b = phased_action_of(&flipped, &system, &system).expect("flipped");
+        a.is_equivalent_up_to_signs(&b).expect("phaseless equal");
+        match a.is_equivalent(&b) {
+            Ok(()) => prop_assert!(signs.iter().all(|s| !s), "only the all-positive mask is equivalent"),
+            Err(reasons) => prop_assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase]),
+        }
+    }
+}
+
+prop_compose! {
+    fn arbitrary_permutation(qubit_range: Range<usize>)(n in qubit_range, seed in any::<u64>()) -> (usize, Vec<usize>) {
+        use rand::seq::SliceRandom;
+        let mut perm: Vec<usize> = (0..((1usize << n) - 1)).collect();
+        perm.shuffle(&mut rand::rngs::StdRng::seed_from_u64(seed));
+        (n, perm)
+    }
+}
+
+proptest! {
+    #[test]
+    fn random_angle_permutation_matches_iff_identity((n, perm) in arbitrary_permutation(2..4usize)) {
+        let supports = distinct_z_supports(n);
+        let system: Vec<QubitId> = (0..n).collect();
+        let identity: Vec<usize> = (0..supports.len()).collect();
+        let base = phased_action_of(&permuted_z_channel(n, &supports, &identity), &system, &system).expect("base");
+        let permuted = phased_action_of(&permuted_z_channel(n, &supports, &perm), &system, &system).expect("perm");
+        if perm == identity {
+            prop_assert!(base.is_equivalent(&permuted).is_ok());
+        } else {
+            prop_assert!(base.is_equivalent(&permuted).is_err(), "permutation {perm:?} maps distinct angles to wrong Paulis");
+        }
+    }
+
+    #[test]
+    fn random_multi_angle_channel_self_equivalent((n, signs) in arbitrary_signed_z_channel(2..4usize)) {
+        let supports = distinct_z_supports(n);
+        let mut signs: Vec<bool> = signs.into_iter().take(supports.len()).collect();
+        signs.resize(supports.len(), false);
+        let system: Vec<QubitId> = (0..n).collect();
+        let a = phased_action_of(&signed_z_channel(n, &supports, &signs), &system, &system).expect("a");
+        let b = phased_action_of(&signed_z_channel(n, &supports, &signs), &system, &system).expect("b");
+        prop_assert!(a.is_equivalent(&b).is_ok(), "a channel must be exactly equivalent to itself");
+    }
 }

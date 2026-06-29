@@ -1,5 +1,7 @@
 import pytest
+import random
 from binar import BitMatrix, BitVector
+from hypothesis import given, strategies as st
 from paulimer import (
     CliffordUnitary,
     SparsePauli,
@@ -423,3 +425,60 @@ class TestPhasedEjection:
         ejection = _z_ejection_action(n, angle_supports)
         assert direct.is_equivalent(ejection)
         assert ejection.is_equivalent(direct)
+
+def _distinct_z_supports(n):
+    """All non-trivial Z-product supports on ``n`` qubits (distinct, independent)."""
+    return [[bit for bit in range(n) if mask & (1 << bit)] for mask in range(1, 1 << n)]
+
+
+def _signed_direct_z_action(n, supports, signs):
+    """:func:`_direct_z_action` where the ``k``-th rotation is negated iff ``signs[k]``."""
+    sim = PhasedOutcomeCompleteSimulation(2 * n)
+    for q in range(n):
+        sim.apply_unitary(UnitaryOpcode.PrepareBell, [q, n + q])
+    for support, negate in zip(supports, signs):
+        body = " ".join(f"Z_{q}" for q in support)
+        pauli = SparsePauli(("-" if negate else "") + body)
+        sim.apply_symbolic_pauli_exp(pauli, sim.allocate_symbolic_angle())
+    return sim.phased_action(list(range(n)), list(range(n)))
+
+
+def _permuted_direct_z_action(n, supports, perm):
+    """:func:`_direct_z_action` where allocated angle ``k`` drives ``supports[perm[k]]``."""
+    sim = PhasedOutcomeCompleteSimulation(2 * n)
+    for q in range(n):
+        sim.apply_unitary(UnitaryOpcode.PrepareBell, [q, n + q])
+    for target in perm:
+        pauli = SparsePauli(" ".join(f"Z_{q}" for q in supports[target]))
+        sim.apply_symbolic_pauli_exp(pauli, sim.allocate_symbolic_angle())
+    return sim.phased_action(list(range(n)), list(range(n)))
+
+
+class TestPhasedNegativeChecks:
+    """Sign flips and angle permutations must break an otherwise exact phased equivalence."""
+
+    @given(
+        n=st.integers(min_value=2, max_value=3),
+        seed=st.integers(min_value=0, max_value=2**32 - 1),
+    )
+    def test_sign_flip_is_pure_relative_phase(self, n, seed):
+        supports = _distinct_z_supports(n)
+        rng = random.Random(seed)
+        signs = [rng.random() < 0.5 for _ in supports]
+        baseline = _signed_direct_z_action(n, supports, [False] * len(supports))
+        flipped = _signed_direct_z_action(n, supports, signs)
+        assert baseline.is_equivalent_up_to_signs(flipped)
+        assert baseline.is_equivalent(flipped) == (not any(signs))
+
+    @given(
+        n=st.integers(min_value=2, max_value=3),
+        seed=st.integers(min_value=0, max_value=2**32 - 1),
+    )
+    def test_permuted_angles_match_iff_identity(self, n, seed):
+        supports = _distinct_z_supports(n)
+        identity = list(range(len(supports)))
+        perm = identity[:]
+        random.Random(seed).shuffle(perm)
+        base = _permuted_direct_z_action(n, supports, identity)
+        permuted = _permuted_direct_z_action(n, supports, perm)
+        assert base.is_equivalent(permuted) == (perm == identity)
