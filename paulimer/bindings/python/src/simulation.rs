@@ -440,4 +440,15 @@ impl PyPhasedCircuitAction {
     pub fn is_equivalent_up_to_signs(&self, other: &PyPhasedCircuitAction) -> bool {
         self.inner.is_equivalent_up_to_signs(&other.inner).is_ok()
     }
+
+    #[must_use]
+    pub fn is_equivalent_with_global_phase(&self, other: &PyPhasedCircuitAction) -> bool {
+        self.inner.is_equivalent_with_global_phase(&other.inner).is_ok()
+    }
+
+    #[getter]
+    #[must_use]
+    pub fn global_phase(&self) -> u8 {
+        self.inner.global_phase()
+    }
 }

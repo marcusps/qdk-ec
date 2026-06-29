@@ -1294,6 +1294,20 @@ class PhasedCircuitAction:
         """
         ...
 
+    def is_equivalent_with_global_phase(self, other: PhasedCircuitAction) -> bool:
+        """Whether two circuits are equivalent including the absolute global phase.
+
+        Like :meth:`is_equivalent`, but additionally requires the absolute global ``zeta8``
+        phases (see :attr:`global_phase`) to match, distinguishing operators that differ by
+        an overall phase such as ``Co`` and ``-Co``.
+        """
+        ...
+
+    @property
+    def global_phase(self) -> int:
+        """Absolute global ``zeta8`` phase of the Choi-state encoder, as an exponent in ``0..8``."""
+        ...
+
 @final
 class OutcomeFreeSimulation:
     """Stabilizer simulation without tracking specific measurement outcomes.

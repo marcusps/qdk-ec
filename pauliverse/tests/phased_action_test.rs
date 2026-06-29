@@ -1,4 +1,4 @@
-use paulimer::core::{x, z};
+use paulimer::core::{x, y, z};
 use paulimer::pauli::SparsePauli;
 use paulimer::{PositionedPauliObservable, UnitaryOp};
 use pauliverse::action::{
@@ -865,4 +865,37 @@ proptest! {
         let b = phased_action_of(&signed_z_channel(n, &supports, &signs), &system, &system).expect("b");
         prop_assert!(a.is_equivalent(&b).is_ok(), "a channel must be exactly equivalent to itself");
     }
+}
+
+/// `Y₀ = i·X₀Z₀`, so applying `Y` differs from applying `X` then `Z` only by the global phase `i`.
+/// Both are equivalent up to a global phase, but their absolute encoder phases differ.
+#[test]
+fn pauli_y_equals_x_then_z_up_to_global_phase() {
+    let direct = build_circuit(|builder| builder.pauli(&sparse(&[y(0)])));
+    let factored = build_circuit(|builder| {
+        builder.pauli(&sparse(&[x(0)]));
+        builder.pauli(&sparse(&[z(0)]));
+    });
+
+    let direct_action = phased_action_of(&direct, &[0], &[0]).expect("direct action");
+    let factored_action = phased_action_of(&factored, &[0], &[0]).expect("factored action");
+
+    direct_action
+        .is_equivalent(&factored_action)
+        .expect("Y and XZ agree up to a global phase");
+
+    let reasons = direct_action
+        .is_equivalent_with_global_phase(&factored_action)
+        .expect_err("Y and XZ differ by the global phase i");
+    assert_eq!(reasons, vec![ActionsInequivalenceReason::GlobalPhase]);
+}
+
+#[test]
+fn identical_circuit_matches_global_phase() {
+    let circuit = build_circuit(|builder| builder.pauli(&sparse(&[y(0)])));
+    let lhs = phased_action_of(&circuit, &[0], &[0]).expect("lhs action");
+    let rhs = phased_action_of(&circuit, &[0], &[0]).expect("rhs action");
+
+    lhs.is_equivalent_with_global_phase(&rhs)
+        .expect("a circuit must equal itself including the global phase");
 }

@@ -5,7 +5,7 @@ use crate::{
     circuit::{Circuit, SimulationError},
 };
 use binar::{AffineMap, BitMatrix, BitVec, Bitwise, BitwiseMut, IndexSet};
-use paulimer::{CliffordUnitary, Pauli, PauliMutable, SparsePauli, clifford::standard_restriction_with_sign_matrix};
+use paulimer::{CliffordUnitary, Pauli, PauliMutable, SparsePauli, clifford::separate_auxiliary_qubits, clifford::standard_restriction_with_sign_matrix};
 
 type QubitId = crate::circuit::QubitId;
 
@@ -95,6 +95,10 @@ pub enum ActionsInequivalenceReason {
     /// with one another or with true (measurement) random bits, which does not correspond to any
     /// operator equality. Only produced by [`PhasedCircuitAction::is_equivalent_with_map`].
     SymbolicAngleMixed,
+    /// The two phased actions agree up to a global phase but their *absolute* global `ζ₈` phases
+    /// differ. Only produced by [`PhasedCircuitAction::is_equivalent_with_global_phase`]; see its
+    /// documentation for details.
+    GlobalPhase,
 }
 
 /// [`Circuit`]s in pauliverse include fixed number of qubits and do not have prepare and destroy instructions.
@@ -431,6 +435,11 @@ pub struct PhasedCircuitAction {
     /// "virtual" random bit allocated via [`Simulation::allocate_symbolic_angle`]) rather than a
     /// genuine measurement-derived random bit.
     symbolic_angles: BitVec,
+    /// The absolute global `ζ₈` phase of the Choi-state encoder, recovered via the §4.3 auxiliary
+    /// separation (the constant term `l` of the separation phase polynomial). Used only by
+    /// [`PhasedCircuitAction::is_equivalent_with_global_phase`]; the up-to-global-phase checks ignore
+    /// it.
+    global_phase: u8,
 }
 
 /// Computes a [`PhasedCircuitAction`] for `circuit` with the given input and output qubits.
@@ -453,7 +462,13 @@ pub fn phased_action_of(
         quadratic: simulation.quadratic_phase_matrix(),
     };
     let symbolic_angles = indicator_to_bitvec(simulation.symbolic_angle_indicator());
-    Ok(PhasedCircuitAction { action, phase, symbolic_angles })
+    let qubit_count = circuit
+        .qubit_count()
+        .max(input_qubits.iter().max().map_or(0, |&q| q + 1))
+        .max(output_qubits.iter().max().map_or(0, |&q| q + 1));
+    let reference_qubits: Vec<QubitId> = (qubit_count..qubit_count + input_qubits.len()).collect();
+    let global_phase = recover_global_phase(&simulation, &reference_qubits, output_qubits);
+    Ok(PhasedCircuitAction { action, phase, symbolic_angles, global_phase })
 }
 
 /// Computes a [`PhasedCircuitAction`] directly from a [`PhasedOutcomeCompleteSimulation`] whose Choi
@@ -490,7 +505,21 @@ pub fn phased_action_from_simulation(
         quadratic: simulation.quadratic_phase_matrix(),
     };
     let symbolic_angles = indicator_to_bitvec(simulation.symbolic_angle_indicator());
-    Ok(PhasedCircuitAction { action, phase, symbolic_angles })
+    let global_phase = recover_global_phase(simulation, &reference_qubits, output_qubits);
+    Ok(PhasedCircuitAction { action, phase, symbolic_angles, global_phase })
+}
+
+/// Recovers the absolute global `ζ₈` phase of the Choi-state encoder via the §4.3 auxiliary
+/// separation: the constant term of the separation phase polynomial over the reference and output
+/// qubits. Falls back to `0` if the (already validated) split is unexpectedly entangled.
+fn recover_global_phase(
+    simulation: &PhasedOutcomeCompleteSimulation,
+    reference_qubits: &[QubitId],
+    output_qubits: &[QubitId],
+) -> u8 {
+    let support: Vec<usize> = reference_qubits.iter().chain(output_qubits.iter()).copied().collect();
+    separate_auxiliary_qubits(&simulation.phased_state_encoder(), &support)
+        .map_or(0, |separation| separation.phase().constant())
 }
 
 impl PhasedCircuitAction {
@@ -498,6 +527,14 @@ impl PhasedCircuitAction {
     #[must_use]
     pub fn action(&self) -> &CircuitAction {
         &self.action
+    }
+
+    /// The absolute global `ζ₈` phase of the Choi-state encoder recovered via the §4.3 auxiliary
+    /// separation, as a `ζ₈` exponent in `0..8`. Compared only by
+    /// [`Self::is_equivalent_with_global_phase`].
+    #[must_use]
+    pub fn global_phase(&self) -> u8 {
+        self.global_phase
     }
 
     /// Canonical choi state stabilizers; see [`CircuitAction::choi_state_stabilizers`].
@@ -548,6 +585,33 @@ impl PhasedCircuitAction {
             .provenance_random_map(other)
             .map_err(|reason| vec![reason])?;
         self.check_with_random_map(other, &map)
+    }
+
+    /// Like [`Self::is_equivalent`], but additionally requires the two actions' *absolute* global
+    /// `ζ₈` phases to agree.
+    ///
+    /// [`Self::is_equivalent`] compares operators up to a common global phase, which is the
+    /// physically meaningful notion (an overall phase is unobservable). This stronger check also
+    /// pins the absolute global phase recovered from the §4.3 auxiliary separation, distinguishing
+    /// e.g. `Co` from `-Co`. It is useful only when exact operator equality including the global
+    /// phase is required. When the operators agree only up to a non-trivial global phase,
+    /// [`ActionsInequivalenceReason::GlobalPhase`] is added to the reasons.
+    ///
+    /// # Errors
+    ///
+    /// Returns a list of [`ActionsInequivalenceReason`] if the actions differ.
+    pub fn is_equivalent_with_global_phase(
+        &self,
+        other: &PhasedCircuitAction,
+    ) -> Result<(), Vec<ActionsInequivalenceReason>> {
+        let mut reasons = match self.is_equivalent(other) {
+            Ok(()) => Vec::new(),
+            Err(reasons) => reasons,
+        };
+        if self.global_phase != other.global_phase {
+            reasons.push(ActionsInequivalenceReason::GlobalPhase);
+        }
+        if reasons.is_empty() { Ok(()) } else { Err(reasons) }
     }
 
     /// Check if two phased actions are equivalent (up to a single global phase) when outcomes are

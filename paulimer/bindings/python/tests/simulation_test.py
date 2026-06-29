@@ -376,6 +376,25 @@ class TestPhasedCircuitAction:
         action = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0 Z_1"), a), n=2)
         assert action.is_equivalent(action)
 
+    def test_global_phase_is_zeta8_exponent(self):
+        action = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0"), a))
+        assert isinstance(action.global_phase, int)
+        assert 0 <= action.global_phase < 8
+
+    def test_global_phase_distinguishes_y_from_xz(self):
+        def apply_pauli(pauli):
+            sim = PhasedOutcomeCompleteSimulation(2)
+            sim.apply_unitary(UnitaryOpcode.PrepareBell, [0, 1])
+            for term in pauli:
+                sim.apply_pauli(SparsePauli(term))
+            return sim.phased_action([0], [0])
+
+        y_action = apply_pauli(["Y_0"])
+        xz_action = apply_pauli(["X_0", "Z_0"])
+        assert y_action.is_equivalent(xz_action)
+        assert not y_action.is_equivalent_with_global_phase(xz_action)
+        assert y_action.is_equivalent_with_global_phase(y_action)
+
 
 def _direct_z_action(n, angle_supports):
     """Phased action of symbolic Z-rotations applied directly to ``n`` system qubits.
