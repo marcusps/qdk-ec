@@ -309,7 +309,7 @@ pub use clifford_impl::{
 };
 
 mod transvection;
-pub use transvection::{clifford_centralizer, clifford_to_transvections};
+pub use transvection::{clifford_centralizer, clifford_to_transvections, clifford_to_transvections_minimal};
 
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct CliffordStringParsingError;

@@ -1,6 +1,7 @@
 use derive_more::{Deref, DerefMut, From, Into};
 use paulimer::clifford::{
-    clifford_centralizer, clifford_to_transvections, group_encoding_clifford_of, split_phased_css,
+    clifford_centralizer, clifford_to_transvections, clifford_to_transvections_minimal,
+    group_encoding_clifford_of, split_phased_css,
     split_qubit_cliffords_and_css, Clifford, CliffordMutable, CliffordUnitary, XOrZ,
 };
 use paulimer::pauli::{as_sparse, DensePauli, SparsePauli};
@@ -284,6 +285,22 @@ impl PyCliffordUnitary {
     /// :meth:`to_pauli_exponents` for the sign-exact (but ``O(n^2)``) decomposition.
     fn to_transvections(&self) -> Vec<PySparsePauli> {
         clifford_to_transvections(&self.inner).into_iter().map(PySparsePauli::from).collect()
+    }
+
+    /// Decomposes this Clifford into a *minimal* ordered product of Clifford transvections (pi/4
+    /// Pauli exponents), reproducing its symplectic action with the fewest possible factors.
+    ///
+    /// Returns Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4 P_1)``, then
+    /// ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces the conjugation action of this
+    /// Clifford, with ``k`` equal to the minimal transvection count (``r`` or ``r + 1``, where ``r``
+    /// is the rank of the residue matrix). Pauli-image signs and the global phase are not
+    /// reproduced; see :meth:`to_transvections` for the linear-time greedy decomposition, which may
+    /// use more factors.
+    fn to_transvections_minimal(&self) -> Vec<PySparsePauli> {
+        clifford_to_transvections_minimal(&self.inner)
+            .into_iter()
+            .map(PySparsePauli::from)
+            .collect()
     }
 
     /// Returns generators of this Clifford's centralizer: the Pauli operators fixed up to sign under

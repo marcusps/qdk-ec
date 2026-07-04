@@ -543,6 +543,18 @@ class CliffordUnitary:
         """
         ...
 
+    def to_transvections_minimal(self) -> list[SparsePauli]:
+        """Decompose into a *minimal* ordered product of Clifford transvections (pi/4 Pauli exponents).
+
+        Returns Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4 P_1)``, then
+        ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces this Clifford's symplectic
+        (conjugation) action, with ``k`` the minimal transvection count (``r`` or ``r + 1``, where
+        ``r`` is the rank of the residue matrix). Pauli-image signs and the global phase are not
+        reproduced; :meth:`to_transvections` is the linear-time greedy variant, which may use more
+        factors.
+        """
+        ...
+
     def centralizer(self) -> list[SparsePauli]:
         """Generators of the centralizer: Paulis fixed up to sign under conjugation."""
         ...
