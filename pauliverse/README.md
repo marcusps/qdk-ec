@@ -10,7 +10,7 @@ pauliverse provides multiple stabilizer simulation implementations optimized for
 
 - **`OutcomeSpecificSimulation`**: Traditional stabilizer simulation that draws random measurement outcomes as needed. Best for Monte Carlo sampling when the number of shots is much smaller than the number of random measurements.
 - **`OutcomeCompleteSimulation`**: Tracks all 2^n_random outcome branches simultaneously. Best for analyzing entire circuits, or when shots >> 2^n_random.
-- **`PhasedOutcomeCompleteSimulation`**: Like `OutcomeCompleteSimulation`, but also tracks the exact global phase of the encoded state. Best for exact equality checking of non-stabilizer circuits.
+- **`PhasedOutcomeCompleteSimulation`**: Like `OutcomeCompleteSimulation`, but also tracks the exact global phase of the encoded state. Best for exact equality checking of non-stabilizer circuits. Its `PhasedCircuitAction` (via `phased_action`) compares two circuits with `is_equivalent` (up to a common global phase) or `is_equivalent_with_global_phase` (pinning the absolute `ζ₈` global phase, using the §4.3 auxiliary-qubit separation of arXiv:2603.24717).
 - **`OutcomeFreeSimulation`**: Tracks stabilizer modulo measurement outcomes. Best for circuit verification and logical operator analysis.
 - **`FaultySimulation`**: Extends OutcomeCompleteSimulation with frame-based noise propagation. Best for estimating logical error rates under Pauli noise models.
 
@@ -137,6 +137,7 @@ Key resources:
 - [OutcomeSpecificSimulation](src/outcome_specific_simulation.rs) - Traditional simulation with random outcomes
 - [OutcomeCompleteSimulation](src/outcome_complete_simulation.rs) - All-branches simulation for exact analysis
 - [PhasedOutcomeCompleteSimulation](src/phased_outcome_complete_simulation.rs) - All-branches simulation tracking the exact global phase
+- [Circuit actions](src/action.rs) - `PhasedCircuitAction` for phase-aware and absolute-global-phase circuit equivalence checking
 - [FaultySimulation](src/faulty_simulation.rs) - Noisy simulation with frame propagation
 
 ## Contributing

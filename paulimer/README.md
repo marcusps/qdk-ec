@@ -24,6 +24,9 @@ the building blocks for stabilizer quantum mechanics and quantum error correctio
   - [`clifford_to_pauli_exponents`]: exact decomposition into `π/4` Pauli exponents (the full
     tableau, including image signs), so replaying it with exact phase tracking yields a well-defined
     global phase
+  - [`separate_auxiliary_qubits`]: §4.3 auxiliary-qubit separation — factor a phased encoder whose
+    auxiliary qubits are disentangled into an output ⊗ auxiliary tensor product and recover the exact
+    global phase ([arXiv:2603.24717](https://arxiv.org/abs/2603.24717))
 
 Based on algorithms from [arXiv:2309.08676](https://arxiv.org/abs/2309.08676).
 
@@ -184,6 +187,7 @@ Key documentation:
 - [`PauliGroup`](src/pauli_group.rs) - Subgroup operations and stabilizer groups
 - [`CliffordUnitary`](src/clifford.rs) - Clifford gates and Pauli conjugation
 - [`clifford_to_pauli_exponents`](src/clifford/decomposition.rs) - Exact decomposition of a Clifford into `π/4` Pauli exponents
+- [`separate_auxiliary_qubits`](src/clifford/aux_separation.rs) - §4.3 auxiliary-qubit separation with exact global-phase recovery
 - [Trait documentation](src/lib.rs) - `Pauli`, `Clifford`, and other core traits
 
 ## Contributing

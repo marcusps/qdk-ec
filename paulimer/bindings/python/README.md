@@ -61,6 +61,12 @@ def conjugated(sim):  # CNOT . e^{i alpha Z1} . CNOT |++>
 assert prepared_action(direct).is_equivalent(prepared_action(conjugated))
 ```
 
+`is_equivalent` compares two circuits up to a common global phase. To additionally pin the **absolute**
+global phase — distinguishing operators such as `Co` and `-Co` — use
+`PhasedCircuitAction.is_equivalent_with_global_phase(other)`, or read the absolute `zeta8` exponent
+directly from the `global_phase` property. This uses the §4.3 auxiliary-qubit separation of
+arXiv:2603.24717 to recover the encoder's exact global phase.
+
 ### Decomposing a Clifford into pi/4 Pauli exponents
 
 `CliffordUnitary.to_pauli_exponents()` returns an ordered product of `pi/4` Pauli exponents that
