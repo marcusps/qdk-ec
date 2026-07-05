@@ -61,10 +61,32 @@ def conjugated(sim):  # CNOT . e^{i alpha Z1} . CNOT |++>
 assert prepared_action(direct).is_equivalent(prepared_action(conjugated))
 ```
 
+### Decomposing a Clifford into pi/4 Pauli exponents
+
+`CliffordUnitary.to_pauli_exponents()` returns an ordered product of `pi/4` Pauli exponents that
+reproduces the Clifford exactly, including the Pauli-image signs — so replaying it with exact phase
+tracking yields a well-defined global phase:
+
+```python
+from paulimer import CliffordUnitary, UnitaryOpcode
+
+clifford = CliffordUnitary.identity(2)
+clifford.left_mul(UnitaryOpcode.Hadamard, [0])
+clifford.left_mul(UnitaryOpcode.ControlledX, [0, 1])
+
+exponents = clifford.to_pauli_exponents()  # list[SparsePauli], each factor exp(+-i pi/4 P)
+
+rebuilt = CliffordUnitary.identity(2)
+for pauli in exponents:
+    rebuilt.left_mul_pauli_exp(pauli)
+assert rebuilt == clifford
+```
+
 ## Features
 
 - **DensePauli / SparsePauli** - Pauli operators with phase tracking and multiplication
 - **CliffordUnitary** - Clifford gates with conjugation and composition
+  (including `to_pauli_exponents()`, an exact decomposition into `pi/4` Pauli exponents)
 - **PauliGroup** - Group operations including membership testing and factorization
 - **Stabilizer Simulation** - Noiseless (OutcomeComplete, OutcomeFree, OutcomeSpecific) and noisy (Faulty) modes
 - **PhasedOutcomeCompleteSimulation** - Outcome-complete simulation that additionally tracks the exact global phase, enabling exact equality checking of parameterised (symbolic-angle) circuits
