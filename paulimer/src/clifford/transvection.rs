@@ -22,11 +22,10 @@
 //! * [`clifford_to_transvections_minimal`] produces the **strict minimum** number of factors
 //!   (`r` or `r + 1`) via a congruence-triangulation of the residue matrix.
 //!
-//! Unlike [`clifford_to_pauli_exponents`](super::clifford_to_pauli_exponents), which reproduces the
-//! full signed tableau (and hence an exact global phase when replayed on a phased operator), these
-//! decompositions reproduce only the **symplectic action** — they ignore Pauli-image signs and the
-//! global phase. Their advantage is the linear factor count `O(n)`, versus `O(n²)` for the
-//! Gaussian-elimination decomposition.
+//! Unlike a sign-exact decomposition into Pauli exponents (which reproduces the full signed tableau,
+//! and hence an exact global phase when replayed on a phased operator, at `O(n²)` factors via
+//! Gaussian elimination), these decompositions reproduce only the **symplectic action** — they
+//! ignore Pauli-image signs and the global phase. Their advantage is the linear factor count `O(n)`.
 //!
 //! ## The minimum factor count
 //!
@@ -54,8 +53,8 @@ use crate::{anti_commutes_with, Pauli, PauliBinaryOps, PauliMutable, SparsePauli
 /// Returns a list of Pauli operators `[P₁, …, P_k]` such that left-multiplying the identity by the
 /// transvections `exp(iπ/4·P₁)`, then `exp(iπ/4·P₂)`, …, then `exp(iπ/4·P_k)` reproduces the
 /// **symplectic action** of `clifford` (its conjugation map on Pauli operators). The Pauli-image
-/// signs and the global phase are *not* reproduced; see the module docs for the contrast with
-/// [`clifford_to_pauli_exponents`](super::clifford_to_pauli_exponents).
+/// signs and the global phase are *not* reproduced; a sign-exact decomposition into Pauli
+/// exponents would preserve them, at the cost of `O(n²)` factors (see the module docs).
 ///
 /// The number of factors is **linear** in the qubit count (`O(n)`). It is close to, but not
 /// guaranteed to equal, the strict minimum `r = 2n − dim Fix(clifford)` (`r + 1` when the
@@ -224,8 +223,8 @@ fn acts_trivially_on(pauli: &SparsePauli, image: &DensePauli) -> bool {
 /// Returns a list of Pauli operators `[P₁, …, P_k]` such that left-multiplying the identity by the
 /// transvections `exp(iπ/4·P₁)`, then `exp(iπ/4·P₂)`, …, then `exp(iπ/4·P_k)` reproduces the
 /// **symplectic action** of `clifford` (its conjugation map on Pauli operators). The Pauli-image
-/// signs and the global phase are *not* reproduced; see the module docs for the contrast with
-/// [`clifford_to_pauli_exponents`](super::clifford_to_pauli_exponents).
+/// signs and the global phase are *not* reproduced; a sign-exact decomposition into Pauli
+/// exponents would preserve them, at the cost of `O(n²)` factors (see the module docs).
 ///
 /// The number of factors `k` is the strict minimum: `k = r` when the residue core is
 /// congruence-triangularizable and `k = r + 1` otherwise, where `r = 2n − dim Fix(clifford)` is the

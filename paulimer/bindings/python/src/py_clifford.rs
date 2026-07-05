@@ -281,8 +281,8 @@ impl PyCliffordUnitary {
     ///
     /// Returns Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4 P_1)``, then
     /// ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces the conjugation action of this
-    /// Clifford. Pauli-image signs and the global phase are not reproduced; see
-    /// :meth:`to_pauli_exponents` for the sign-exact (but ``O(n^2)``) decomposition.
+    /// Clifford. Pauli-image signs and the global phase are not reproduced; a sign-exact
+    /// decomposition into Pauli exponents would preserve them, at the cost of ``O(n^2)`` factors.
     fn to_transvections(&self) -> Vec<PySparsePauli> {
         clifford_to_transvections(&self.inner).into_iter().map(PySparsePauli::from).collect()
     }
