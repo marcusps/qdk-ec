@@ -17,6 +17,16 @@ SIMULATION_CLASSES = [
     OutcomeCompleteSimulation,
     OutcomeFreeSimulation,
     OutcomeSpecificSimulation,
+    PhasedOutcomeCompleteSimulation,
+]
+
+# PhasedOutcomeCompleteSimulation tracks the exact global phase, which a phaseless CliffordUnitary
+# does not determine, so apply_clifford raises NotImplementedError on it; exclude it from the
+# apply_clifford tests below while keeping it in the shared list for everything else.
+CLIFFORD_CAPABLE_SIMULATION_CLASSES = [
+    OutcomeCompleteSimulation,
+    OutcomeFreeSimulation,
+    OutcomeSpecificSimulation,
 ]
 
 
@@ -134,13 +144,13 @@ class TestSimulationOperations:
         sim = sim_class(3)
         sim.apply_permutation([2, 0, 1])
 
-    @pytest.mark.parametrize("sim_class", SIMULATION_CLASSES)
+    @pytest.mark.parametrize("sim_class", CLIFFORD_CAPABLE_SIMULATION_CLASSES)
     def test_apply_clifford_with_support(self, sim_class):
         sim = sim_class(3)
         hadamard = CliffordUnitary.from_name("Hadamard", [0], 1)
         sim.apply_clifford(hadamard, supported_by=[1])
 
-    @pytest.mark.parametrize("sim_class", SIMULATION_CLASSES)
+    @pytest.mark.parametrize("sim_class", CLIFFORD_CAPABLE_SIMULATION_CLASSES)
     def test_apply_clifford_full(self, sim_class):
         sim = sim_class(2)
         cnot = CliffordUnitary.from_name("ControlledX", [0, 1], 2)
