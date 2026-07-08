@@ -47,79 +47,82 @@ impl C {
 }
 
 fn zeta8(k: i64) -> C {
-    let a = std::f64::consts::FRAC_PI_4 * (k.rem_euclid(8)) as f64;
-    C::new(a.cos(), a.sin())
+    let angle = std::f64::consts::FRAC_PI_4 * (k.rem_euclid(8)) as f64;
+    C::new(angle.cos(), angle.sin())
 }
 
 const ROOT_HALF: f64 = std::f64::consts::FRAC_1_SQRT_2;
 
 struct Dense {
-    n: usize,
+    qubit_count: usize,
     amp: Vec<C>,
 }
 
 impl Dense {
-    fn zero(n: usize) -> Dense {
-        let mut amp = vec![C::ZERO; 1 << n];
+    fn zero(qubit_count: usize) -> Dense {
+        let mut amp = vec![C::ZERO; 1 << qubit_count];
         amp[0] = C::new(1.0, 0.0);
-        Dense { n, amp }
+        Dense { qubit_count, amp }
     }
-    fn apply1(&mut self, q: usize, m: [[C; 2]; 2]) {
-        let bit = 1usize << (self.n - 1 - q);
-        for base in 0..(1 << self.n) {
+    fn apply1(&mut self, qubit: usize, matrix: [[C; 2]; 2]) {
+        let bit = 1usize << (self.qubit_count - 1 - qubit);
+        for base in 0..(1 << self.qubit_count) {
             if base & bit == 0 {
-                let a0 = self.amp[base];
-                let a1 = self.amp[base | bit];
-                self.amp[base] = m[0][0].mul(a0).add(m[0][1].mul(a1));
-                self.amp[base | bit] = m[1][0].mul(a0).add(m[1][1].mul(a1));
+                let amplitude_0 = self.amp[base];
+                let amplitude_1 = self.amp[base | bit];
+                self.amp[base] = matrix[0][0].mul(amplitude_0).add(matrix[0][1].mul(amplitude_1));
+                self.amp[base | bit] = matrix[1][0].mul(amplitude_0).add(matrix[1][1].mul(amplitude_1));
             }
         }
     }
-    fn apply_cx(&mut self, c: usize, t: usize) {
-        let cb = 1usize << (self.n - 1 - c);
-        let tb = 1usize << (self.n - 1 - t);
+    fn apply_cx(&mut self, control: usize, target: usize) {
+        let control_bit = 1usize << (self.qubit_count - 1 - control);
+        let target_bit = 1usize << (self.qubit_count - 1 - target);
         let mut out = self.amp.clone();
-        for base in 0..(1 << self.n) {
-            let src = if base & cb != 0 { base ^ tb } else { base };
+        for base in 0..(1 << self.qubit_count) {
+            let src = if base & control_bit != 0 { base ^ target_bit } else { base };
             out[base] = self.amp[src];
         }
         self.amp = out;
     }
-    fn apply_cz(&mut self, a: usize, b: usize) {
-        let ab = 1usize << (self.n - 1 - a);
-        let bb = 1usize << (self.n - 1 - b);
-        for base in 0..(1 << self.n) {
-            if base & ab != 0 && base & bb != 0 {
+    fn apply_cz(&mut self, first_qubit: usize, second_qubit: usize) {
+        let first_bit = 1usize << (self.qubit_count - 1 - first_qubit);
+        let second_bit = 1usize << (self.qubit_count - 1 - second_qubit);
+        for base in 0..(1 << self.qubit_count) {
+            if base & first_bit != 0 && base & second_bit != 0 {
                 self.amp[base] = self.amp[base].scale(-1.0);
             }
         }
     }
-    fn apply_swap(&mut self, a: usize, b: usize) {
-        let ab = 1usize << (self.n - 1 - a);
-        let bb = 1usize << (self.n - 1 - b);
+    fn apply_swap(&mut self, first_qubit: usize, second_qubit: usize) {
+        let first_bit = 1usize << (self.qubit_count - 1 - first_qubit);
+        let second_bit = 1usize << (self.qubit_count - 1 - second_qubit);
         let mut out = self.amp.clone();
-        for base in 0..(1 << self.n) {
-            let bit_a = usize::from(base & ab != 0);
-            let bit_b = usize::from(base & bb != 0);
-            let mut src = base & !ab & !bb;
-            if bit_b != 0 {
-                src |= ab;
+        for base in 0..(1 << self.qubit_count) {
+            let bit_first = usize::from(base & first_bit != 0);
+            let bit_second = usize::from(base & second_bit != 0);
+            let mut src = base & !first_bit & !second_bit;
+            if bit_second != 0 {
+                src |= first_bit;
             }
-            if bit_a != 0 {
-                src |= bb;
+            if bit_first != 0 {
+                src |= second_bit;
             }
             out[base] = self.amp[src];
         }
         self.amp = out;
     }
-    fn pauli_applied(&self, x: &[bool], z: &[bool], phase: i64) -> Vec<C> {
+    fn pauli_applied(&self, x_bits: &[bool], z_bits: &[bool], phase: i64) -> Vec<C> {
         let mut out = vec![C::ZERO; self.amp.len()];
-        let xmask: usize = (0..self.n).filter(|&q| x[q]).map(|q| 1usize << (self.n - 1 - q)).sum();
-        for base in 0..(1 << self.n) {
-            let target = base ^ xmask;
+        let x_mask: usize = (0..self.qubit_count)
+            .filter(|&qubit| x_bits[qubit])
+            .map(|qubit| 1usize << (self.qubit_count - 1 - qubit))
+            .sum();
+        for base in 0..(1 << self.qubit_count) {
+            let target = base ^ x_mask;
             let mut sign_parity = 0i64;
-            for q in 0..self.n {
-                if z[q] && (base >> (self.n - 1 - q)) & 1 == 1 {
+            for qubit in 0..self.qubit_count {
+                if z_bits[qubit] && (base >> (self.qubit_count - 1 - qubit)) & 1 == 1 {
                     sign_parity ^= 1;
                 }
             }
@@ -128,75 +131,78 @@ impl Dense {
         }
         out
     }
-    fn apply_pauli(&mut self, x: &[bool], z: &[bool], phase: i64) {
-        self.amp = self.pauli_applied(x, z, phase);
+    fn apply_pauli(&mut self, x_bits: &[bool], z_bits: &[bool], phase: i64) {
+        self.amp = self.pauli_applied(x_bits, z_bits, phase);
     }
-    fn apply_pauli_exp(&mut self, x: &[bool], z: &[bool], phase: i64) {
-        let p_applied = self.pauli_applied(x, z, phase);
+    fn apply_pauli_exp(&mut self, x_bits: &[bool], z_bits: &[bool], phase: i64) {
+        let pauli_applied = self.pauli_applied(x_bits, z_bits, phase);
         for base in 0..self.amp.len() {
-            self.amp[base] = self.amp[base].add(p_applied[base].mul(C::new(0.0, 1.0))).scale(ROOT_HALF);
+            self.amp[base] = self.amp[base].add(pauli_applied[base].mul(C::new(0.0, 1.0))).scale(ROOT_HALF);
         }
     }
-    fn apply_controlled_pauli(&mut self, p1: &(Vec<bool>, Vec<bool>, i64), p2: &(Vec<bool>, Vec<bool>, i64)) {
-        // Lambda(P1, P2) = (I + P1)/2 + (I - P1)/2 * P2
-        let p1v = self.pauli_applied(&p1.0, &p1.1, p1.2);
+    fn apply_controlled_pauli(&mut self, first_pauli: &(Vec<bool>, Vec<bool>, i64), second_pauli: &(Vec<bool>, Vec<bool>, i64)) {
+        // controlled_pauli(first, second) = (I + first)/2 + (I - first)/2 * second
+        let first_pauli_applied = self.pauli_applied(&first_pauli.0, &first_pauli.1, first_pauli.2);
         let plus: Vec<C> = (0..self.amp.len())
-            .map(|i| self.amp[i].add(p1v[i]).scale(0.5))
+            .map(|index| self.amp[index].add(first_pauli_applied[index]).scale(0.5))
             .collect();
         let minus = Dense {
-            n: self.n,
+            qubit_count: self.qubit_count,
             amp: (0..self.amp.len())
-                .map(|i| self.amp[i].add(p1v[i].scale(-1.0)).scale(0.5))
+                .map(|index| self.amp[index].add(first_pauli_applied[index].scale(-1.0)).scale(0.5))
                 .collect(),
         };
-        let p2_minus = minus.pauli_applied(&p2.0, &p2.1, p2.2);
-        for i in 0..self.amp.len() {
-            self.amp[i] = plus[i].add(p2_minus[i]);
+        let second_pauli_applied_to_minus = minus.pauli_applied(&second_pauli.0, &second_pauli.1, second_pauli.2);
+        for index in 0..self.amp.len() {
+            self.amp[index] = plus[index].add(second_pauli_applied_to_minus[index]);
         }
     }
-    fn project(&mut self, x: &[bool], z: &[bool], phase: i64, outcome: bool) {
-        let pv = self.pauli_applied(x, z, phase);
+    fn project(&mut self, x_bits: &[bool], z_bits: &[bool], phase: i64, outcome: bool) {
+        let pauli_applied = self.pauli_applied(x_bits, z_bits, phase);
         let sign = if outcome { -1.0 } else { 1.0 };
-        for i in 0..self.amp.len() {
-            self.amp[i] = self.amp[i].add(pv[i].scale(sign)).scale(0.5);
+        for index in 0..self.amp.len() {
+            self.amp[index] = self.amp[index].add(pauli_applied[index].scale(sign)).scale(0.5);
         }
         normalize(&mut self.amp);
     }
 }
 
 fn normalize(amp: &mut [C]) {
-    let norm = amp.iter().map(|a| a.abs2()).sum::<f64>().sqrt();
+    let norm = amp.iter().map(|amplitude| amplitude.abs2()).sum::<f64>().sqrt();
     assert!(norm > 1e-9, "attempted to normalize a vanishing state");
     let inv = 1.0 / norm;
-    for a in amp.iter_mut() {
-        *a = a.scale(inv);
+    for amplitude in amp.iter_mut() {
+        *amplitude = amplitude.scale(inv);
     }
 }
 
 fn gate_matrix(op: UnitaryOp) -> [[C; 2]; 2] {
-    let rh = ROOT_HALF;
+    let root_half = ROOT_HALF;
     match op {
-        UnitaryOp::Hadamard => [[C::new(rh, 0.0), C::new(rh, 0.0)], [C::new(rh, 0.0), C::new(-rh, 0.0)]],
+        UnitaryOp::Hadamard => [
+            [C::new(root_half, 0.0), C::new(root_half, 0.0)],
+            [C::new(root_half, 0.0), C::new(-root_half, 0.0)],
+        ],
         UnitaryOp::X => [[C::ZERO, C::new(1.0, 0.0)], [C::new(1.0, 0.0), C::ZERO]],
         UnitaryOp::Y => [[C::ZERO, C::new(0.0, -1.0)], [C::new(0.0, 1.0), C::ZERO]],
         UnitaryOp::Z => [[C::new(1.0, 0.0), C::ZERO], [C::ZERO, C::new(-1.0, 0.0)]],
         UnitaryOp::SqrtZ => [[C::new(1.0, 0.0), C::ZERO], [C::ZERO, C::new(0.0, 1.0)]],
         UnitaryOp::SqrtZInv => [[C::new(1.0, 0.0), C::ZERO], [C::ZERO, C::new(0.0, -1.0)]],
         UnitaryOp::SqrtX => [
-            [zeta8(1).scale(rh), zeta8(7).scale(rh)],
-            [zeta8(7).scale(rh), zeta8(1).scale(rh)],
+            [zeta8(1).scale(root_half), zeta8(7).scale(root_half)],
+            [zeta8(7).scale(root_half), zeta8(1).scale(root_half)],
         ],
         UnitaryOp::SqrtXInv => [
-            [zeta8(7).scale(rh), zeta8(1).scale(rh)],
-            [zeta8(1).scale(rh), zeta8(7).scale(rh)],
+            [zeta8(7).scale(root_half), zeta8(1).scale(root_half)],
+            [zeta8(1).scale(root_half), zeta8(7).scale(root_half)],
         ],
         UnitaryOp::SqrtY => [
-            [zeta8(1).scale(rh), zeta8(5).scale(rh)],
-            [zeta8(1).scale(rh), zeta8(1).scale(rh)],
+            [zeta8(1).scale(root_half), zeta8(5).scale(root_half)],
+            [zeta8(1).scale(root_half), zeta8(1).scale(root_half)],
         ],
         UnitaryOp::SqrtYInv => [
-            [zeta8(7).scale(rh), zeta8(7).scale(rh)],
-            [zeta8(3).scale(rh), zeta8(7).scale(rh)],
+            [zeta8(7).scale(root_half), zeta8(7).scale(root_half)],
+            [zeta8(3).scale(root_half), zeta8(7).scale(root_half)],
         ],
         other => panic!("gate_matrix called on multi-qubit op {other:?}"),
     }
@@ -205,9 +211,9 @@ fn gate_matrix(op: UnitaryOp) -> [[C; 2]; 2] {
 fn statevector(phased: &PhasedCliffordUnitary) -> Vec<C> {
     use binar::matrix::AlignedBitMatrix;
     use binar::{BitMatrix, BitwiseMut};
-    let n = phased.num_qubits();
-    let mut matrix = AlignedBitMatrix::zeros(n, n);
-    for generator in 0..n {
+    let qubit_count = phased.num_qubits();
+    let mut matrix = AlignedBitMatrix::zeros(qubit_count, qubit_count);
+    for generator in 0..qubit_count {
         let image: DensePauli = phased.clifford().image_z(generator);
         for qubit in image.x_bits().support() {
             matrix.row_mut(generator).assign_index(qubit, true);
@@ -215,12 +221,12 @@ fn statevector(phased: &PhasedCliffordUnitary) -> Vec<C> {
     }
     let rank = BitMatrix::from_aligned(matrix).rank();
     let mag = (0.5f64).powf(rank as f64 / 2.0);
-    let mut out = vec![C::ZERO; 1 << n];
-    for idx in 0..(1usize << n) {
+    let mut out = vec![C::ZERO; 1 << qubit_count];
+    for idx in 0..(1usize << qubit_count) {
         let mut value = 0usize;
-        for q in 0..n {
-            if (idx >> (n - 1 - q)) & 1 == 1 {
-                value |= 1usize << q;
+        for qubit in 0..qubit_count {
+            if (idx >> (qubit_count - 1 - qubit)) & 1 == 1 {
+                value |= 1usize << qubit;
             }
         }
         if let Some(exp) = phased.state_amplitude_phase_exponent_usize(value) {
@@ -230,16 +236,16 @@ fn statevector(phased: &PhasedCliffordUnitary) -> Vec<C> {
     out
 }
 
-fn pauli_arrays(pauli: &DensePauli, n: usize) -> (Vec<bool>, Vec<bool>, i64) {
-    let mut x = vec![false; n];
-    let mut z = vec![false; n];
-    for q in pauli.x_bits().support() {
-        x[q] = true;
+fn pauli_arrays(pauli: &DensePauli, qubit_count: usize) -> (Vec<bool>, Vec<bool>, i64) {
+    let mut x_bits = vec![false; qubit_count];
+    let mut z_bits = vec![false; qubit_count];
+    for qubit in pauli.x_bits().support() {
+        x_bits[qubit] = true;
     }
-    for q in pauli.z_bits().support() {
-        z[q] = true;
+    for qubit in pauli.z_bits().support() {
+        z_bits[qubit] = true;
     }
-    (x, z, i64::from(pauli.xz_phase_exponent()))
+    (x_bits, z_bits, i64::from(pauli.xz_phase_exponent()))
 }
 
 #[derive(Clone)]
@@ -252,11 +258,11 @@ enum Op {
     Measure(String),
 }
 
-fn random_hermitian_pauli(rng: &mut impl RngExt, n: usize) -> String {
+fn random_hermitian_pauli(rng: &mut impl RngExt, qubit_count: usize) -> String {
     loop {
         let mut letters = String::new();
         let mut any = false;
-        for _ in 0..n {
+        for _ in 0..qubit_count {
             match rng.random_range(0..4) {
                 0 => letters.push('I'),
                 1 => {
@@ -281,17 +287,17 @@ fn random_hermitian_pauli(rng: &mut impl RngExt, n: usize) -> String {
     }
 }
 
-fn two_distinct(rng: &mut impl RngExt, n: usize) -> (usize, usize) {
-    let a = rng.random_range(0..n);
-    let mut b = rng.random_range(0..n);
-    while b == a {
-        b = rng.random_range(0..n);
+fn two_distinct(rng: &mut impl RngExt, qubit_count: usize) -> (usize, usize) {
+    let first = rng.random_range(0..qubit_count);
+    let mut second = rng.random_range(0..qubit_count);
+    while second == first {
+        second = rng.random_range(0..qubit_count);
     }
-    (a, b)
+    (first, second)
 }
 
-fn random_circuit(rng: &mut impl RngExt, n: usize) -> Vec<Op> {
-    let single = [
+fn random_circuit(rng: &mut impl RngExt, qubit_count: usize) -> Vec<Op> {
+    let single_qubit_gates = [
         UnitaryOp::Hadamard,
         UnitaryOp::X,
         UnitaryOp::Y,
@@ -303,55 +309,58 @@ fn random_circuit(rng: &mut impl RngExt, n: usize) -> Vec<Op> {
         UnitaryOp::SqrtY,
         UnitaryOp::SqrtYInv,
     ];
-    let two = [UnitaryOp::ControlledX, UnitaryOp::ControlledZ, UnitaryOp::Swap];
+    let two_qubit_gates = [UnitaryOp::ControlledX, UnitaryOp::ControlledZ, UnitaryOp::Swap];
     let mut ops = Vec::new();
     let mut measurement_count = 0usize;
     let op_count = rng.random_range(6..14);
     for _ in 0..op_count {
         match rng.random_range(0..7) {
             0 => {
-                let q = rng.random_range(0..n);
-                ops.push(Op::Gate(single[rng.random_range(0..single.len())], vec![q]));
+                let qubit = rng.random_range(0..qubit_count);
+                ops.push(Op::Gate(single_qubit_gates[rng.random_range(0..single_qubit_gates.len())], vec![qubit]));
             }
             1 => {
-                let (a, b) = two_distinct(rng, n);
-                ops.push(Op::Gate(two[rng.random_range(0..two.len())], vec![a, b]));
+                let (first_qubit, second_qubit) = two_distinct(rng, qubit_count);
+                ops.push(Op::Gate(
+                    two_qubit_gates[rng.random_range(0..two_qubit_gates.len())],
+                    vec![first_qubit, second_qubit],
+                ));
             }
-            2 => ops.push(Op::Pauli(random_hermitian_pauli(rng, n))),
-            3 => ops.push(Op::PauliExp(random_hermitian_pauli(rng, n))),
+            2 => ops.push(Op::Pauli(random_hermitian_pauli(rng, qubit_count))),
+            3 => ops.push(Op::PauliExp(random_hermitian_pauli(rng, qubit_count))),
             4 => {
-                let p1 = random_hermitian_pauli(rng, n);
-                let mut p2 = random_hermitian_pauli(rng, n);
+                let first_pauli_string = random_hermitian_pauli(rng, qubit_count);
+                let mut second_pauli_string = random_hermitian_pauli(rng, qubit_count);
                 let mut guard = 0;
                 loop {
-                    let sp1: SparsePauli = p1.parse().unwrap();
-                    let sp2: SparsePauli = p2.parse().unwrap();
-                    if commutes_with(&sp1, &sp2) {
+                    let first_sparse_pauli: SparsePauli = first_pauli_string.parse().unwrap();
+                    let second_sparse_pauli: SparsePauli = second_pauli_string.parse().unwrap();
+                    if commutes_with(&first_sparse_pauli, &second_sparse_pauli) {
                         break;
                     }
-                    p2 = random_hermitian_pauli(rng, n);
+                    second_pauli_string = random_hermitian_pauli(rng, qubit_count);
                     guard += 1;
                     if guard > 32 {
                         break;
                     }
                 }
-                let sp1: SparsePauli = p1.parse().unwrap();
-                let sp2: SparsePauli = p2.parse().unwrap();
-                if commutes_with(&sp1, &sp2) {
-                    ops.push(Op::ControlledPauli(p1, p2));
+                let first_sparse_pauli: SparsePauli = first_pauli_string.parse().unwrap();
+                let second_sparse_pauli: SparsePauli = second_pauli_string.parse().unwrap();
+                if commutes_with(&first_sparse_pauli, &second_sparse_pauli) {
+                    ops.push(Op::ControlledPauli(first_pauli_string, second_pauli_string));
                 }
             }
             5 => {
                 if measurement_count > 0 && rng.random_range(0..2) == 0 {
                     let mut outcomes = Vec::new();
-                    for o in 0..measurement_count {
+                    for outcome_index in 0..measurement_count {
                         if rng.random_range(0..2) == 0 {
-                            outcomes.push(o);
+                            outcomes.push(outcome_index);
                         }
                     }
                     if !outcomes.is_empty() {
                         ops.push(Op::ConditionalPauli(
-                            random_hermitian_pauli(rng, n),
+                            random_hermitian_pauli(rng, qubit_count),
                             outcomes,
                             rng.random_range(0..2) == 1,
                         ));
@@ -360,7 +369,7 @@ fn random_circuit(rng: &mut impl RngExt, n: usize) -> Vec<Op> {
             }
             _ => {
                 if measurement_count < 5 {
-                    ops.push(Op::Measure(random_hermitian_pauli(rng, n)));
+                    ops.push(Op::Measure(random_hermitian_pauli(rng, qubit_count)));
                     measurement_count += 1;
                 }
             }
@@ -369,59 +378,61 @@ fn random_circuit(rng: &mut impl RngExt, n: usize) -> Vec<Op> {
     ops
 }
 
-fn run_simulation(ops: &[Op], n: usize) -> PhasedOutcomeCompleteSimulation {
-    let mut sim = PhasedOutcomeCompleteSimulation::new(n);
+fn run_simulation(ops: &[Op], qubit_count: usize) -> PhasedOutcomeCompleteSimulation {
+    let mut sim = PhasedOutcomeCompleteSimulation::new(qubit_count);
     for op in ops {
         match op {
-            Op::Gate(u, support) => sim.unitary_op(*u, support),
-            Op::Pauli(p) => sim.pauli(&p.parse().unwrap()),
-            Op::PauliExp(p) => sim.pauli_exp(&p.parse().unwrap()),
-            Op::ControlledPauli(p1, p2) => sim.controlled_pauli(&p1.parse().unwrap(), &p2.parse().unwrap()),
-            Op::ConditionalPauli(p, outcomes, parity) => {
-                sim.conditional_pauli(&p.parse().unwrap(), outcomes, *parity);
+            Op::Gate(gate, support) => sim.unitary_op(*gate, support),
+            Op::Pauli(pauli) => sim.pauli(&pauli.parse().unwrap()),
+            Op::PauliExp(pauli) => sim.pauli_exp(&pauli.parse().unwrap()),
+            Op::ControlledPauli(first_pauli, second_pauli) => {
+                sim.controlled_pauli(&first_pauli.parse().unwrap(), &second_pauli.parse().unwrap());
             }
-            Op::Measure(p) => {
-                sim.measure(&p.parse().unwrap());
+            Op::ConditionalPauli(pauli, outcomes, parity) => {
+                sim.conditional_pauli(&pauli.parse().unwrap(), outcomes, *parity);
+            }
+            Op::Measure(pauli) => {
+                sim.measure(&pauli.parse().unwrap());
             }
         }
     }
     sim
 }
 
-fn dense_reference(ops: &[Op], outcome_vector: &[bool], n: usize) -> Vec<C> {
-    let mut dense = Dense::zero(n);
+fn dense_reference(ops: &[Op], outcome_bits: &[bool], qubit_count: usize) -> Vec<C> {
+    let mut dense = Dense::zero(qubit_count);
     let mut measurement_index = 0usize;
     for op in ops {
         match op {
-            Op::Gate(u, support) => match u {
+            Op::Gate(gate, support) => match gate {
                 UnitaryOp::ControlledX => dense.apply_cx(support[0], support[1]),
                 UnitaryOp::ControlledZ => dense.apply_cz(support[0], support[1]),
                 UnitaryOp::Swap => dense.apply_swap(support[0], support[1]),
                 other => dense.apply1(support[0], gate_matrix(*other)),
             },
-            Op::Pauli(p) => {
-                let (x, z, phase) = pauli_arrays(&p.parse::<DensePauli>().unwrap(), n);
-                dense.apply_pauli(&x, &z, phase);
+            Op::Pauli(pauli) => {
+                let (x_bits, z_bits, phase) = pauli_arrays(&pauli.parse::<DensePauli>().unwrap(), qubit_count);
+                dense.apply_pauli(&x_bits, &z_bits, phase);
             }
-            Op::PauliExp(p) => {
-                let (x, z, phase) = pauli_arrays(&p.parse::<DensePauli>().unwrap(), n);
-                dense.apply_pauli_exp(&x, &z, phase);
+            Op::PauliExp(pauli) => {
+                let (x_bits, z_bits, phase) = pauli_arrays(&pauli.parse::<DensePauli>().unwrap(), qubit_count);
+                dense.apply_pauli_exp(&x_bits, &z_bits, phase);
             }
-            Op::ControlledPauli(p1, p2) => {
-                let a = pauli_arrays(&p1.parse::<DensePauli>().unwrap(), n);
-                let b = pauli_arrays(&p2.parse::<DensePauli>().unwrap(), n);
-                dense.apply_controlled_pauli(&a, &b);
+            Op::ControlledPauli(first_pauli, second_pauli) => {
+                let first_arrays = pauli_arrays(&first_pauli.parse::<DensePauli>().unwrap(), qubit_count);
+                let second_arrays = pauli_arrays(&second_pauli.parse::<DensePauli>().unwrap(), qubit_count);
+                dense.apply_controlled_pauli(&first_arrays, &second_arrays);
             }
-            Op::ConditionalPauli(p, outcomes, parity) => {
-                let condition = outcomes.iter().fold(false, |acc, &o| acc ^ outcome_vector[o]);
+            Op::ConditionalPauli(pauli, outcomes, parity) => {
+                let condition = outcomes.iter().fold(false, |acc, &outcome_index| acc ^ outcome_bits[outcome_index]);
                 if condition == *parity {
-                    let (x, z, phase) = pauli_arrays(&p.parse::<DensePauli>().unwrap(), n);
-                    dense.apply_pauli(&x, &z, phase);
+                    let (x_bits, z_bits, phase) = pauli_arrays(&pauli.parse::<DensePauli>().unwrap(), qubit_count);
+                    dense.apply_pauli(&x_bits, &z_bits, phase);
                 }
             }
-            Op::Measure(p) => {
-                let (x, z, phase) = pauli_arrays(&p.parse::<DensePauli>().unwrap(), n);
-                dense.project(&x, &z, phase, outcome_vector[measurement_index]);
+            Op::Measure(pauli) => {
+                let (x_bits, z_bits, phase) = pauli_arrays(&pauli.parse::<DensePauli>().unwrap(), qubit_count);
+                dense.project(&x_bits, &z_bits, phase, outcome_bits[measurement_index]);
                 measurement_index += 1;
             }
         }
@@ -429,16 +440,16 @@ fn dense_reference(ops: &[Op], outcome_vector: &[bool], n: usize) -> Vec<C> {
     dense.amp
 }
 
-fn claimed_state(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool], n: usize) -> Vec<C> {
+fn claimed_state(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool], qubit_count: usize) -> Vec<C> {
     let encoder = sim.phased_state_encoder();
     let base = statevector(&encoder);
 
     let sign_matrix = sim.aligned_sign_matrix();
-    let n_random = sim.random_outcome_count();
-    let mut register = AlignedBitVec::zeros(n);
-    for qubit in 0..n {
+    let random_outcome_count = sim.random_outcome_count();
+    let mut register = AlignedBitVec::zeros(qubit_count);
+    for qubit in 0..qubit_count {
         let mut bit = false;
-        for column in 0..n_random {
+        for column in 0..random_outcome_count {
             if random_bits[column] && sign_matrix.row(qubit).index(column) {
                 bit = !bit;
             }
@@ -447,9 +458,9 @@ fn claimed_state(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool], n:
     }
 
     let image = encoder.clifford().image_x_bits(&register);
-    let (x, z, phase) = pauli_arrays(&image, n);
-    let mut dense = Dense { n, amp: base };
-    dense.apply_pauli(&x, &z, phase);
+    let (x_bits, z_bits, phase) = pauli_arrays(&image, qubit_count);
+    let mut dense = Dense { qubit_count, amp: base };
+    dense.apply_pauli(&x_bits, &z_bits, phase);
 
     let exponent = i64::from(sim.output_phase_exponent(random_bits));
     for amplitude in &mut dense.amp {
@@ -463,11 +474,11 @@ fn claimed_state(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool], n:
 fn outcome_vector(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool]) -> Vec<bool> {
     let outcome_matrix = sim.aligned_outcome_matrix();
     let shift = sim.aligned_outcome_shift();
-    let n_random = sim.random_outcome_count();
+    let random_outcome_count = sim.random_outcome_count();
     (0..sim.outcome_count())
         .map(|row| {
             let mut bit = shift.index(row);
-            for column in 0..n_random {
+            for column in 0..random_outcome_count {
                 if random_bits[column] && outcome_matrix.row(row).index(column) {
                     bit = !bit;
                 }
@@ -480,30 +491,34 @@ fn outcome_vector(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool]) -
 fn describe(ops: &[Op]) -> String {
     ops.iter()
         .map(|op| match op {
-            Op::Gate(u, s) => format!("Gate({u:?},{s:?})"),
-            Op::Pauli(p) => format!("Pauli({p})"),
-            Op::PauliExp(p) => format!("PauliExp({p})"),
-            Op::ControlledPauli(a, b) => format!("CPauli({a},{b})"),
-            Op::ConditionalPauli(p, o, parity) => format!("CondPauli({p},{o:?},{parity})"),
-            Op::Measure(p) => format!("Measure({p})"),
+            Op::Gate(gate, support) => format!("Gate({gate:?},{support:?})"),
+            Op::Pauli(pauli) => format!("Pauli({pauli})"),
+            Op::PauliExp(pauli) => format!("PauliExp({pauli})"),
+            Op::ControlledPauli(first_pauli, second_pauli) => format!("CPauli({first_pauli},{second_pauli})"),
+            Op::ConditionalPauli(pauli, outcomes, parity) => format!("CondPauli({pauli},{outcomes:?},{parity})"),
+            Op::Measure(pauli) => format!("Measure({pauli})"),
         })
         .collect::<Vec<_>>()
         .join(" | ")
 }
 
-fn close(a: &[C], b: &[C]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.add(y.scale(-1.0)).abs2() < 1e-6)
+fn close(left: &[C], right: &[C]) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left_value, right_value)| left_value.add(right_value.scale(-1.0)).abs2() < 1e-6)
 }
 
-fn verify(ops: &[Op], n: usize) {
-    let sim = run_simulation(ops, n);
-    let n_random = sim.random_outcome_count();
-    assert!(n_random <= 12, "too many random bits to enumerate");
-    for assignment in 0..(1usize << n_random) {
-        let random_bits: Vec<bool> = (0..n_random).map(|bit| (assignment >> bit) & 1 == 1).collect();
+fn verify(ops: &[Op], qubit_count: usize) {
+    let sim = run_simulation(ops, qubit_count);
+    let random_outcome_count = sim.random_outcome_count();
+    assert!(random_outcome_count <= 12, "too many random bits to enumerate");
+    for assignment in 0..(1usize << random_outcome_count) {
+        let random_bits: Vec<bool> = (0..random_outcome_count).map(|bit| (assignment >> bit) & 1 == 1).collect();
         let outcomes = outcome_vector(&sim, &random_bits);
-        let reference = dense_reference(ops, &outcomes, n);
-        let claimed = claimed_state(&sim, &random_bits, n);
+        let reference = dense_reference(ops, &outcomes, qubit_count);
+        let claimed = claimed_state(&sim, &random_bits, qubit_count);
         assert!(
             close(&claimed, &reference),
             "mismatch: ops=[{}] random_bits={random_bits:?}",
@@ -642,18 +657,18 @@ fn captured_regression_one() {
 fn phased_outcome_complete_tracks_dense_statevector() {
     let mut rng = rand::rng();
     for _trial in 0..600 {
-        let n = 3usize;
-        let ops = random_circuit(&mut rng, n);
-        let sim = run_simulation(&ops, n);
-        let n_random = sim.random_outcome_count();
-        if n_random > 8 {
+        let qubit_count = 3usize;
+        let ops = random_circuit(&mut rng, qubit_count);
+        let sim = run_simulation(&ops, qubit_count);
+        let random_outcome_count = sim.random_outcome_count();
+        if random_outcome_count > 8 {
             continue;
         }
-        for assignment in 0..(1usize << n_random) {
-            let random_bits: Vec<bool> = (0..n_random).map(|bit| (assignment >> bit) & 1 == 1).collect();
+        for assignment in 0..(1usize << random_outcome_count) {
+            let random_bits: Vec<bool> = (0..random_outcome_count).map(|bit| (assignment >> bit) & 1 == 1).collect();
             let outcomes = outcome_vector(&sim, &random_bits);
-            let reference = dense_reference(&ops, &outcomes, n);
-            let claimed = claimed_state(&sim, &random_bits, n);
+            let reference = dense_reference(&ops, &outcomes, qubit_count);
+            let claimed = claimed_state(&sim, &random_bits, qubit_count);
             assert!(
                 close(&claimed, &reference),
                 "mismatch: ops=[{}] random_bits={random_bits:?}",

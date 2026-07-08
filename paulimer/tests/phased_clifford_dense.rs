@@ -34,79 +34,82 @@ impl C {
 }
 
 fn zeta8(k: i64) -> C {
-    let a = std::f64::consts::FRAC_PI_4 * (k.rem_euclid(8)) as f64;
-    C::new(a.cos(), a.sin())
+    let angle = std::f64::consts::FRAC_PI_4 * (k.rem_euclid(8)) as f64;
+    C::new(angle.cos(), angle.sin())
 }
 
 const ROOT_HALF: f64 = std::f64::consts::FRAC_1_SQRT_2;
 
 struct Dense {
-    n: usize,
+    qubit_count: usize,
     amp: Vec<C>,
 }
 
 impl Dense {
-    fn zero(n: usize) -> Dense {
-        let mut amp = vec![C::ZERO; 1 << n];
+    fn zero(qubit_count: usize) -> Dense {
+        let mut amp = vec![C::ZERO; 1 << qubit_count];
         amp[0] = C::new(1.0, 0.0);
-        Dense { n, amp }
+        Dense { qubit_count, amp }
     }
-    fn apply1(&mut self, q: usize, m: [[C; 2]; 2]) {
-        let bit = 1usize << (self.n - 1 - q);
-        for base in 0..(1 << self.n) {
+    fn apply1(&mut self, qubit: usize, matrix: [[C; 2]; 2]) {
+        let bit = 1usize << (self.qubit_count - 1 - qubit);
+        for base in 0..(1 << self.qubit_count) {
             if base & bit == 0 {
-                let a0 = self.amp[base];
-                let a1 = self.amp[base | bit];
-                self.amp[base] = m[0][0].mul(a0).add(m[0][1].mul(a1));
-                self.amp[base | bit] = m[1][0].mul(a0).add(m[1][1].mul(a1));
+                let amplitude_0 = self.amp[base];
+                let amplitude_1 = self.amp[base | bit];
+                self.amp[base] = matrix[0][0].mul(amplitude_0).add(matrix[0][1].mul(amplitude_1));
+                self.amp[base | bit] = matrix[1][0].mul(amplitude_0).add(matrix[1][1].mul(amplitude_1));
             }
         }
     }
-    fn apply_cx(&mut self, c: usize, t: usize) {
-        let cb = 1usize << (self.n - 1 - c);
-        let tb = 1usize << (self.n - 1 - t);
+    fn apply_cx(&mut self, control: usize, target: usize) {
+        let control_bit = 1usize << (self.qubit_count - 1 - control);
+        let target_bit = 1usize << (self.qubit_count - 1 - target);
         let mut out = self.amp.clone();
-        for base in 0..(1 << self.n) {
-            let src = if base & cb != 0 { base ^ tb } else { base };
+        for base in 0..(1 << self.qubit_count) {
+            let src = if base & control_bit != 0 { base ^ target_bit } else { base };
             out[base] = self.amp[src];
         }
         self.amp = out;
     }
-    fn apply_cz(&mut self, a: usize, b: usize) {
-        let ab = 1usize << (self.n - 1 - a);
-        let bb = 1usize << (self.n - 1 - b);
-        for base in 0..(1 << self.n) {
-            if base & ab != 0 && base & bb != 0 {
+    fn apply_cz(&mut self, first_qubit: usize, second_qubit: usize) {
+        let first_bit = 1usize << (self.qubit_count - 1 - first_qubit);
+        let second_bit = 1usize << (self.qubit_count - 1 - second_qubit);
+        for base in 0..(1 << self.qubit_count) {
+            if base & first_bit != 0 && base & second_bit != 0 {
                 self.amp[base] = self.amp[base].scale(-1.0);
             }
         }
     }
-    fn apply_swap(&mut self, a: usize, b: usize) {
-        let ab = 1usize << (self.n - 1 - a);
-        let bb = 1usize << (self.n - 1 - b);
+    fn apply_swap(&mut self, first_qubit: usize, second_qubit: usize) {
+        let first_bit = 1usize << (self.qubit_count - 1 - first_qubit);
+        let second_bit = 1usize << (self.qubit_count - 1 - second_qubit);
         let mut out = self.amp.clone();
-        for base in 0..(1 << self.n) {
-            let bit_a = usize::from(base & ab != 0);
-            let bit_b = usize::from(base & bb != 0);
-            let mut src = base & !ab & !bb;
-            if bit_b != 0 {
-                src |= ab;
+        for base in 0..(1 << self.qubit_count) {
+            let bit_first = usize::from(base & first_bit != 0);
+            let bit_second = usize::from(base & second_bit != 0);
+            let mut src = base & !first_bit & !second_bit;
+            if bit_second != 0 {
+                src |= first_bit;
             }
-            if bit_a != 0 {
-                src |= bb;
+            if bit_first != 0 {
+                src |= second_bit;
             }
             out[base] = self.amp[src];
         }
         self.amp = out;
     }
-    fn apply_pauli(&mut self, x: &[bool], z: &[bool], phase: i64) {
+    fn apply_pauli(&mut self, x_bits: &[bool], z_bits: &[bool], phase: i64) {
         let mut out = vec![C::ZERO; self.amp.len()];
-        let xmask: usize = (0..self.n).filter(|&q| x[q]).map(|q| 1usize << (self.n - 1 - q)).sum();
-        for base in 0..(1 << self.n) {
-            let target = base ^ xmask;
+        let x_mask: usize = (0..self.qubit_count)
+            .filter(|&qubit| x_bits[qubit])
+            .map(|qubit| 1usize << (self.qubit_count - 1 - qubit))
+            .sum();
+        for base in 0..(1 << self.qubit_count) {
+            let target = base ^ x_mask;
             let mut sign_parity = 0i64;
-            for q in 0..self.n {
-                if z[q] && (base >> (self.n - 1 - q)) & 1 == 1 {
+            for qubit in 0..self.qubit_count {
+                if z_bits[qubit] && (base >> (self.qubit_count - 1 - qubit)) & 1 == 1 {
                     sign_parity ^= 1;
                 }
             }
@@ -115,13 +118,13 @@ impl Dense {
         }
         self.amp = out;
     }
-    fn apply_pauli_exp(&mut self, x: &[bool], z: &[bool], phase: i64) {
-        let mut p_applied = self.amp.clone();
-        let saved = std::mem::replace(&mut self.amp, p_applied.clone());
-        self.apply_pauli(x, z, phase);
-        p_applied = std::mem::replace(&mut self.amp, saved);
+    fn apply_pauli_exp(&mut self, x_bits: &[bool], z_bits: &[bool], phase: i64) {
+        let mut pauli_applied = self.amp.clone();
+        let saved = std::mem::replace(&mut self.amp, pauli_applied.clone());
+        self.apply_pauli(x_bits, z_bits, phase);
+        pauli_applied = std::mem::replace(&mut self.amp, saved);
         for base in 0..self.amp.len() {
-            self.amp[base] = self.amp[base].add(p_applied[base].mul(C::new(0.0, 1.0))).scale(ROOT_HALF);
+            self.amp[base] = self.amp[base].add(pauli_applied[base].mul(C::new(0.0, 1.0))).scale(ROOT_HALF);
         }
     }
 }
@@ -158,15 +161,15 @@ fn rt_y_inv() -> [[C; 2]; 2] {
 }
 
 fn statevector(phased: &PhasedCliffordUnitary) -> Vec<C> {
-    let n = phased.num_qubits();
+    let qubit_count = phased.num_qubits();
     let rank = stabilizer_rank(phased);
     let mag = (0.5f64).powf(rank as f64 / 2.0);
-    let mut out = vec![C::ZERO; 1 << n];
-    for idx in 0..(1usize << n) {
+    let mut out = vec![C::ZERO; 1 << qubit_count];
+    for idx in 0..(1usize << qubit_count) {
         let mut value = 0usize;
-        for q in 0..n {
-            if (idx >> (n - 1 - q)) & 1 == 1 {
-                value |= 1usize << q;
+        for qubit in 0..qubit_count {
+            if (idx >> (qubit_count - 1 - qubit)) & 1 == 1 {
+                value |= 1usize << qubit;
             }
         }
         if let Some(exp) = phased.state_amplitude_phase_exponent_usize(value) {
@@ -181,9 +184,9 @@ fn stabilizer_rank(phased: &PhasedCliffordUnitary) -> usize {
     use binar::{BitMatrix, Bitwise, BitwiseMut};
     use paulimer::clifford::Clifford;
     use paulimer::pauli::Pauli;
-    let n = phased.num_qubits();
-    let mut matrix = AlignedBitMatrix::zeros(n, n);
-    for generator in 0..n {
+    let qubit_count = phased.num_qubits();
+    let mut matrix = AlignedBitMatrix::zeros(qubit_count, qubit_count);
+    for generator in 0..qubit_count {
         let image: DensePauli = phased.clifford().image_z(generator);
         for qubit in image.x_bits().support() {
             matrix.row_mut(generator).assign_index(qubit, true);
@@ -192,8 +195,12 @@ fn stabilizer_rank(phased: &PhasedCliffordUnitary) -> usize {
     BitMatrix::from_aligned(matrix).rank()
 }
 
-fn close(a: &[C], b: &[C]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.add(y.scale(-1.0)).abs2() < 1e-6)
+fn close(left: &[C], right: &[C]) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left_value, right_value)| left_value.add(right_value.scale(-1.0)).abs2() < 1e-6)
 }
 
 #[test]
@@ -201,135 +208,139 @@ fn phased_clifford_tracks_dense_statevector() {
     use rand::RngExt;
     let mut rng = rand::rng();
     for _trial in 0..400 {
-        let n = 4usize;
-        let mut dense = Dense::zero(n);
-        let mut phased = PhasedCliffordUnitary::identity(n);
+        let qubit_count = 4usize;
+        let mut dense = Dense::zero(qubit_count);
+        let mut phased = PhasedCliffordUnitary::identity(qubit_count);
         let mut log: Vec<String> = Vec::new();
         for _gate in 0..40 {
             let pick = rng.random_range(0..16);
             match pick {
                 0 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("H {q}"));
-                    dense.apply1(q, h_mat());
-                    phased.left_mul_hadamard(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("H {qubit}"));
+                    dense.apply1(qubit, h_mat());
+                    phased.left_mul_hadamard(qubit);
                 }
                 1 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("X {q}"));
-                    dense.apply1(q, x_mat());
-                    phased.left_mul_x(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("X {qubit}"));
+                    dense.apply1(qubit, x_mat());
+                    phased.left_mul_x(qubit);
                 }
                 2 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("Y {q}"));
-                    dense.apply1(q, y_mat());
-                    phased.left_mul_y(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("Y {qubit}"));
+                    dense.apply1(qubit, y_mat());
+                    phased.left_mul_y(qubit);
                 }
                 3 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("Z {q}"));
-                    dense.apply1(q, z_mat());
-                    phased.left_mul_z(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("Z {qubit}"));
+                    dense.apply1(qubit, z_mat());
+                    phased.left_mul_z(qubit);
                 }
                 4 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("S {q}"));
-                    dense.apply1(q, s_mat());
-                    phased.left_mul_root_z(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("S {qubit}"));
+                    dense.apply1(qubit, s_mat());
+                    phased.left_mul_root_z(qubit);
                 }
                 5 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("Sdg {q}"));
-                    dense.apply1(q, sdg_mat());
-                    phased.left_mul_root_z_inverse(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("Sdg {qubit}"));
+                    dense.apply1(qubit, sdg_mat());
+                    phased.left_mul_root_z_inverse(qubit);
                 }
                 6 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("RX {q}"));
-                    dense.apply1(q, rt_x());
-                    phased.left_mul_root_x(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("RX {qubit}"));
+                    dense.apply1(qubit, rt_x());
+                    phased.left_mul_root_x(qubit);
                 }
                 7 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("RXi {q}"));
-                    dense.apply1(q, rt_x_inv());
-                    phased.left_mul_root_x_inverse(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("RXi {qubit}"));
+                    dense.apply1(qubit, rt_x_inv());
+                    phased.left_mul_root_x_inverse(qubit);
                 }
                 8 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("RY {q}"));
-                    dense.apply1(q, rt_y());
-                    phased.left_mul_root_y(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("RY {qubit}"));
+                    dense.apply1(qubit, rt_y());
+                    phased.left_mul_root_y(qubit);
                 }
                 9 => {
-                    let q = rng.random_range(0..n);
-                    log.push(format!("RYi {q}"));
-                    dense.apply1(q, rt_y_inv());
-                    phased.left_mul_root_y_inverse(q);
+                    let qubit = rng.random_range(0..qubit_count);
+                    log.push(format!("RYi {qubit}"));
+                    dense.apply1(qubit, rt_y_inv());
+                    phased.left_mul_root_y_inverse(qubit);
                 }
                 10 => {
-                    let (a, b) = two_distinct(&mut rng, n);
-                    log.push(format!("CX {a} {b}"));
-                    dense.apply_cx(a, b);
-                    phased.left_mul_cx(a, b);
+                    let (first_qubit, second_qubit) = two_distinct(&mut rng, qubit_count);
+                    log.push(format!("CX {first_qubit} {second_qubit}"));
+                    dense.apply_cx(first_qubit, second_qubit);
+                    phased.left_mul_cx(first_qubit, second_qubit);
                 }
                 11 => {
-                    let (a, b) = two_distinct(&mut rng, n);
-                    log.push(format!("CZ {a} {b}"));
-                    dense.apply_cz(a, b);
-                    phased.left_mul_cz(a, b);
+                    let (first_qubit, second_qubit) = two_distinct(&mut rng, qubit_count);
+                    log.push(format!("CZ {first_qubit} {second_qubit}"));
+                    dense.apply_cz(first_qubit, second_qubit);
+                    phased.left_mul_cz(first_qubit, second_qubit);
                 }
                 12 => {
-                    let (a, b) = two_distinct(&mut rng, n);
-                    log.push(format!("SWAP {a} {b}"));
-                    dense.apply_swap(a, b);
-                    phased.left_mul_swap(a, b);
+                    let (first_qubit, second_qubit) = two_distinct(&mut rng, qubit_count);
+                    log.push(format!("SWAP {first_qubit} {second_qubit}"));
+                    dense.apply_swap(first_qubit, second_qubit);
+                    phased.left_mul_swap(first_qubit, second_qubit);
                 }
                 13 => {
-                    let p = random_pauli_string(&mut rng, n);
-                    log.push(format!("P {p}"));
-                    let dp: DensePauli = p.parse().unwrap();
-                    let (x, z, phase) = pauli_arrays(&dp, n);
-                    dense.apply_pauli(&x, &z, phase);
-                    phased.left_mul_pauli(&dp);
+                    let pauli_string = random_pauli_string(&mut rng, qubit_count);
+                    log.push(format!("P {pauli_string}"));
+                    let pauli: DensePauli = pauli_string.parse().unwrap();
+                    let (x_bits, z_bits, phase) = pauli_arrays(&pauli, qubit_count);
+                    dense.apply_pauli(&x_bits, &z_bits, phase);
+                    phased.left_mul_pauli(&pauli);
                 }
                 14 => {
-                    let p = random_hermitian_pauli_string(&mut rng, n);
-                    log.push(format!("PEXP {p}"));
-                    let dp: DensePauli = p.parse().unwrap();
-                    let (x, z, phase) = pauli_arrays(&dp, n);
-                    dense.apply_pauli_exp(&x, &z, phase);
-                    phased.left_mul_pauli_exp(&dp);
+                    let pauli_string = random_hermitian_pauli_string(&mut rng, qubit_count);
+                    log.push(format!("PEXP {pauli_string}"));
+                    let pauli: DensePauli = pauli_string.parse().unwrap();
+                    let (x_bits, z_bits, phase) = pauli_arrays(&pauli, qubit_count);
+                    dense.apply_pauli_exp(&x_bits, &z_bits, phase);
+                    phased.left_mul_pauli_exp(&pauli);
                 }
                 _ => {
-                    let (a, b) = two_distinct(&mut rng, n);
-                    log.push(format!("BELL {a} {b}"));
-                    dense.apply1(a, h_mat());
-                    dense.apply_cx(a, b);
-                    phased.left_mul_prepare_bell(a, b);
+                    let (first_qubit, second_qubit) = two_distinct(&mut rng, qubit_count);
+                    log.push(format!("BELL {first_qubit} {second_qubit}"));
+                    dense.apply1(first_qubit, h_mat());
+                    dense.apply_cx(first_qubit, second_qubit);
+                    phased.left_mul_prepare_bell(first_qubit, second_qubit);
                 }
             }
         }
-        let sv = statevector(&phased);
-        assert!(close(&sv, &dense.amp), "mismatch log={log:?}\n tracker={sv:?}\n dense={:?}", dense.amp);
+        let tracked_statevector = statevector(&phased);
+        assert!(
+            close(&tracked_statevector, &dense.amp),
+            "mismatch log={log:?}\n tracker={tracked_statevector:?}\n dense={:?}",
+            dense.amp
+        );
     }
 }
 
-fn two_distinct(rng: &mut impl rand::RngExt, n: usize) -> (usize, usize) {
-    let a = rng.random_range(0..n);
-    let mut b = rng.random_range(0..n);
-    while b == a {
-        b = rng.random_range(0..n);
+fn two_distinct(rng: &mut impl rand::RngExt, qubit_count: usize) -> (usize, usize) {
+    let first = rng.random_range(0..qubit_count);
+    let mut second = rng.random_range(0..qubit_count);
+    while second == first {
+        second = rng.random_range(0..qubit_count);
     }
-    (a, b)
+    (first, second)
 }
 
-fn random_pauli_string(rng: &mut impl rand::RngExt, n: usize) -> String {
+fn random_pauli_string(rng: &mut impl rand::RngExt, qubit_count: usize) -> String {
     loop {
         let mut letters = String::new();
         let mut any = false;
-        for _ in 0..n {
+        for _ in 0..qubit_count {
             match rng.random_range(0..4) {
                 0 => letters.push('I'),
                 1 => {
@@ -360,8 +371,8 @@ fn random_pauli_string(rng: &mut impl rand::RngExt, n: usize) -> String {
     }
 }
 
-fn random_hermitian_pauli_string(rng: &mut impl rand::RngExt, n: usize) -> String {
-    let inner = random_pauli_string(rng, n);
+fn random_hermitian_pauli_string(rng: &mut impl rand::RngExt, qubit_count: usize) -> String {
+    let inner = random_pauli_string(rng, qubit_count);
     let body = inner.trim_start_matches(['-', 'i']);
     if rng.random_range(0..2) == 0 {
         format!("-{body}")
@@ -370,17 +381,17 @@ fn random_hermitian_pauli_string(rng: &mut impl rand::RngExt, n: usize) -> Strin
     }
 }
 
-fn pauli_arrays(pauli: &DensePauli, n: usize) -> (Vec<bool>, Vec<bool>, i64) {
+fn pauli_arrays(pauli: &DensePauli, qubit_count: usize) -> (Vec<bool>, Vec<bool>, i64) {
     use binar::Bitwise;
     use paulimer::pauli::Pauli;
-    let mut x = vec![false; n];
-    let mut z = vec![false; n];
-    for q in pauli.x_bits().support() {
-        x[q] = true;
+    let mut x_bits = vec![false; qubit_count];
+    let mut z_bits = vec![false; qubit_count];
+    for qubit in pauli.x_bits().support() {
+        x_bits[qubit] = true;
     }
-    for q in pauli.z_bits().support() {
-        z[q] = true;
+    for qubit in pauli.z_bits().support() {
+        z_bits[qubit] = true;
     }
-    (x, z, i64::from(pauli.xz_phase_exponent()))
+    (x_bits, z_bits, i64::from(pauli.xz_phase_exponent()))
 }
 
