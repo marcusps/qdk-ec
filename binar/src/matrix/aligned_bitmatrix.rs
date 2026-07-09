@@ -811,9 +811,9 @@ impl AlignedBitMatrix {
     ///
     /// Will panic if matrix is not invertible
     pub fn inverted(&self) -> AlignedBitMatrix {
-        assert!(self.column_count() == self.row_count());
+        assert_eq!(self.column_count(), self.row_count());
         let echelon_form = EchelonForm::new(self.clone());
-        assert!(echelon_form.pivots.len() == self.row_count());
+        assert_eq!(echelon_form.pivots.len(), self.row_count());
         debug_assert_eq!(
             self * &echelon_form.transform,
             AlignedBitMatrix::identity(self.row_count())
