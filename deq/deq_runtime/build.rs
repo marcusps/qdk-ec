@@ -122,14 +122,13 @@ fn find_boost(out_dir: &std::path::Path) -> std::path::PathBuf {
     if let Ok(output) = std::process::Command::new("pkg-config")
         .args(["--variable=includedir", "boost"])
         .output()
+        && output.status.success()
     {
-        if output.status.success() {
-            let s = String::from_utf8_lossy(&output.stdout);
-            let p = PathBuf::from(s.trim());
-            if p.join("boost").join("dynamic_bitset.hpp").exists() {
-                eprintln!("cargo:warning=Using Boost from pkg-config: {}", p.display());
-                return p;
-            }
+        let s = String::from_utf8_lossy(&output.stdout);
+        let p = PathBuf::from(s.trim());
+        if p.join("boost").join("dynamic_bitset.hpp").exists() {
+            eprintln!("cargo:warning=Using Boost from pkg-config: {}", p.display());
+            return p;
         }
     }
 
