@@ -8,7 +8,7 @@ parameters:
 
 steps:
   - script: |
-      sudo tdnf install binutils glibc-devel kernel-headers patchelf gcc python3-3.12.9 python3-pip-24.2 python3-devel-3.12.9 -y
+      sudo tdnf install binutils glibc-devel kernel-headers patchelf gcc python3-3.12.9 python3-pip-24.2 python3-devel-3.12.9 boost-devel -y
     displayName: Install build tools and Python on Linux aarch64
     condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'), eq(variables['arch'], 'aarch64'))
 
@@ -60,6 +60,17 @@ steps:
         fi
       fi
       cmake --version
+
+      # Boost: header-only library required by the Tesseract decoder C++ bridge.
+      if ! test -f /usr/include/boost/dynamic_bitset.hpp && ! test -f /usr/local/include/boost/dynamic_bitset.hpp; then
+        if command -v apt-get >/dev/null 2>&1; then
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libboost-dev
+        elif command -v tdnf >/dev/null 2>&1; then
+          sudo tdnf install -y boost-devel
+        elif command -v brew >/dev/null 2>&1; then
+          brew install boost
+        fi
+      fi
 
       # protoc: download directly from the protobuf GitHub release so we
       # get a known version that bundles the well-known proto sources
@@ -127,6 +138,34 @@ steps:
         }
       }
       cmake --version
+
+      # Boost: header-only library required by the Tesseract decoder C++ bridge.
+      # Check well-known pre-installed locations first (some agents ship Boost);
+      # fall back to downloading from the GitHub release (accessible on 1ES agents).
+      $boostRoot = $null
+      foreach ($candidate in @($env:BOOST_ROOT, "C:\local\boost", "C:\Boost", "C:\tools\boost")) {
+        if ($candidate -and (Test-Path (Join-Path $candidate "boost\dynamic_bitset.hpp"))) {
+          $boostRoot = $candidate
+          break
+        }
+      }
+      if (-not $boostRoot) {
+        $boostVersion = "1.83.0"
+        $boostUrl = "https://github.com/boostorg/boost/releases/download/boost-$boostVersion/boost-$boostVersion.zip"
+        $boostZip = Join-Path $tempDir "boost.zip"
+        $boostExtract = Join-Path $tempDir "boost_extract"
+        Write-Host "Downloading Boost $boostVersion from $boostUrl"
+        Invoke-WebRequest -Uri $boostUrl -OutFile $boostZip
+        Write-Host "Extracting Boost headers..."
+        Expand-Archive -Path $boostZip -DestinationPath $boostExtract -Force
+        $boostRoot = Get-ChildItem -Path $boostExtract -Directory |
+          Where-Object { Test-Path (Join-Path $_.FullName "boost\dynamic_bitset.hpp") } |
+          Select-Object -First 1 -ExpandProperty FullName
+        if (-not $boostRoot) { throw "Boost extraction failed: boost/dynamic_bitset.hpp not found" }
+      }
+      Write-Host "##vso[task.setvariable variable=DEQ_BOOST_ROOT]$boostRoot"
+      $env:DEQ_BOOST_ROOT = $boostRoot
+      Write-Host "Boost configured at: $boostRoot"
 
       # protoc: download directly from the protobuf GitHub release.
       # The win64.zip is x86_64; Windows ARM64 runs it transparently

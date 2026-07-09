@@ -28,6 +28,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    let mut include_dirs = vec![PROTO_DIR.to_string()];
+    // When using a system-installed protoc that does not embed well-known
+    // proto types (e.g. Ubuntu's `protobuf-compiler`), we need to pass the
+    // system include directory so that imports like
+    // `google/protobuf/empty.proto` can be resolved.  The release binary
+    // downloaded by CI embeds these, so no extra path is needed there.
+    // Skip this probe if the caller already set PROTOC_INCLUDE, which
+    // prost-build will forward to protoc on its own.
+    if std::env::var_os("PROTOC_INCLUDE").is_none() {
+        for candidate in ["/usr/include", "/usr/local/include"] {
+            if Path::new(candidate)
+                .join("google/protobuf/empty.proto")
+                .exists()
+            {
+                include_dirs.push(candidate.to_string());
+                break;
+            }
+        }
+    }
+
     tonic_prost_build::configure()
         .build_server(true)
         .client_mod_attribute(".", "#[cfg(feature = \"cli\")]")
@@ -39,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "deq.coordinator.window_coordinator.Event.event",
             "#[allow(clippy::large_enum_variant)]",
         )
-        .compile_protos(&proto_files, &[PROTO_DIR.to_string()])?;
+        .compile_protos(&proto_files, &include_dirs)?;
 
     Ok(())
 }
@@ -59,7 +79,7 @@ fn build_tesseract_bridge() {
     println!("cargo::rerun-if-changed=cpp/tesseract/tesseract_bridge.cc");
     println!("cargo::rerun-if-changed=src/decoder/tesseract_ffi.rs");
 
-    let boost_dir = download_boost(&out_dir);
+    let boost_dir = find_boost(&out_dir);
 
     let mut build = cxx_build::bridge("src/decoder/tesseract_ffi.rs");
     build
@@ -74,6 +94,54 @@ fn build_tesseract_bridge() {
     }
 
     build.compile("tesseract-bridge");
+}
+
+// ── Boost include path resolution ───────────────────────────────────
+//
+// Preference order:
+//   1. DEQ_BOOST_ROOT env var (explicit override, e.g. from CI or developer)
+//   2. BOOST_ROOT env var (set automatically on GitHub-hosted Windows runners)
+//   3. pkg-config (Linux/macOS with libboost-dev / Homebrew boost)
+//   4. Well-known system include directories
+//   5. Fall back to downloading the headers at build time
+
+#[cfg(feature = "tesseract")]
+fn find_boost(out_dir: &std::path::Path) -> std::path::PathBuf {
+    use std::path::PathBuf;
+
+    for var in ["DEQ_BOOST_ROOT", "BOOST_ROOT"] {
+        if let Ok(val) = std::env::var(var) {
+            let p = PathBuf::from(&val);
+            if p.join("boost").join("dynamic_bitset.hpp").exists() {
+                eprintln!("cargo:warning=Using Boost from ${var}: {}", p.display());
+                return p;
+            }
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("pkg-config")
+        .args(["--variable=includedir", "boost"])
+        .output()
+    {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout);
+            let p = PathBuf::from(s.trim());
+            if p.join("boost").join("dynamic_bitset.hpp").exists() {
+                eprintln!("cargo:warning=Using Boost from pkg-config: {}", p.display());
+                return p;
+            }
+        }
+    }
+
+    for candidate in ["/usr/include", "/usr/local/include", "/opt/homebrew/include"] {
+        let p = PathBuf::from(candidate);
+        if p.join("boost").join("dynamic_bitset.hpp").exists() {
+            eprintln!("cargo:warning=Using Boost from system path: {}", p.display());
+            return p;
+        }
+    }
+
+    download_boost(out_dir)
 }
 
 // ── Boost download (header-only, for dynamic_bitset) ────────────────
