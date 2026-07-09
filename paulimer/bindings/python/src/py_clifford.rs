@@ -230,6 +230,18 @@ impl PyCliffordUnitary {
         }
     }
 
+    #[staticmethod]
+    fn from_symplectic_matrix(matrix: &binar::BitMatrix) -> PyResult<Self> {
+        CliffordUnitary::from_symplectic_matrix(matrix)
+            .map(Into::into)
+            .ok_or_else(|| {
+                PyValueError::new_err(
+                    "Invalid symplectic matrix: dimensions must be 2n×2n for some n ≥ 1, \
+                     and the matrix must represent a valid symplectic transformation over GF(2).",
+                )
+            })
+    }
+
     fn __mul__(&self, other: &Self) -> Self {
         Self {
             inner: self.inner.multiply_with(&other.inner),

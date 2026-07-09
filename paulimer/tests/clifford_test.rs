@@ -501,6 +501,43 @@ proptest! {
         css_clifford_and_bitmatrix_identity_test(dimension, seed);
     }
 
+    #[test]
+    fn from_symplectic_matrix_roundtrip(clifford in arbitrary_clifford(1..8)) {
+        let symp = clifford.symplectic_matrix();
+        let reconstructed = CliffordUnitary::from_symplectic_matrix(&symp.into())
+            .expect("from_symplectic_matrix must succeed on a valid symplectic matrix");
+        prop_assert!(reconstructed.is_valid());
+        prop_assert_eq!(clifford.symplectic_matrix(), reconstructed.symplectic_matrix());
+    }
+
+    #[test]
+    fn from_symplectic_matrix_preimage_bits(clifford in arbitrary_clifford(1..8)) {
+        let symp = clifford.symplectic_matrix();
+        let reconstructed = CliffordUnitary::from_symplectic_matrix(&symp.into())
+            .expect("from_symplectic_matrix must succeed on a valid symplectic matrix");
+        for qubit in clifford.qubits() {
+            let orig_px = clifford.preimage_x(qubit);
+            let rec_px = reconstructed.preimage_x(qubit);
+            let orig_pz = clifford.preimage_z(qubit);
+            let rec_pz = reconstructed.preimage_z(qubit);
+            prop_assert_eq!(orig_px.x_bits(), rec_px.x_bits());
+            prop_assert_eq!(orig_px.z_bits(), rec_px.z_bits());
+            prop_assert_eq!(orig_pz.x_bits(), rec_pz.x_bits());
+            prop_assert_eq!(orig_pz.z_bits(), rec_pz.z_bits());
+        }
+    }
+
+    #[test]
+    fn from_symplectic_matrix_rejects_non_square(
+        rows in 1usize..8usize,
+        cols in 1usize..8usize,
+    ) {
+        if rows != cols || rows % 2 != 0 {
+            let matrix = binar::BitMatrix::zeros(rows, cols);
+            prop_assert!(CliffordUnitary::from_symplectic_matrix(&matrix).is_none());
+        }
+    }
+
 }
 
 prop_compose! {
