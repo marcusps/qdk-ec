@@ -15,7 +15,7 @@ SparsePhase = complex
 # On 32-bit targets (e.g. Pyodide/Emscripten wasm32) qubit indices are limited
 # to the platform pointer size, so cap the generated indices accordingly. On
 # 64-bit platforms the full range is used, leaving native behaviour unchanged.
-MAX_QUBIT_INDEX = 2**64 - 1 if sys.maxsize > 2**32 else 2**16 - 1
+MAX_QUBIT_INDEX = sys.maxsize
 
 def sparse_phases() -> strategies.SearchStrategy[SparsePhase]:
     return strategies.sampled_from([1,-1,1.j, -1.j])
