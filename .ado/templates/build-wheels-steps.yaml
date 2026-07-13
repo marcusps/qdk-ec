@@ -12,13 +12,31 @@ steps:
   displayName: Install Rust toolchain
 
 - bash: |
-    python -m pip install --upgrade maturin
+    maturin_args=()
+    case "$(uname -s)" in
+      Linux)
+        # Linux agents run on a glibc 2.35 baseline, so a native build
+        # already yields glibc-2.35-compatible wheels; tag them manylinux_2_35.
+        python -m pip install --upgrade maturin
+        maturin_args=(--manylinux manylinux_2_35)
+        ;;
+      Darwin)
+        python -m pip install --upgrade maturin
+        ;;
+      *)
+        echo "Unsupported Unix platform: $(uname -s)" >&2
+        exit 1
+        ;;
+    esac
     mkdir -p target/wheels
     cd binar/bindings/python
-    maturin build --release --out ../../../target/wheels
+    maturin build --release "${maturin_args[@]}" --out ../../../target/wheels
     cd ../../..
     cd paulimer/bindings/python
-    maturin build --release --out ../../../target/wheels
+    maturin build --release "${maturin_args[@]}" --out ../../../target/wheels
+    if [ "$(uname -s)" = "Linux" ]; then
+      ls ../../../target/wheels/*manylinux_2_35*.whl
+    fi
   displayName: Build Python wheels (Linux/Mac)
   condition: ne( variables['Agent.OS'], 'Windows_NT')
 
