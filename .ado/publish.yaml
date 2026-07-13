@@ -75,12 +75,12 @@ parameters:
     default:
       - name: linux_x86_64
         poolName: "Azure-Pipelines-DevTools-EO"
-        imageName: "ubuntu-latest"
+        imageName: "ubuntu-22.04"
         os: linux
         arch: x86_64
       - name: linux_aarch64
         poolName: "Azure-Pipelines-DevTools-ARM64-EO"
-        imageName: "azurelinux-3.0-arm64"
+        imageName: "ubuntu-22.04-arm64"
         os: linux
         arch: aarch64
       - name: mac_x86_64
