@@ -356,7 +356,7 @@ def test_to_pauli_exponents_roundtrip_named_gates():
         assert rebuilt == clifford
 
 
-
+def test_left_mul_controlled_pauli_with_dense_paulis():
     clifford = CliffordUnitary.identity(2)
     control = DensePauli("ZI")
     target = DensePauli("IX")
