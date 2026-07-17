@@ -16,7 +16,7 @@ use crate::{CliffordUnitary, Pauli, PauliMutable, SparsePauli};
 /// Because [`PhasedCliffordUnitary::left_mul_pauli_exp`](crate::clifford::PhasedCliffordUnitary::left_mul_pauli_exp)
 /// applies the same factors with exact `ζ₈` phase tracking, replaying the returned list on a phased
 /// operator yields a *well-defined* global phase. This is the building block used to recover the
-/// global phase in the auxiliary-qubit separation of §4.5 of
+/// global phase in the auxiliary-qubit separation of §4.3 of
 /// [arXiv:2603.24717](https://arxiv.org/abs/2603.24717): decompose each Clifford factor and replay it
 /// on a [`PhasedCliffordUnitary`](crate::clifford::PhasedCliffordUnitary).
 ///
