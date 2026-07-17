@@ -424,9 +424,10 @@ impl CircuitAction {
 /// `φ(r) = i^⟨p, r⟩ (-1)^⟨B r + s, r⟩`, capturing exactly that information.
 ///
 /// The comparison is *up to a single global phase* common to all branches: the encoder's absolute
-/// phase is not exposed, so two Choi states that differ only by an overall scalar are reported as
-/// equivalent. Pinning down that absolute phase as well requires the auxiliary-qubit separation of
-/// §4.5 of [arXiv:2603.24717](https://arxiv.org/abs/2603.24717), a planned follow-up.
+/// phase is ignored by [`Self::is_equivalent`], so two Choi states that differ only by an overall
+/// scalar are reported as equivalent. Use [`Self::is_equivalent_with_global_phase`] to include the
+/// absolute phase recovered by the §4.3 auxiliary-qubit separation of
+/// [arXiv:2603.24717](https://arxiv.org/abs/2603.24717), or inspect it with [`Self::global_phase`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct PhasedCircuitAction {
     action: CircuitAction,
