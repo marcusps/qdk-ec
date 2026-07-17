@@ -65,6 +65,11 @@ use crate::{anti_commutes_with, Pauli, PauliBinaryOps, PauliMutable, SparsePauli
 /// Every factor is returned with phase exponent `0`; the sign of a transvection does not affect its
 /// symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
 ///
+/// The exact congruence search has exponential worst-case running time and memoization space in the
+/// residue rank. Candidates are generated lazily rather than materializing the full residue-space
+/// span up front. For large Cliffords where strict minimality is unnecessary, prefer
+/// [`clifford_to_transvections`].
+///
 /// # Examples
 ///
 /// ```
@@ -475,22 +480,48 @@ fn triangularize_subspace(
     None
 }
 
-/// All `2ᵈ − 1` nonzero vectors in the span of a `d`-vector `basis`.
-fn span_vectors(basis: &[Vec<bool>]) -> Vec<Vec<bool>> {
-    let dimension = basis.first().map_or(0, Vec::len);
-    (1u64..(1u64 << basis.len()))
-        .map(|mask| {
-            let mut vector = vec![false; dimension];
-            for (index, member) in basis.iter().enumerate() {
-                if mask & (1 << index) != 0 {
-                    for (slot, &bit) in vector.iter_mut().zip(member) {
-                        *slot ^= bit;
-                    }
-                }
+/// Lazily generates all `2ᵈ − 1` nonzero vectors in the span of a `d`-vector basis.
+struct SpanVectors<'a> {
+    basis: &'a [Vec<bool>],
+    coefficients: Vec<bool>,
+    current: Vec<bool>,
+    exhausted: bool,
+}
+
+impl<'a> SpanVectors<'a> {
+    fn new(basis: &'a [Vec<bool>]) -> Self {
+        Self {
+            basis,
+            coefficients: vec![false; basis.len()],
+            current: vec![false; basis.first().map_or(0, Vec::len)],
+            exhausted: basis.is_empty(),
+        }
+    }
+}
+
+impl Iterator for SpanVectors<'_> {
+    type Item = Vec<bool>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.exhausted {
+            return None;
+        }
+        for (index, member) in self.basis.iter().enumerate() {
+            self.coefficients[index] ^= true;
+            for (slot, &bit) in self.current.iter_mut().zip(member) {
+                *slot ^= bit;
             }
-            vector
-        })
-        .collect()
+            if self.coefficients[index] {
+                return Some(self.current.clone());
+            }
+        }
+        self.exhausted = true;
+        None
+    }
+}
+
+fn span_vectors(basis: &[Vec<bool>]) -> SpanVectors<'_> {
+    SpanVectors::new(basis)
 }
 
 /// A basis of `{y ∈ span(basis) : pick·core·yᵀ = 0}`, one dimension smaller than `basis`, or `None`
@@ -578,9 +609,8 @@ fn minimal_decomposition(action: &AlignedBitMatrix, qubit_count: usize) -> Vec<V
 /// in `Res(F)` (the map is a product of `rank + 1` transvections, and dropping the last factor
 /// leaves a product of `rank` transvections whose residue core is triangularizable).
 ///
-/// Candidates are the nonzero residue vectors, tried in ascending index order so that single basis
-/// vectors — which resolve essentially every case — come first; the search is exhaustive over
-/// `Res(F)` and therefore always succeeds.
+/// Candidates are the nonzero residue vectors in ascending binary-coordinate order. The search is
+/// exhaustive over `Res(F)` and therefore always succeeds.
 fn find_fix_vector(
     action: &AlignedBitMatrix,
     qubit_count: usize,
@@ -607,8 +637,10 @@ fn find_fix_vector(
         let (_, updated_rank, updated_core) = residue_core(&updated, qubit_count);
         updated_rank == rank && congruence_triangularize(&updated_core).is_ok()
     };
-    for mask in 1..(1u64 << rank) {
-        let coordinates: Vec<bool> = (0..rank).map(|bit| mask & (1 << bit) != 0).collect();
+    let coordinate_basis: Vec<Vec<bool>> = (0..rank)
+        .map(|selected| (0..rank).map(|index| index == selected).collect())
+        .collect();
+    for coordinates in span_vectors(&coordinate_basis) {
         let vector = lift(&coordinates);
         if candidate_accepts(&vector) {
             return vector;
@@ -626,3 +658,22 @@ fn vector_to_pauli(vector: &[bool], qubit_count: usize) -> SparsePauli {
     SparsePauli::from_bits(x_bits, z_bits, 0)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::span_vectors;
+
+    #[test]
+    fn span_vectors_supports_more_than_u64_bits_lazily() {
+        let dimension = 65;
+        let basis: Vec<Vec<bool>> = (0..dimension)
+            .map(|row| (0..dimension).map(|column| row == column).collect())
+            .collect();
+        let vectors: Vec<Vec<bool>> = span_vectors(&basis).take(4).collect();
+
+        assert_eq!(vectors.len(), 4);
+        assert_eq!(vectors[0].iter().filter(|&&bit| bit).count(), 1);
+        assert_eq!(vectors[1].iter().filter(|&&bit| bit).count(), 1);
+        assert_eq!(vectors[2].iter().filter(|&&bit| bit).count(), 2);
+        assert_eq!(vectors[3].iter().filter(|&&bit| bit).count(), 1);
+    }
+}
