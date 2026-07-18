@@ -10,8 +10,8 @@ use binar::matrix::AlignedBitMatrix;
 use binar::vec::AlignedBitVec;
 use binar::{Bitwise, BitwiseMut};
 use paulimer::clifford::{
-    clifford_to_pauli_exponents, random_clifford_via_operations_sampling, separate_auxiliary_qubits,
-    AuxiliarySeparationError, Clifford, PhasedCliffordUnitary,
+    AuxiliarySeparationError, Clifford, PhasedCliffordUnitary, clifford_to_pauli_exponents,
+    random_clifford_via_operations_sampling, separate_auxiliary_qubits,
 };
 use paulimer::operations::{css_operations, diagonal_operations};
 use paulimer::{CliffordMutable, CliffordUnitary, DensePauli};
@@ -96,20 +96,21 @@ fn check_separation(co_clifford: &CliffordUnitary, k1: usize) {
     let output: Vec<usize> = (0..k1).collect();
     let encoder = phased_from_clifford(co_clifford);
 
-    let separation =
-        separate_auxiliary_qubits(&encoder, &output).expect("disentangled auxiliary qubits separate");
-    let blocks =
-        phased_from_clifford(&separation.output_encoder().tensor(separation.auxiliary_encoder()));
+    let separation = separate_auxiliary_qubits(&encoder, &output).expect("disentangled auxiliary qubits separate");
+    let blocks = phased_from_clifford(&separation.output_encoder().tensor(separation.auxiliary_encoder()));
 
     for value in 0..(1usize << num_qubits) {
         let label = label_bits(value, num_qubits);
         let encoder_state = encoded_basis_state(&encoder, &label);
-        let block_label =
-            block_labels(separation.output_basis_map(), separation.auxiliary_basis_map(), &label);
+        let block_label = block_labels(separation.output_basis_map(), separation.auxiliary_basis_map(), &label);
         let block_state = encoded_basis_state(&blocks, &block_label);
 
         let diffs = phase_diffs(&encoder_state, &block_state);
-        assert_eq!(diffs.len(), 1, "n={num_qubits} k1={k1} r={value}: not a single global phase: {diffs:?}");
+        assert_eq!(
+            diffs.len(),
+            1,
+            "n={num_qubits} k1={k1} r={value}: not a single global phase: {diffs:?}"
+        );
         let expected = i64::from(separation.phase().evaluate(&label)).rem_euclid(8);
         assert_eq!(
             *diffs.iter().next().unwrap(),
@@ -142,8 +143,7 @@ fn general_separable_separation() {
         let c2 = CliffordUnitary::random(k2, &mut rng);
         let diagonal: CliffordUnitary =
             random_clifford_via_operations_sampling(n, n * n, &diagonal_operations(n), &mut rng);
-        let css: CliffordUnitary =
-            random_clifford_via_operations_sampling(n, n * n, &css_operations(n), &mut rng);
+        let css: CliffordUnitary = random_clifford_via_operations_sampling(n, n * n, &css_operations(n), &mut rng);
         let co_clifford = c1.tensor(&c2).multiply_with(&diagonal).multiply_with(&css);
         check_separation(&co_clifford, k1);
     }
@@ -173,4 +173,3 @@ fn invalid_output_qubits_are_rejected() {
         AuxiliarySeparationError::InvalidOutputQubits,
     );
 }
-

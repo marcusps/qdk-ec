@@ -5,7 +5,10 @@ use crate::{
     circuit::{Circuit, SimulationError},
 };
 use binar::{AffineMap, BitMatrix, BitVec, Bitwise, BitwiseMut, IndexSet};
-use paulimer::{CliffordUnitary, Pauli, PauliMutable, SparsePauli, clifford::separate_auxiliary_qubits, clifford::standard_restriction_with_sign_matrix};
+use paulimer::{
+    CliffordUnitary, Pauli, PauliMutable, SparsePauli, clifford::separate_auxiliary_qubits,
+    clifford::standard_restriction_with_sign_matrix,
+};
 
 type QubitId = crate::circuit::QubitId;
 
@@ -469,7 +472,12 @@ pub fn phased_action_of(
         .max(output_qubits.iter().max().map_or(0, |&q| q + 1));
     let reference_qubits: Vec<QubitId> = (qubit_count..qubit_count + input_qubits.len()).collect();
     let global_phase = recover_global_phase(&simulation, &reference_qubits, output_qubits);
-    Ok(PhasedCircuitAction { action, phase, symbolic_angles, global_phase })
+    Ok(PhasedCircuitAction {
+        action,
+        phase,
+        symbolic_angles,
+        global_phase,
+    })
 }
 
 /// Computes a [`PhasedCircuitAction`] directly from a [`PhasedOutcomeCompleteSimulation`] whose Choi
@@ -512,7 +520,12 @@ pub fn phased_action_from_simulation(
     };
     let symbolic_angles = indicator_to_bitvec(simulation.symbolic_angle_indicator());
     let global_phase = recover_global_phase(simulation, &reference_qubits, output_qubits);
-    Ok(PhasedCircuitAction { action, phase, symbolic_angles, global_phase })
+    Ok(PhasedCircuitAction {
+        action,
+        phase,
+        symbolic_angles,
+        global_phase,
+    })
 }
 
 /// Recovers the absolute global `ζ₈` phase of the Choi-state encoder via the §4.3 auxiliary

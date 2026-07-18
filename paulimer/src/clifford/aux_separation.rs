@@ -21,8 +21,8 @@ use binar::vec::AlignedBitVec;
 use binar::{BitMatrix, Bitwise, BitwiseMut};
 
 use super::{
-    clifford_to_pauli_exponents, group_encoding_clifford_of, standard_restriction_with_sign_matrix, Clifford,
-    CliffordUnitary, PhasedCliffordUnitary,
+    Clifford, CliffordUnitary, PhasedCliffordUnitary, clifford_to_pauli_exponents, group_encoding_clifford_of,
+    standard_restriction_with_sign_matrix,
 };
 use crate::DensePauli;
 use crate::pauli::Pauli;
@@ -61,7 +61,11 @@ impl SeparationPhase {
     /// The quadratic coefficient `c_{ij}` (a `ζ₈` exponent) of the pair of input bits `i < j`.
     #[must_use]
     pub fn quadratic_coefficient(&self, first: usize, second: usize) -> u8 {
-        let (low, high) = if first <= second { (first, second) } else { (second, first) };
+        let (low, high) = if first <= second {
+            (first, second)
+        } else {
+            (second, first)
+        };
         self.quadratic[low * self.linear.len() + high]
     }
 
@@ -224,8 +228,7 @@ fn basis_label_map(
     for column in 0..num_qubits {
         let image = clifford.image_x(column);
         let output_preimage = output_encoder.preimage(&restrict_pauli_to(&image, output, num_qubits));
-        let auxiliary_preimage =
-            auxiliary_encoder.preimage(&restrict_pauli_to(&image, auxiliary, num_qubits));
+        let auxiliary_preimage = auxiliary_encoder.preimage(&restrict_pauli_to(&image, auxiliary, num_qubits));
         for bit in output_preimage.x_bits().support() {
             matrix.set((bit, column), true);
         }
@@ -304,8 +307,7 @@ fn interpolate_phase(
     num_qubits: usize,
 ) -> Result<SeparationPhase, AuxiliarySeparationError> {
     let phase_at = |label: &AlignedBitVec| {
-        separation_phase_at(encoder, blocks, basis_map, label)
-            .ok_or(AuxiliarySeparationError::AuxiliaryQubitsEntangled)
+        separation_phase_at(encoder, blocks, basis_map, label).ok_or(AuxiliarySeparationError::AuxiliaryQubitsEntangled)
     };
     let unit = |index: usize| {
         let mut label = AlignedBitVec::zeros(num_qubits);
@@ -316,8 +318,8 @@ fn interpolate_phase(
     let constant = phase_at(&AlignedBitVec::zeros(num_qubits))?;
     let mut linear = vec![0u8; num_qubits];
     for (index, value) in linear.iter_mut().enumerate() {
-        *value = u8::try_from((i64::from(phase_at(&unit(index))?) - i64::from(constant)).rem_euclid(8))
-            .expect("modulo 8");
+        *value =
+            u8::try_from((i64::from(phase_at(&unit(index))?) - i64::from(constant)).rem_euclid(8)).expect("modulo 8");
     }
 
     let mut quadratic = vec![0u8; num_qubits * num_qubits];
@@ -329,12 +331,15 @@ fn interpolate_phase(
                 - i64::from(constant)
                 - i64::from(linear[first])
                 - i64::from(linear[second]);
-            quadratic[first * num_qubits + second] =
-                u8::try_from(value.rem_euclid(8)).expect("modulo 8");
+            quadratic[first * num_qubits + second] = u8::try_from(value.rem_euclid(8)).expect("modulo 8");
         }
     }
 
-    Ok(SeparationPhase { constant, linear, quadratic })
+    Ok(SeparationPhase {
+        constant,
+        linear,
+        quadratic,
+    })
 }
 
 /// Splits the `n × n` basis-label matrix into its leading `output_count` rows (`A₁`) and the

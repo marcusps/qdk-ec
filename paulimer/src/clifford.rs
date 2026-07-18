@@ -303,9 +303,7 @@ mod clifford_impl;
 mod decomposition;
 mod phased_clifford;
 use crate::core::Axis;
-pub use aux_separation::{
-    separate_auxiliary_qubits, AuxiliarySeparation, AuxiliarySeparationError, SeparationPhase,
-};
+pub use aux_separation::{AuxiliarySeparation, AuxiliarySeparationError, SeparationPhase, separate_auxiliary_qubits};
 pub use clifford_impl::{
     ImagesPartitionResult, apply_qubit_clifford_by_axis, group_encoding_clifford_of, prepare_all_plus,
     prepare_all_zero, random_clifford_via_operations_sampling, recover_z_images_phases, split_clifford_encoder,
