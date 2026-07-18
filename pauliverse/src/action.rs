@@ -452,7 +452,7 @@ pub fn phased_action_of(
         linear_sign: simulation.linear_sign_phase(),
         quadratic: simulation.quadratic_phase_matrix(),
     };
-    let symbolic_angles = indicator_to_bitvec(simulation.symbolic_angle_indicator());
+    let symbolic_angles: BitVec = simulation.symbolic_angle_indicator().iter().copied().collect();
     Ok(PhasedCircuitAction {
         action,
         phase,
@@ -498,7 +498,7 @@ pub fn phased_action_from_simulation(
         linear_sign: simulation.linear_sign_phase(),
         quadratic: simulation.quadratic_phase_matrix(),
     };
-    let symbolic_angles = indicator_to_bitvec(simulation.symbolic_angle_indicator());
+    let symbolic_angles: BitVec = simulation.symbolic_angle_indicator().iter().copied().collect();
     Ok(PhasedCircuitAction {
         action,
         phase,
@@ -913,17 +913,6 @@ fn unit_vector(dimension: usize, set_indices: &[usize]) -> BitVec {
     let mut vector = BitVec::zeros(dimension);
     for &index in set_indices {
         vector.assign_index(index, true);
-    }
-    vector
-}
-
-/// Converts a per-bit boolean indicator into a [`BitVec`] of the same length.
-fn indicator_to_bitvec(indicator: &[bool]) -> BitVec {
-    let mut vector = BitVec::zeros(indicator.len());
-    for (index, &set) in indicator.iter().enumerate() {
-        if set {
-            vector.assign_index(index, true);
-        }
     }
     vector
 }
