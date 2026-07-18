@@ -284,7 +284,10 @@ impl PyCliffordUnitary {
     /// Clifford. Pauli-image signs and the global phase are not reproduced; a sign-exact
     /// decomposition into Pauli exponents would preserve them, at the cost of ``O(n^2)`` factors.
     fn to_transvections(&self) -> Vec<PySparsePauli> {
-        clifford_to_transvections(&self.inner).into_iter().map(PySparsePauli::from).collect()
+        clifford_to_transvections(&self.inner)
+            .into_iter()
+            .map(PySparsePauli::from)
+            .collect()
     }
 
     /// Decomposes this Clifford into a *minimal* ordered product of Clifford transvections (pi/4
@@ -306,7 +309,10 @@ impl PyCliffordUnitary {
     /// Returns generators of this Clifford's centralizer: the Pauli operators fixed up to sign under
     /// conjugation (``clifford * P * clifford_dagger == +/- P``).
     fn centralizer(&self) -> Vec<PySparsePauli> {
-        clifford_centralizer(&self.inner).into_iter().map(PySparsePauli::from).collect()
+        clifford_centralizer(&self.inner)
+            .into_iter()
+            .map(PySparsePauli::from)
+            .collect()
     }
 
     #[allow(clippy::needless_pass_by_value)]
