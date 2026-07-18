@@ -119,6 +119,61 @@ fn rotation_equals_itself() {
         .expect("a rotation must be equivalent to itself");
 }
 
+/// Conjugating a `Z` rotation by a Hadamard produces the corresponding `X` rotation:
+/// `H₀ · exp(iα Z₀) · H₀ == exp(iα X₀)`, including branch phase.
+#[test]
+fn hadamard_conjugated_z_rotation_equals_x_rotation() {
+    let conjugated = build_circuit(|builder| {
+        builder.unitary_op(UnitaryOp::Hadamard, &[0]);
+        let branch = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), branch);
+        builder.unitary_op(UnitaryOp::Hadamard, &[0]);
+    });
+    let x_rotation = build_circuit(|builder| {
+        let branch = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[x(0)]), branch);
+    });
+
+    let conjugated_action = phased_action_of(&conjugated, &[0], &[0]).expect("conjugated action");
+    let x_action = phased_action_of(&x_rotation, &[0], &[0]).expect("x action");
+
+    conjugated_action
+        .is_equivalent(&x_action)
+        .expect("HZH must equal an X rotation, including branch phase");
+    x_action
+        .is_equivalent(&conjugated_action)
+        .expect("equivalence must be symmetric");
+}
+
+/// A mixed-basis exponent equals its single-qubit Hadamard conjugate:
+/// `exp(iα X₀Z₁) == H₀ · exp(iα Z₀Z₁) · H₀`, while the un-conjugated `exp(iα Z₀Z₁)` differs.
+#[test]
+fn mixed_basis_exponent_equals_hadamard_conjugated_zz() {
+    let mixed = build_circuit(|builder| {
+        let branch = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[x(0), z(1)]), branch);
+    });
+    let conjugated_zz = build_circuit(|builder| {
+        builder.unitary_op(UnitaryOp::Hadamard, &[0]);
+        let branch = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[z(0), z(1)]), branch);
+        builder.unitary_op(UnitaryOp::Hadamard, &[0]);
+    });
+
+    let mixed_action = phased_action_of(&mixed, &[0, 1], &[0, 1]).expect("mixed action");
+    let conjugated_action = phased_action_of(&conjugated_zz, &[0, 1], &[0, 1]).expect("conjugated action");
+
+    mixed_action
+        .is_equivalent(&conjugated_action)
+        .expect("mixed-basis exponent must equal the Hadamard-conjugated ZZ exponent");
+
+    let (bare_zz, bare_input, bare_output) = zz_rotation();
+    let bare_action = phased_action_of(&bare_zz, &bare_input, &bare_output).expect("bare zz action");
+    mixed_action
+        .is_equivalent(&bare_action)
+        .expect_err("the un-conjugated ZZ exponent is a different channel");
+}
+
 /// Builds the Choi state of a single-system-qubit gadget directly in a phased simulation, mirroring
 /// the simulator-native idiom used by the Python bindings: Bell-pair every system qubit `q` in
 /// `0..n` with its reference `q + n`, allocate one random branch bit, then apply `build_gadget`.
@@ -186,18 +241,20 @@ fn simulator_native_distinguishes_opposite_signs() {
 // correspond one-to-one — exactly the mixed case the virtual/true distinction is built for.
 // ================================================================================================
 
-/// `Z` on each `qubits[i]`-th entry of `support` (a tensor product of `Z` operators).
-fn z_product(qubits: &[usize], support: &[QubitId]) -> SparsePauli {
-    let positioned: Vec<PositionedPauliObservable> = qubits.iter().map(|&qubit| z(support[qubit])).collect();
+/// A tensor product of `Z` operators, one on each qubit `support[i]` selected by `local_indices`.
+/// `local_indices` name positions *within* `support`, letting the same channel description
+/// (`angle_supports`) be applied either to the system qubits or to the ancillas.
+fn z_product(local_indices: &[usize], support: &[QubitId]) -> SparsePauli {
+    let positioned: Vec<PositionedPauliObservable> = local_indices.iter().map(|&index| z(support[index])).collect();
     (&positioned[..]).into()
 }
 
 /// Applies the symbolic Z-rotations indexed by `angle_supports` (each a tensor product of `Z`s, with
 /// its own symbolic angle) to the qubits named by `support`, in allocation order.
 fn apply_symbolic_z_rotations(builder: &mut CircuitBuilder, angle_supports: &[Vec<usize>], support: &[QubitId]) {
-    for qubits in angle_supports {
+    for local_indices in angle_supports {
         let angle = builder.allocate_symbolic_angle();
-        builder.symbolic_pauli_exp(&z_product(qubits, support), angle);
+        builder.symbolic_pauli_exp(&z_product(local_indices, support), angle);
     }
 }
 
@@ -209,7 +266,14 @@ fn direct_z_channel(n: usize, angle_supports: &[Vec<usize>]) -> Circuit {
     })
 }
 
-/// The ejection circuit: the same symbolic Z-rotations executed remotely on `n` ancillas.
+/// The ejection circuit: the same Z-rotations are executed *remotely* on `n` fresh ancillas and then
+/// teleported back onto the system. Qubits `0..n` are the system, `n..2n` the ancillas. Three phases:
+///   1. entangle — a transversal CNOT copies each system qubit onto its ancilla,
+///   2. rotate remotely — the symbolic Z-rotations act on the ancillas instead of the system,
+///   3. measure and correct — each ancilla is measured in the X basis (a *true* random bit), and a
+///      `−` outcome triggers a conditional `Z` correction on the matching system qubit.
+///
+/// The net channel on the system must equal [`direct_z_channel`].
 fn z_ejection_channel(n: usize, angle_supports: &[Vec<usize>]) -> Circuit {
     let system: Vec<QubitId> = (0..n).collect();
     let ancillas: Vec<QubitId> = (n..2 * n).collect();
@@ -219,12 +283,15 @@ fn z_ejection_channel(n: usize, angle_supports: &[Vec<usize>]) -> Circuit {
         }
         apply_symbolic_z_rotations(builder, angle_supports, &ancillas);
         for (&system_qubit, &ancilla) in system.iter().zip(ancillas.iter()) {
-            let outcome = builder.measure(&sparse(&[x(ancilla)]));
-            builder.conditional_pauli(&sparse(&[z(system_qubit)]), &[outcome], true);
+            let minus_outcome = builder.measure(&sparse(&[x(ancilla)]));
+            builder.conditional_pauli(&sparse(&[z(system_qubit)]), &[minus_outcome], true);
         }
     })
 }
 
+/// Asserts the ejection invariant: executing the Z-rotations remotely and teleporting them back is
+/// the same channel — including every branch phase — as applying them directly. Checked both ways so
+/// the equivalence is symmetric.
 fn check_z_ejection(n: usize, angle_supports: &[Vec<usize>]) {
     let system: Vec<QubitId> = (0..n).collect();
     let direct = direct_z_channel(n, angle_supports);
