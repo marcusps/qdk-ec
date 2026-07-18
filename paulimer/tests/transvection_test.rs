@@ -275,7 +275,11 @@ fn transvection(vector: &[bool], qubit_count: usize) -> ActionMatrix {
     let mut matrix = vec![vec![false; dimension]; dimension];
     for (row, output) in matrix.iter_mut().enumerate() {
         output[row] = true;
-        let coupling = if row < qubit_count { vector[qubit_count + row] } else { vector[row - qubit_count] };
+        let coupling = if row < qubit_count {
+            vector[qubit_count + row]
+        } else {
+            vector[row - qubit_count]
+        };
         if coupling {
             for (column, slot) in output.iter_mut().enumerate() {
                 *slot ^= vector[column];
@@ -304,8 +308,9 @@ fn encode(matrix: &ActionMatrix) -> u32 {
 fn minimal_length_oracle(clifford: &CliffordUnitary) -> usize {
     let qubit_count = clifford.num_qubits();
     let dimension = 2 * qubit_count;
-    let identity: ActionMatrix =
-        (0..dimension).map(|i| (0..dimension).map(|j| i == j).collect()).collect();
+    let identity: ActionMatrix = (0..dimension)
+        .map(|i| (0..dimension).map(|j| i == j).collect())
+        .collect();
     let target = encode(&action_of(clifford));
     let generators: Vec<ActionMatrix> = (1..(1u32 << dimension))
         .map(|mask| {

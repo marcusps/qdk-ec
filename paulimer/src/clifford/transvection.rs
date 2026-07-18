@@ -320,7 +320,11 @@ fn residue_matrix(action: &AlignedBitMatrix, qubit_count: usize) -> AlignedBitMa
     let dimension = 2 * qubit_count;
     let mut residue = AlignedBitMatrix::zeros(dimension, dimension);
     for row in 0..dimension {
-        let swapped = if row < qubit_count { row + qubit_count } else { row - qubit_count };
+        let swapped = if row < qubit_count {
+            row + qubit_count
+        } else {
+            row - qubit_count
+        };
         for column in 0..dimension {
             let mut bit = action.get((swapped, column));
             if swapped == column {
@@ -527,11 +531,7 @@ fn span_vectors(basis: &[Vec<bool>]) -> SpanVectors<'_> {
 
 /// A basis of `{y ∈ span(basis) : pick·core·yᵀ = 0}`, one dimension smaller than `basis`, or `None`
 /// if `pick` is right-orthogonal to the whole span (which cannot happen for a non-isotropic `pick`).
-fn right_orthogonal_complement(
-    core: &AlignedBitMatrix,
-    pick: &[bool],
-    basis: &[Vec<bool>],
-) -> Option<Vec<Vec<bool>>> {
+fn right_orthogonal_complement(core: &AlignedBitMatrix, pick: &[bool], basis: &[Vec<bool>]) -> Option<Vec<Vec<bool>>> {
     let couplings: Vec<bool> = basis.iter().map(|vector| bilinear(core, pick, vector)).collect();
     let pivot = couplings.iter().position(|&bit| bit)?;
     let mut complement = Vec::with_capacity(basis.len() - 1);
@@ -576,10 +576,7 @@ fn subspace_key(basis: &[Vec<bool>], dimension: usize) -> Vec<bool> {
 ///
 /// Returns `(basis, rank, core)` where `basis` (`rank × 2n`) spans `Res(F)` and `core = V·Rᵀ` with
 /// `V = R·F̂` (`rank × rank`) is the matrix whose congruence-triangularizability governs minimality.
-fn residue_core(
-    action: &AlignedBitMatrix,
-    qubit_count: usize,
-) -> (AlignedBitMatrix, usize, AlignedBitMatrix) {
+fn residue_core(action: &AlignedBitMatrix, qubit_count: usize) -> (AlignedBitMatrix, usize, AlignedBitMatrix) {
     let residue = residue_matrix(action, qubit_count);
     let (basis, transform) = row_reduce_with_transform(&residue);
     let rank = basis.row_count();
@@ -612,12 +609,7 @@ fn minimal_decomposition(action: &AlignedBitMatrix, qubit_count: usize) -> Vec<V
 ///
 /// Candidates are the nonzero residue vectors in ascending binary-coordinate order. The search is
 /// exhaustive over `Res(F)` and therefore always succeeds.
-fn find_fix_vector(
-    action: &AlignedBitMatrix,
-    qubit_count: usize,
-    basis: &AlignedBitMatrix,
-    rank: usize,
-) -> Vec<bool> {
+fn find_fix_vector(action: &AlignedBitMatrix, qubit_count: usize, basis: &AlignedBitMatrix, rank: usize) -> Vec<bool> {
     let dimension = 2 * qubit_count;
     let lift = |coordinates: &[bool]| -> Vec<bool> {
         let mut vector = vec![false; dimension];
@@ -654,8 +646,7 @@ fn find_fix_vector(
 /// `[n, 2n)`).
 fn vector_to_pauli(vector: &[bool], qubit_count: usize) -> SparsePauli {
     let x_bits: IndexSet = (0..qubit_count).filter(|&qubit| vector[qubit]).collect();
-    let z_bits: IndexSet =
-        (0..qubit_count).filter(|&qubit| vector[qubit_count + qubit]).collect();
+    let z_bits: IndexSet = (0..qubit_count).filter(|&qubit| vector[qubit_count + qubit]).collect();
     SparsePauli::from_bits(x_bits, z_bits, 0)
 }
 
