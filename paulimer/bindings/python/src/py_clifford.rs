@@ -1,7 +1,7 @@
 use derive_more::{Deref, DerefMut, From, Into};
 use paulimer::clifford::{
-    clifford_to_pauli_exponents, group_encoding_clifford_of, split_phased_css, split_qubit_cliffords_and_css,
-    Clifford, CliffordMutable, CliffordUnitary, XOrZ,
+    clifford_to_pauli_exponents, group_encoding_clifford_of, split_phased_css, split_qubit_cliffords_and_css, Clifford,
+    CliffordMutable, CliffordUnitary, XOrZ,
 };
 use paulimer::pauli::{as_sparse, DensePauli, SparsePauli};
 use pyo3::exceptions::PyValueError;

@@ -521,7 +521,10 @@ fn reconstruct_from_pauli_exponents(exponents: &[SparsePauli], dimension: usize)
 fn clifford_to_pauli_exponents_identity_is_empty() {
     for dimension in 0..4 {
         let exponents = clifford_to_pauli_exponents(&CliffordUnitary::identity(dimension));
-        assert!(exponents.is_empty(), "identity decomposes to no exponents (dimension {dimension})");
+        assert!(
+            exponents.is_empty(),
+            "identity decomposes to no exponents (dimension {dimension})"
+        );
     }
 }
 
