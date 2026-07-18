@@ -80,7 +80,11 @@ impl Dense {
         let target_bit = 1usize << (self.qubit_count - 1 - target);
         let mut out = self.amp.clone();
         for base in 0..(1 << self.qubit_count) {
-            let src = if base & control_bit != 0 { base ^ target_bit } else { base };
+            let src = if base & control_bit != 0 {
+                base ^ target_bit
+            } else {
+                base
+            };
             out[base] = self.amp[src];
         }
         self.amp = out;
@@ -137,10 +141,16 @@ impl Dense {
     fn apply_pauli_exp(&mut self, x_bits: &[bool], z_bits: &[bool], phase: i64) {
         let pauli_applied = self.pauli_applied(x_bits, z_bits, phase);
         for base in 0..self.amp.len() {
-            self.amp[base] = self.amp[base].add(pauli_applied[base].mul(C::new(0.0, 1.0))).scale(ROOT_HALF);
+            self.amp[base] = self.amp[base]
+                .add(pauli_applied[base].mul(C::new(0.0, 1.0)))
+                .scale(ROOT_HALF);
         }
     }
-    fn apply_controlled_pauli(&mut self, first_pauli: &(Vec<bool>, Vec<bool>, i64), second_pauli: &(Vec<bool>, Vec<bool>, i64)) {
+    fn apply_controlled_pauli(
+        &mut self,
+        first_pauli: &(Vec<bool>, Vec<bool>, i64),
+        second_pauli: &(Vec<bool>, Vec<bool>, i64),
+    ) {
         // controlled_pauli(first, second) = (I + first)/2 + (I - first)/2 * second
         let first_pauli_applied = self.pauli_applied(&first_pauli.0, &first_pauli.1, first_pauli.2);
         let plus: Vec<C> = (0..self.amp.len())
@@ -317,7 +327,10 @@ fn random_circuit(rng: &mut impl RngExt, qubit_count: usize) -> Vec<Op> {
         match rng.random_range(0..7) {
             0 => {
                 let qubit = rng.random_range(0..qubit_count);
-                ops.push(Op::Gate(single_qubit_gates[rng.random_range(0..single_qubit_gates.len())], vec![qubit]));
+                ops.push(Op::Gate(
+                    single_qubit_gates[rng.random_range(0..single_qubit_gates.len())],
+                    vec![qubit],
+                ));
             }
             1 => {
                 let (first_qubit, second_qubit) = two_distinct(rng, qubit_count);
@@ -424,7 +437,9 @@ fn dense_reference(ops: &[Op], outcome_bits: &[bool], qubit_count: usize) -> Vec
                 dense.apply_controlled_pauli(&first_arrays, &second_arrays);
             }
             Op::ConditionalPauli(pauli, outcomes, parity) => {
-                let condition = outcomes.iter().fold(false, |acc, &outcome_index| acc ^ outcome_bits[outcome_index]);
+                let condition = outcomes
+                    .iter()
+                    .fold(false, |acc, &outcome_index| acc ^ outcome_bits[outcome_index]);
                 if condition == *parity {
                     let (x_bits, z_bits, phase) = pauli_arrays(&pauli.parse::<DensePauli>().unwrap(), qubit_count);
                     dense.apply_pauli(&x_bits, &z_bits, phase);
@@ -515,7 +530,9 @@ fn verify(ops: &[Op], qubit_count: usize) {
     let random_outcome_count = sim.random_outcome_count();
     assert!(random_outcome_count <= 12, "too many random bits to enumerate");
     for assignment in 0..(1usize << random_outcome_count) {
-        let random_bits: Vec<bool> = (0..random_outcome_count).map(|bit| (assignment >> bit) & 1 == 1).collect();
+        let random_bits: Vec<bool> = (0..random_outcome_count)
+            .map(|bit| (assignment >> bit) & 1 == 1)
+            .collect();
         let outcomes = outcome_vector(&sim, &random_bits);
         let reference = dense_reference(ops, &outcomes, qubit_count);
         let claimed = claimed_state(&sim, &random_bits, qubit_count);
@@ -546,7 +563,10 @@ fn two_pauli_measurements() {
 #[test]
 fn measurement_then_conditional() {
     verify(
-        &[Op::Measure("X".into()), Op::ConditionalPauli("Z".into(), vec![0], false)],
+        &[
+            Op::Measure("X".into()),
+            Op::ConditionalPauli("Z".into(), vec![0], false),
+        ],
         1,
     );
     verify(
@@ -557,9 +577,27 @@ fn measurement_then_conditional() {
 
 #[test]
 fn controlled_pauli_no_randomness() {
-    verify(&[Op::Gate(UnitaryOp::Hadamard, vec![0]), Op::ControlledPauli("ZI".into(), "IX".into())], 2);
-    verify(&[Op::Gate(UnitaryOp::Hadamard, vec![0]), Op::ControlledPauli("ZZ".into(), "XX".into())], 2);
-    verify(&[Op::Gate(UnitaryOp::SqrtX, vec![0]), Op::ControlledPauli("YI".into(), "IY".into())], 2);
+    verify(
+        &[
+            Op::Gate(UnitaryOp::Hadamard, vec![0]),
+            Op::ControlledPauli("ZI".into(), "IX".into()),
+        ],
+        2,
+    );
+    verify(
+        &[
+            Op::Gate(UnitaryOp::Hadamard, vec![0]),
+            Op::ControlledPauli("ZZ".into(), "XX".into()),
+        ],
+        2,
+    );
+    verify(
+        &[
+            Op::Gate(UnitaryOp::SqrtX, vec![0]),
+            Op::ControlledPauli("YI".into(), "IY".into()),
+        ],
+        2,
+    );
 }
 
 #[test]
@@ -574,7 +612,11 @@ fn entangling_then_two_measurements() {
         2,
     );
     verify(
-        &[Op::Measure("X".into()), Op::Gate(UnitaryOp::SqrtX, vec![0]), Op::Measure("X".into())],
+        &[
+            Op::Measure("X".into()),
+            Op::Gate(UnitaryOp::SqrtX, vec![0]),
+            Op::Measure("X".into()),
+        ],
         1,
     );
 }
@@ -665,7 +707,9 @@ fn phased_outcome_complete_tracks_dense_statevector() {
             continue;
         }
         for assignment in 0..(1usize << random_outcome_count) {
-            let random_bits: Vec<bool> = (0..random_outcome_count).map(|bit| (assignment >> bit) & 1 == 1).collect();
+            let random_bits: Vec<bool> = (0..random_outcome_count)
+                .map(|bit| (assignment >> bit) & 1 == 1)
+                .collect();
             let outcomes = outcome_vector(&sim, &random_bits);
             let reference = dense_reference(&ops, &outcomes, qubit_count);
             let claimed = claimed_state(&sim, &random_bits, qubit_count);

@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use binar::{BitMatrix, BitVec};
 use paulimer::clifford::CliffordUnitary;
-use pauliverse::action::{PhasedCircuitAction, phased_action_from_simulation};
+use pauliverse::action::{phased_action_from_simulation, PhasedCircuitAction};
 use pauliverse::outcome_complete_simulation::OutcomeCompleteSimulation;
 use pauliverse::outcome_free_simulation::OutcomeFreeSimulation;
 use pauliverse::outcome_specific_simulation::OutcomeSpecificSimulation;

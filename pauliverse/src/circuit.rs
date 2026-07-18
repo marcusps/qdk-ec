@@ -206,7 +206,10 @@ impl Circuit {
                         });
                     }
                 }
-                Instruction::AllocateRandomBit { outcome_id, symbolic_angle } => {
+                Instruction::AllocateRandomBit {
+                    outcome_id,
+                    symbolic_angle,
+                } => {
                     let sim_outcome_id = if *symbolic_angle {
                         simulator.allocate_symbolic_angle()
                     } else {
@@ -372,16 +375,20 @@ impl Simulation for CircuitBuilder {
     fn allocate_random_bit(&mut self) -> OutcomeId {
         let outcome_id = self.outcome_count;
         self.outcome_count += 1;
-        self.circuit
-            .push(Instruction::AllocateRandomBit { outcome_id, symbolic_angle: false });
+        self.circuit.push(Instruction::AllocateRandomBit {
+            outcome_id,
+            symbolic_angle: false,
+        });
         outcome_id
     }
 
     fn allocate_symbolic_angle(&mut self) -> OutcomeId {
         let outcome_id = self.outcome_count;
         self.outcome_count += 1;
-        self.circuit
-            .push(Instruction::AllocateRandomBit { outcome_id, symbolic_angle: true });
+        self.circuit.push(Instruction::AllocateRandomBit {
+            outcome_id,
+            symbolic_angle: true,
+        });
         outcome_id
     }
 
@@ -620,7 +627,10 @@ mod tests {
             _ => {
                 let outcome_id = *outcome_counter;
                 *outcome_counter += 1;
-                Instruction::AllocateRandomBit { outcome_id, symbolic_angle: false }
+                Instruction::AllocateRandomBit {
+                    outcome_id,
+                    symbolic_angle: false,
+                }
             }
         }
     }
@@ -808,7 +818,10 @@ mod tests {
     #[test]
     fn allocate_random_bit_has_no_faults() {
         let mut circuit = Circuit::new();
-        circuit.push(Instruction::AllocateRandomBit { outcome_id: 0, symbolic_angle: false });
+        circuit.push(Instruction::AllocateRandomBit {
+            outcome_id: 0,
+            symbolic_angle: false,
+        });
         assert_eq!(circuit.fault_count(), 0);
         assert_eq!(circuit.outcome_count(), 1);
     }

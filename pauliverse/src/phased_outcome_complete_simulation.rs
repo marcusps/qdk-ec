@@ -74,15 +74,15 @@ type SparsePauli = paulimer::pauli::SparsePauli;
 /// ```
 #[must_use]
 pub struct PhasedOutcomeCompleteSimulation {
-    phased_clifford: PhasedCliffordUnitary, // R (phased encoder)
-    sign_matrix: AlignedBitMatrix,          // A
+    phased_clifford: PhasedCliffordUnitary,   // R (phased encoder)
+    sign_matrix: AlignedBitMatrix,            // A
     quadratic_phase_matrix: AlignedBitMatrix, // B
-    outcome_matrix: AlignedBitMatrix,       // M
-    outcome_shift: AlignedBitVec,           // v_0
-    linear_i_phase: AlignedBitVec,          // p
-    linear_sign_phase: AlignedBitVec,       // s
-    random_outcome_indicator: Vec<bool>,    // vec(q), [j] is true iff vec(q)_j = 1/2
-    symbolic_angle_indicator: Vec<bool>,    // [k] is true iff random bit k is a symbolic rotation angle
+    outcome_matrix: AlignedBitMatrix,         // M
+    outcome_shift: AlignedBitVec,             // v_0
+    linear_i_phase: AlignedBitVec,            // p
+    linear_sign_phase: AlignedBitVec,         // s
+    random_outcome_indicator: Vec<bool>,      // vec(q), [j] is true iff vec(q)_j = 1/2
+    symbolic_angle_indicator: Vec<bool>,      // [k] is true iff random bit k is a symbolic rotation angle
     random_bit_count: usize,
     qubit_count: usize,
 }
@@ -96,7 +96,10 @@ impl std::fmt::Debug for PhasedOutcomeCompleteSimulation {
             .field("outcome_matrix", &self.outcome_matrix())
             .field("outcome_shift", &self.outcome_shift().iter().collect::<Vec<bool>>())
             .field("linear_i_phase", &self.linear_i_phase().iter().collect::<Vec<bool>>())
-            .field("linear_sign_phase", &self.linear_sign_phase().iter().collect::<Vec<bool>>())
+            .field(
+                "linear_sign_phase",
+                &self.linear_sign_phase().iter().collect::<Vec<bool>>(),
+            )
             .field("random_outcome_indicator", &self.random_outcome_indicator)
             .field("symbolic_angle_indicator", &self.symbolic_angle_indicator)
             .field("random_bit_count", &self.random_bit_count)
@@ -216,7 +219,10 @@ impl PhasedOutcomeCompleteSimulation {
     #[must_use]
     pub fn output_phase_exponent(&self, random_bits: &[bool]) -> u8 {
         let n_random = self.random_outcome_count();
-        assert!(random_bits.len() >= n_random, "random_bits is shorter than the number of random outcomes");
+        assert!(
+            random_bits.len() >= n_random,
+            "random_bits is shorter than the number of random outcomes"
+        );
 
         let mut linear_i = false;
         let mut sign = false;

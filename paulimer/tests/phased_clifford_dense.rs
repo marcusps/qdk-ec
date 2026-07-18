@@ -67,7 +67,11 @@ impl Dense {
         let target_bit = 1usize << (self.qubit_count - 1 - target);
         let mut out = self.amp.clone();
         for base in 0..(1 << self.qubit_count) {
-            let src = if base & control_bit != 0 { base ^ target_bit } else { base };
+            let src = if base & control_bit != 0 {
+                base ^ target_bit
+            } else {
+                base
+            };
             out[base] = self.amp[src];
         }
         self.amp = out;
@@ -124,13 +128,18 @@ impl Dense {
         self.apply_pauli(x_bits, z_bits, phase);
         pauli_applied = std::mem::replace(&mut self.amp, saved);
         for base in 0..self.amp.len() {
-            self.amp[base] = self.amp[base].add(pauli_applied[base].mul(C::new(0.0, 1.0))).scale(ROOT_HALF);
+            self.amp[base] = self.amp[base]
+                .add(pauli_applied[base].mul(C::new(0.0, 1.0)))
+                .scale(ROOT_HALF);
         }
     }
 }
 
 fn h_mat() -> [[C; 2]; 2] {
-    [[C::new(ROOT_HALF, 0.0), C::new(ROOT_HALF, 0.0)], [C::new(ROOT_HALF, 0.0), C::new(-ROOT_HALF, 0.0)]]
+    [
+        [C::new(ROOT_HALF, 0.0), C::new(ROOT_HALF, 0.0)],
+        [C::new(ROOT_HALF, 0.0), C::new(-ROOT_HALF, 0.0)],
+    ]
 }
 fn x_mat() -> [[C; 2]; 2] {
     [[C::ZERO, C::new(1.0, 0.0)], [C::new(1.0, 0.0), C::ZERO]]
@@ -148,16 +157,28 @@ fn sdg_mat() -> [[C; 2]; 2] {
     [[C::new(1.0, 0.0), C::ZERO], [C::ZERO, C::new(0.0, -1.0)]]
 }
 fn rt_x() -> [[C; 2]; 2] {
-    [[zeta8(1).scale(ROOT_HALF), zeta8(7).scale(ROOT_HALF)], [zeta8(7).scale(ROOT_HALF), zeta8(1).scale(ROOT_HALF)]]
+    [
+        [zeta8(1).scale(ROOT_HALF), zeta8(7).scale(ROOT_HALF)],
+        [zeta8(7).scale(ROOT_HALF), zeta8(1).scale(ROOT_HALF)],
+    ]
 }
 fn rt_x_inv() -> [[C; 2]; 2] {
-    [[zeta8(7).scale(ROOT_HALF), zeta8(1).scale(ROOT_HALF)], [zeta8(1).scale(ROOT_HALF), zeta8(7).scale(ROOT_HALF)]]
+    [
+        [zeta8(7).scale(ROOT_HALF), zeta8(1).scale(ROOT_HALF)],
+        [zeta8(1).scale(ROOT_HALF), zeta8(7).scale(ROOT_HALF)],
+    ]
 }
 fn rt_y() -> [[C; 2]; 2] {
-    [[zeta8(1).scale(ROOT_HALF), zeta8(5).scale(ROOT_HALF)], [zeta8(1).scale(ROOT_HALF), zeta8(1).scale(ROOT_HALF)]]
+    [
+        [zeta8(1).scale(ROOT_HALF), zeta8(5).scale(ROOT_HALF)],
+        [zeta8(1).scale(ROOT_HALF), zeta8(1).scale(ROOT_HALF)],
+    ]
 }
 fn rt_y_inv() -> [[C; 2]; 2] {
-    [[zeta8(7).scale(ROOT_HALF), zeta8(7).scale(ROOT_HALF)], [zeta8(3).scale(ROOT_HALF), zeta8(7).scale(ROOT_HALF)]]
+    [
+        [zeta8(7).scale(ROOT_HALF), zeta8(7).scale(ROOT_HALF)],
+        [zeta8(3).scale(ROOT_HALF), zeta8(7).scale(ROOT_HALF)],
+    ]
 }
 
 fn statevector(phased: &PhasedCliffordUnitary) -> Vec<C> {
@@ -394,4 +415,3 @@ fn pauli_arrays(pauli: &DensePauli, qubit_count: usize) -> (Vec<bool>, Vec<bool>
     }
     (x_bits, z_bits, i64::from(pauli.xz_phase_exponent()))
 }
-
