@@ -259,21 +259,21 @@ impl PhasedCliffordUnitary {
     /// Left-multiplies by a Pauli `X` gate on `qubit`.
     pub fn left_mul_x(&mut self, qubit: usize) {
         self.apply_one_qubit(qubit, [[None, Some(0)], [Some(0), None]], |clifford| {
-            clifford.left_mul_x(qubit)
+            clifford.left_mul_x(qubit);
         });
     }
 
     /// Left-multiplies by a Pauli `Y` gate on `qubit`.
     pub fn left_mul_y(&mut self, qubit: usize) {
         self.apply_one_qubit(qubit, [[None, Some(6)], [Some(2), None]], |clifford| {
-            clifford.left_mul_y(qubit)
+            clifford.left_mul_y(qubit);
         });
     }
 
     /// Left-multiplies by a Pauli `Z` gate on `qubit`.
     pub fn left_mul_z(&mut self, qubit: usize) {
         self.apply_one_qubit(qubit, [[Some(0), None], [None, Some(4)]], |clifford| {
-            clifford.left_mul_z(qubit)
+            clifford.left_mul_z(qubit);
         });
     }
 
