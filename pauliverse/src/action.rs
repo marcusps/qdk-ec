@@ -497,9 +497,14 @@ pub fn phased_action_from_simulation(
         .copied()
         .max()
         .map_or(0, |qubit| qubit + 1);
-    let reference_qubits: Vec<QubitId> =
-        (system_qubit_count..system_qubit_count + input_qubits.len()).collect();
-    let action = action_from_simulation(simulation, input_qubits, output_qubits, &reference_qubits, system_qubit_count)?;
+    let reference_qubits: Vec<QubitId> = (system_qubit_count..system_qubit_count + input_qubits.len()).collect();
+    let action = action_from_simulation(
+        simulation,
+        input_qubits,
+        output_qubits,
+        &reference_qubits,
+        system_qubit_count,
+    )?;
     let phase = PhaseData {
         linear_i: simulation.linear_i_phase(),
         linear_sign: simulation.linear_sign_phase(),
@@ -582,9 +587,7 @@ impl PhasedCircuitAction {
     ///
     /// Returns a list of [`ActionsInequivalenceReason`] if the actions differ.
     pub fn is_equivalent(&self, other: &PhasedCircuitAction) -> Result<(), Vec<ActionsInequivalenceReason>> {
-        let map = self
-            .provenance_random_map(other)
-            .map_err(|reason| vec![reason])?;
+        let map = self.provenance_random_map(other).map_err(|reason| vec![reason])?;
         self.check_with_random_map(other, &map)
     }
 
@@ -652,10 +655,7 @@ impl PhasedCircuitAction {
     /// Builds the random-bit correspondence used by [`Self::is_equivalent`]: identity (in allocation
     /// order) on the symbolic-angle bits, identity on the true bits shared by both actions, and a
     /// projection to zero of any surplus true bits present only in `other`.
-    fn provenance_random_map(
-        &self,
-        other: &PhasedCircuitAction,
-    ) -> Result<AffineMap, ActionsInequivalenceReason> {
+    fn provenance_random_map(&self, other: &PhasedCircuitAction) -> Result<AffineMap, ActionsInequivalenceReason> {
         let self_angles: Vec<usize> = self.symbolic_angles.support().collect();
         let other_angles: Vec<usize> = other.symbolic_angles.support().collect();
         if self_angles.len() != other_angles.len() {
@@ -809,11 +809,13 @@ impl PhasedCircuitAction {
 
         for first in 0..angle_count {
             for second in (first + 1)..angle_count {
-                let quadratic_self = (i32::from(phase_self(&[first, second])) - constant_self
+                let quadratic_self = (i32::from(phase_self(&[first, second]))
+                    - constant_self
                     - linear_self[first]
                     - linear_self[second])
                     .rem_euclid(8);
-                let quadratic_other = (i32::from(phase_other(&[first, second])) - constant_other
+                let quadratic_other = (i32::from(phase_other(&[first, second]))
+                    - constant_other
                     - linear_other[first]
                     - linear_other[second])
                     .rem_euclid(8);

@@ -61,7 +61,10 @@ struct Reduction {
 
 impl Reduction {
     fn new(qubit_count: usize) -> Self {
-        Reduction { qubit_count, applied: Vec::new() }
+        Reduction {
+            qubit_count,
+            applied: Vec::new(),
+        }
     }
 
     /// Left-multiplies `working` by `exp(iπ/4·pauli)` and records the factor.

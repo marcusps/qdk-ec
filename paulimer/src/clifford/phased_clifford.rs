@@ -231,8 +231,14 @@ impl PhasedCliffordUnitary {
         inverse: impl Fn(bool, bool) -> (bool, bool, i64),
         symplectic: impl FnOnce(&mut CliffordUnitary),
     ) {
-        for output_a in [self.reference_string.index(qubit_a), !self.reference_string.index(qubit_a)] {
-            for output_b in [self.reference_string.index(qubit_b), !self.reference_string.index(qubit_b)] {
+        for output_a in [
+            self.reference_string.index(qubit_a),
+            !self.reference_string.index(qubit_a),
+        ] {
+            for output_b in [
+                self.reference_string.index(qubit_b),
+                !self.reference_string.index(qubit_b),
+            ] {
                 let mut candidate = self.reference_string.clone();
                 candidate.assign_index(qubit_a, output_a);
                 candidate.assign_index(qubit_b, output_b);
@@ -252,8 +258,6 @@ impl PhasedCliffordUnitary {
         unreachable!("a unitary maps a nonzero state to a nonzero state");
     }
 
-
-
     /// Left-multiplies by a Hadamard gate on `qubit`.
     pub fn left_mul_hadamard(&mut self, qubit: usize) {
         self.apply_one_qubit(qubit, [[Some(0), Some(0)], [Some(0), Some(4)]], |clifford| {
@@ -263,17 +267,23 @@ impl PhasedCliffordUnitary {
 
     /// Left-multiplies by a Pauli `X` gate on `qubit`.
     pub fn left_mul_x(&mut self, qubit: usize) {
-        self.apply_one_qubit(qubit, [[None, Some(0)], [Some(0), None]], |clifford| clifford.left_mul_x(qubit));
+        self.apply_one_qubit(qubit, [[None, Some(0)], [Some(0), None]], |clifford| {
+            clifford.left_mul_x(qubit);
+        });
     }
 
     /// Left-multiplies by a Pauli `Y` gate on `qubit`.
     pub fn left_mul_y(&mut self, qubit: usize) {
-        self.apply_one_qubit(qubit, [[None, Some(6)], [Some(2), None]], |clifford| clifford.left_mul_y(qubit));
+        self.apply_one_qubit(qubit, [[None, Some(6)], [Some(2), None]], |clifford| {
+            clifford.left_mul_y(qubit);
+        });
     }
 
     /// Left-multiplies by a Pauli `Z` gate on `qubit`.
     pub fn left_mul_z(&mut self, qubit: usize) {
-        self.apply_one_qubit(qubit, [[Some(0), None], [None, Some(4)]], |clifford| clifford.left_mul_z(qubit));
+        self.apply_one_qubit(qubit, [[Some(0), None], [None, Some(4)]], |clifford| {
+            clifford.left_mul_z(qubit);
+        });
     }
 
     /// Left-multiplies by `√Z` (the phase gate `S = diag(1, i)`) on `qubit`.
@@ -320,30 +330,45 @@ impl PhasedCliffordUnitary {
 
     /// Left-multiplies by a controlled-`X` gate with the given control and target qubits.
     pub fn left_mul_cx(&mut self, control: usize, target: usize) {
-        self.apply_two_qubit(control, target, |control_bit, target_bit| (control_bit, control_bit ^ target_bit, 0), |clifford| {
-            clifford.left_mul_cx(control, target);
-        });
+        self.apply_two_qubit(
+            control,
+            target,
+            |control_bit, target_bit| (control_bit, control_bit ^ target_bit, 0),
+            |clifford| {
+                clifford.left_mul_cx(control, target);
+            },
+        );
     }
 
     /// Left-multiplies by a controlled-`Z` gate on the two given qubits.
     pub fn left_mul_cz(&mut self, qubit_a: usize, qubit_b: usize) {
-        self.apply_two_qubit(qubit_a, qubit_b, |bit_a, bit_b| (bit_a, bit_b, if bit_a && bit_b { 4 } else { 0 }), |clifford| {
-            clifford.left_mul_cz(qubit_a, qubit_b);
-        });
+        self.apply_two_qubit(
+            qubit_a,
+            qubit_b,
+            |bit_a, bit_b| (bit_a, bit_b, if bit_a && bit_b { 4 } else { 0 }),
+            |clifford| {
+                clifford.left_mul_cz(qubit_a, qubit_b);
+            },
+        );
     }
 
     /// Left-multiplies by a swap of the two given qubits.
     pub fn left_mul_swap(&mut self, qubit_a: usize, qubit_b: usize) {
-        self.apply_two_qubit(qubit_a, qubit_b, |bit_a, bit_b| (bit_b, bit_a, 0), |clifford| {
-            clifford.left_mul_swap(qubit_a, qubit_b);
-        });
+        self.apply_two_qubit(
+            qubit_a,
+            qubit_b,
+            |bit_a, bit_b| (bit_b, bit_a, 0),
+            |clifford| {
+                clifford.left_mul_swap(qubit_a, qubit_b);
+            },
+        );
     }
 
     /// Left-multiplies by the named elementary [`UnitaryOp`] on `support`.
     pub fn left_mul(&mut self, unitary_op: UnitaryOp, support: &[usize]) {
         use UnitaryOp::{
-            ControlledX, ControlledZ, Hadamard, I, PrepareBell, SqrtX, SqrtXInv, SqrtY, SqrtYInv, SqrtZ, SqrtZInv, Swap,
-            X, Y, Z,
+            ControlledX, ControlledZ, Hadamard, I, PrepareBell, SqrtX, SqrtXInv, SqrtY, SqrtYInv, SqrtZ, SqrtZInv,
+            Swap, X, Y, Z,
         };
         match unitary_op {
             I => {}
@@ -371,7 +396,10 @@ impl PhasedCliffordUnitary {
     /// left unchanged. The convention matches [`CliffordMutable::left_mul_permutation`]: the qubit
     /// `support[i]` takes the role previously played by `support[permutation[i]]`.
     pub fn left_mul_permutation(&mut self, permutation: &[usize], support: &[usize]) {
-        let previous: Vec<bool> = support.iter().map(|&qubit| self.reference_string.index(qubit)).collect();
+        let previous: Vec<bool> = support
+            .iter()
+            .map(|&qubit| self.reference_string.index(qubit))
+            .collect();
         self.clifford.left_mul_permutation(permutation, support);
         for (index, &qubit) in support.iter().enumerate() {
             self.reference_string.assign_index(qubit, previous[permutation[index]]);
