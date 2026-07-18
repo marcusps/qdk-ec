@@ -6,9 +6,9 @@ use pauliverse::action::{
 };
 use pauliverse::phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 use pauliverse::{Circuit, CircuitBuilder, QubitId, Simulation};
-use std::ops::Range;
 use proptest::prelude::*;
 use rand::SeedableRng;
+use std::ops::Range;
 
 fn build_circuit(build: impl FnOnce(&mut CircuitBuilder)) -> Circuit {
     let mut builder = CircuitBuilder::new();
@@ -128,7 +128,10 @@ fn choi_simulation(
 ) -> PhasedOutcomeCompleteSimulation {
     let mut simulation = PhasedOutcomeCompleteSimulation::new(2 * system_qubit_count);
     for system_qubit in 0..system_qubit_count {
-        simulation.unitary_op(UnitaryOp::PrepareBell, &[system_qubit, system_qubit + system_qubit_count]);
+        simulation.unitary_op(
+            UnitaryOp::PrepareBell,
+            &[system_qubit, system_qubit + system_qubit_count],
+        );
     }
     let branch = simulation.allocate_symbolic_angle();
     build_gadget(&mut simulation, branch);
@@ -339,9 +342,9 @@ fn z_diagonal_clifford_ejection_without_angles() {
         let direct_action = phased_action_of(&direct, &system, &system).expect("direct clifford action");
         let ejection_action = phased_action_of(&ejection, &system, &system).expect("ejection clifford action");
 
-        direct_action
-            .is_equivalent(&ejection_action)
-            .unwrap_or_else(|reasons| panic!("no-angle Z-diagonal Clifford ejection on {n} qubits must equal direct: {reasons:?}"));
+        direct_action.is_equivalent(&ejection_action).unwrap_or_else(|reasons| {
+            panic!("no-angle Z-diagonal Clifford ejection on {n} qubits must equal direct: {reasons:?}")
+        });
         ejection_action
             .is_equivalent(&direct_action)
             .expect("no-angle ejection equivalence must be symmetric");
@@ -469,7 +472,11 @@ fn apply_z_diagonal_channel(
     }
 }
 
-fn direct_z_channel_with_measurements(n: usize, angle_supports: &[Vec<usize>], measure_supports: &[Vec<usize>]) -> Circuit {
+fn direct_z_channel_with_measurements(
+    n: usize,
+    angle_supports: &[Vec<usize>],
+    measure_supports: &[Vec<usize>],
+) -> Circuit {
     let system: Vec<QubitId> = (0..n).collect();
     build_circuit(|builder| {
         apply_z_diagonal_channel(builder, angle_supports, measure_supports, &system);
@@ -550,7 +557,11 @@ fn apply_x_diagonal_channel(
     }
 }
 
-fn direct_x_channel_with_measurements(n: usize, angle_supports: &[Vec<usize>], measure_supports: &[Vec<usize>]) -> Circuit {
+fn direct_x_channel_with_measurements(
+    n: usize,
+    angle_supports: &[Vec<usize>],
+    measure_supports: &[Vec<usize>],
+) -> Circuit {
     let system: Vec<QubitId> = (0..n).collect();
     build_circuit(|builder| {
         apply_x_diagonal_channel(builder, angle_supports, measure_supports, &system);
@@ -613,7 +624,6 @@ fn two_qubit_x_channel_ejections() {
 fn three_qubit_x_channel_ejection() {
     check_x_ejection_with_measurements(3, &[vec![0, 1, 2]], &[vec![0], vec![1, 2]]);
 }
-
 
 // ================================================================================================
 // Section 4.1 of arXiv:2603.24717: verifying parameterized state-preparation circuits.
@@ -707,7 +717,11 @@ fn verifies_multi_angle_state_preparation() {
             let first = builder.allocate_symbolic_angle();
             builder.symbolic_pauli_exp(&sparse(&[z(0), z(1)]), first);
             let second = builder.allocate_symbolic_angle();
-            let pauli = if negate_second { -sparse(&[z(0)]) } else { sparse(&[z(0)]) };
+            let pauli = if negate_second {
+                -sparse(&[z(0)])
+            } else {
+                sparse(&[z(0)])
+            };
             builder.symbolic_pauli_exp(&pauli, second);
         })
     };
@@ -744,7 +758,11 @@ fn signed_z_channel(n: usize, angle_supports: &[Vec<usize>], signs: &[bool]) -> 
     build_circuit(|builder| {
         for (qubits, &negate) in angle_supports.iter().zip(signs.iter()) {
             let angle = builder.allocate_symbolic_angle();
-            let pauli = if negate { -z_product(qubits, &system) } else { z_product(qubits, &system) };
+            let pauli = if negate {
+                -z_product(qubits, &system)
+            } else {
+                z_product(qubits, &system)
+            };
             builder.symbolic_pauli_exp(&pauli, angle);
         }
     })
@@ -763,7 +781,9 @@ fn permuted_z_channel(n: usize, angle_supports: &[Vec<usize>], perm: &[usize]) -
 
 /// All non-trivial Z products on `n` qubits, in ascending-mask order: distinct, independent supports.
 fn distinct_z_supports(n: usize) -> Vec<Vec<usize>> {
-    (1u32..(1 << n)).map(|mask| (0..n).filter(|bit| mask & (1 << bit) != 0).collect()).collect()
+    (1u32..(1 << n))
+        .map(|mask| (0..n).filter(|bit| mask & (1 << bit) != 0).collect())
+        .collect()
 }
 
 #[test]
@@ -783,7 +803,11 @@ fn flipping_any_sign_yields_relative_phase() {
         let reasons = baseline_action
             .is_equivalent(&flipped_action)
             .expect_err("sign mask must be detected");
-        assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase], "mask {mask:b}");
+        assert_eq!(
+            reasons,
+            vec![ActionsInequivalenceReason::RelativePhase],
+            "mask {mask:b}"
+        );
     }
 }
 
