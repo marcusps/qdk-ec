@@ -6,19 +6,14 @@
 //! the centralizer contract, rather than exact minimality.
 
 use binar::Bitwise;
-use paulimer::clifford::{
-    clifford_centralizer, clifford_to_transvections, Clifford, CliffordMutable, CliffordUnitary,
-};
+use paulimer::clifford::{Clifford, CliffordMutable, CliffordUnitary, clifford_centralizer, clifford_to_transvections};
 use paulimer::pauli::{Pauli, SparsePauli};
 use proptest::prelude::*;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 /// Rebuilds a Clifford's symplectic action by replaying transvections on the identity.
-fn symplectic_action_from_transvections(
-    transvections: &[SparsePauli],
-    qubit_count: usize,
-) -> CliffordUnitary {
+fn symplectic_action_from_transvections(transvections: &[SparsePauli], qubit_count: usize) -> CliffordUnitary {
     let mut rebuilt = CliffordUnitary::identity(qubit_count);
     for transvection in transvections {
         rebuilt.left_mul_pauli_exp(transvection);
@@ -99,7 +94,11 @@ fn single_qubit_gates_reproduce_symplectic_action() {
     let mut hadamard = CliffordUnitary::identity(1);
     hadamard.left_mul_hadamard(0);
     assert_valid_decomposition(&hadamard);
-    assert_eq!(clifford_to_transvections(&hadamard).len(), 1, "H is the transvection T_Y");
+    assert_eq!(
+        clifford_to_transvections(&hadamard).len(),
+        1,
+        "H is the transvection T_Y"
+    );
 }
 
 #[test]
@@ -113,8 +112,15 @@ fn pauli_gates_are_conjugation_trivial() {
             1 => clifford.left_mul_pauli(&SparsePauli::z(0, 1)),
             _ => clifford.left_mul_pauli(&SparsePauli::y(0, 1)),
         }
-        assert!(clifford_to_transvections(&clifford).is_empty(), "Pauli axis {axis} needs no factor");
-        assert_eq!(clifford_centralizer(&clifford).len(), 2, "a Pauli commutes with all generators");
+        assert!(
+            clifford_to_transvections(&clifford).is_empty(),
+            "Pauli axis {axis} needs no factor"
+        );
+        assert_eq!(
+            clifford_centralizer(&clifford).len(),
+            2,
+            "a Pauli commutes with all generators"
+        );
     }
 }
 

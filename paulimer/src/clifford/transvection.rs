@@ -26,12 +26,12 @@
 //! global phase. Its advantage is the linear factor count `O(n)`, versus `O(n²)` for the
 //! Gaussian-elimination decomposition.
 
-use binar::matrix::{kernel_basis_matrix, AlignedBitMatrix};
+use binar::matrix::{AlignedBitMatrix, kernel_basis_matrix};
 use binar::{Bitwise, IndexSet};
 
 use crate::clifford::{Clifford, CliffordMutable, CliffordUnitary};
 use crate::pauli::DensePauli;
-use crate::{anti_commutes_with, Pauli, PauliBinaryOps, PauliMutable, SparsePauli};
+use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with};
 
 /// Decomposes `clifford` into an ordered product of Clifford transvections.
 ///
@@ -133,8 +133,9 @@ pub fn clifford_centralizer(clifford: &CliffordUnitary) -> Vec<SparsePauli> {
     (0..kernel.row_count())
         .map(|row| {
             let x_bits: IndexSet = (0..qubit_count).filter(|&qubit| kernel[(row, qubit)]).collect();
-            let z_bits: IndexSet =
-                (0..qubit_count).filter(|&qubit| kernel[(row, qubit_count + qubit)]).collect();
+            let z_bits: IndexSet = (0..qubit_count)
+                .filter(|&qubit| kernel[(row, qubit_count + qubit)])
+                .collect();
             SparsePauli::from_bits(x_bits, z_bits, 0)
         })
         .collect()
@@ -168,8 +169,8 @@ fn next_transvection(working: &CliffordUnitary, qubit_count: usize) -> Option<Sp
     let dimension = basis.len();
     for first in 0..dimension {
         for second in (first + 1)..dimension {
-            let anticommuting = anti_commutes_with(&basis[first], &images[second])
-                ^ anti_commutes_with(&basis[second], &images[first]);
+            let anticommuting =
+                anti_commutes_with(&basis[first], &images[second]) ^ anti_commutes_with(&basis[second], &images[first]);
             if anticommuting {
                 let mut sum = basis[first].clone();
                 sum.mul_assign_left(&basis[second]);
