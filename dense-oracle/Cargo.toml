@@ -7,5 +7,5 @@ license = "MIT"
 description = "Dense (full state vector) simulation oracle shared by paulimer and pauliverse tests"
 
 [dependencies]
-binar = { path = "../binar", version = "0.1.0" }
-paulimer = { path = "../paulimer", version = "0.1.0" }
+binar = { path = "../binar", version = "0.1.2" }
+paulimer = { path = "../paulimer", version = "0.2.2" }
