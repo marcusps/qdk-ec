@@ -362,8 +362,9 @@ impl PhasedOutcomeCompleteSimulation {
     /// Measures a Pauli observable using an anti-commuting hint operator, tracking the exact phase.
     ///
     /// Implements case 5 of Algorithm 4.2. Given an anti-commuting hint `P'` with preimage
-    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← (-1)^α e^{iπ/4 (i P' P)} R` and the
-    /// quadratic and linear `-1` phases absorb the outcome-dependent stabiliser sign.
+    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← e^{iπ/4 (i P' P)} R`, the quadratic
+    /// and linear `-1` phases absorb the outcome-dependent stabiliser sign, and the `(-1)^α` sign
+    /// relabels the reported outcome (`m = r ⊕ α`) via `outcome_shift` rather than a global phase.
     ///
     /// # Panics
     ///
@@ -392,9 +393,6 @@ impl PhasedOutcomeCompleteSimulation {
             rotation.mul_assign_right(hint);
             rotation.add_assign_phase_exp(3);
             self.phased_clifford.left_mul_pauli_exp(&rotation);
-            if alpha == 1 {
-                self.phased_clifford.left_mul_global_phase(4);
-            }
 
             // a = A^T b', with the new random bit appended: a_with_zero and a_with_one = a ⊕ {0,1}.
             let a_with_zero = row_sum(&self.sign_matrix, preimage.z_bits().support());
@@ -410,6 +408,10 @@ impl PhasedOutcomeCompleteSimulation {
             if alpha == 1 {
                 self.linear_sign_phase
                     .assign_index(new_random_bit, !self.linear_sign_phase.index(new_random_bit));
+                // (-1)^alpha relabels the reported outcome (m = r ⊕ alpha), not the global phase.
+                let outcome_position = self.outcome_count() - 1;
+                self.outcome_shift
+                    .assign_index(outcome_position, !self.outcome_shift.index(outcome_position));
             }
 
             // Apply P' conditioned on the random bits indicated by (a ⊕ 1).
