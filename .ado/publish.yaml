@@ -70,17 +70,21 @@ parameters:
     displayName: 'Publish paulimer (Python package)'
     type: boolean
     default: false
+  - name: buildWasm
+    displayName: 'Build WASM/Pyodide wheels for binar/paulimer'
+    type: boolean
+    default: true
   - name: platforms
     type: object
     default:
       - name: linux_x86_64
         poolName: "Azure-Pipelines-DevTools-EO"
-        imageName: "ubuntu-latest"
+        imageName: "ubuntu-22.04"
         os: linux
         arch: x86_64
       - name: linux_aarch64
         poolName: "Azure-Pipelines-DevTools-ARM64-EO"
-        imageName: "azurelinux-3.0-arm64"
+        imageName: "ubuntu-22.04-arm64"
         os: linux
         arch: aarch64
       - name: mac_x86_64
@@ -173,5 +177,10 @@ extends:
     - template: stages/publish_python.yaml@self
       parameters:
         platforms: ${{ parameters.platforms }}
+        publishBinarPython: ${{ parameters.publishBinarPython }}
+        publishPaulimerPython: ${{ parameters.publishPaulimerPython }}
+
+    - template: stages/publish_wasm_wheels.yaml@self
+      parameters:
         publishBinarPython: ${{ parameters.publishBinarPython }}
         publishPaulimerPython: ${{ parameters.publishPaulimerPython }}
