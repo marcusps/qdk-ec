@@ -1,4 +1,5 @@
 use crate::Simulation;
+use crate::action::phase_form_exponent;
 use crate::outcome_complete_simulation::row_sum;
 use crate::outcome_free_simulation::{max_pair_support, max_support};
 use binar::{BitMatrix, BitVec};
@@ -223,8 +224,13 @@ impl PhasedOutcomeCompleteSimulation {
             random_bits.len() >= n_random,
             "random_bits is shorter than the number of random outcomes"
         );
-        let random: BitVec = random_bits[..n_random].iter().copied().collect();
-        crate::action::PhaseData::from_simulation(self).phase_exponent(&random)
+        phase_form_exponent(
+            n_random,
+            |index| random_bits[index],
+            |index| self.linear_i_phase.index(index),
+            |index| self.linear_sign_phase.index(index),
+            |row, column| self.quadratic_phase_matrix.get((row, column)),
+        )
     }
 
     /// Sample measurement outcomes from all `2^{n_r}` branches.

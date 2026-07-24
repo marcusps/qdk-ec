@@ -796,23 +796,46 @@ impl PhaseData {
 
     /// The `ζ₈` exponent `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)` for the branch `random_bits`.
     pub(crate) fn phase_exponent(&self, random_bits: &BitVec) -> u8 {
-        let random_count = self.random_count();
-        let mut linear_i = false;
-        let mut sign = false;
-        for column in 0..random_count {
-            if !random_bits.index(column) {
-                continue;
-            }
-            linear_i ^= self.linear_i.index(column);
-            sign ^= self.linear_sign.index(column);
-            for row in 0..random_count {
-                if random_bits.index(row) && self.quadratic.get((row, column)) {
-                    sign = !sign;
-                }
+        phase_form_exponent(
+            self.random_count(),
+            |index| random_bits.index(index),
+            |index| self.linear_i.index(index),
+            |index| self.linear_sign.index(index),
+            |row, column| self.quadratic.get((row, column)),
+        )
+    }
+}
+
+/// Evaluates the `ζ₈ = e^{iπ/4}` exponent of the F₂ phase form `i^⟨p, r⟩ (-1)^⟨B r + s, r⟩` for a
+/// random-bit assignment `r`.
+///
+/// The coefficients are read through accessor closures so the phased simulator and its lowered
+/// [`crate::action`] `PhaseData` — which store `p`, `s`, `B` and `r` in different (aligned vs.
+/// unaligned) representations — share a single implementation. `random_bit`, `linear_i` (`p`) and
+/// `linear_sign` (`s`) are indexed by column and `quadratic` reads `B[(row, column)]`, all over
+/// `0..random_count`.
+pub(crate) fn phase_form_exponent(
+    random_count: usize,
+    random_bit: impl Fn(usize) -> bool,
+    linear_i: impl Fn(usize) -> bool,
+    linear_sign: impl Fn(usize) -> bool,
+    quadratic: impl Fn(usize, usize) -> bool,
+) -> u8 {
+    let mut linear_i_parity = false;
+    let mut sign = false;
+    for column in 0..random_count {
+        if !random_bit(column) {
+            continue;
+        }
+        linear_i_parity ^= linear_i(column);
+        sign ^= linear_sign(column);
+        for row in 0..random_count {
+            if random_bit(row) && quadratic(row, column) {
+                sign = !sign;
             }
         }
-        (2 * u8::from(linear_i) + 4 * u8::from(sign)) % 8
     }
+    (2 * u8::from(linear_i_parity) + 4 * u8::from(sign)) % 8
 }
 
 #[derive(Debug, Clone, PartialEq)]
