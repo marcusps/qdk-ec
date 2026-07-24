@@ -161,7 +161,7 @@ impl Dense {
 /// # Panics
 /// Panics if the state has (near) zero norm.
 pub fn normalize(amp: &mut [C]) {
-    let norm = amp.iter().map(|amplitude| amplitude.norm_sqr()).sum::<f64>().sqrt();
+    let norm = amp.iter().map(Complex::norm_sqr).sum::<f64>().sqrt();
     assert!(norm > 1e-9, "attempted to normalize a vanishing state");
     let inv = 1.0 / norm;
     for amplitude in amp.iter_mut() {
