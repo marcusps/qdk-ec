@@ -1,4 +1,5 @@
 use crate::Simulation;
+use crate::action::phase_form_exponent;
 use crate::outcome_complete_simulation::row_sum;
 use crate::outcome_free_simulation::{max_pair_support, max_support};
 use binar::{BitMatrix, BitVec};
@@ -223,23 +224,13 @@ impl PhasedOutcomeCompleteSimulation {
             random_bits.len() >= n_random,
             "random_bits is shorter than the number of random outcomes"
         );
-
-        let mut linear_i = false;
-        let mut sign = false;
-        for column in 0..n_random {
-            if !random_bits[column] {
-                continue;
-            }
-            linear_i ^= self.linear_i_phase.index(column);
-            sign ^= self.linear_sign_phase.index(column);
-            // quadratic term: sum_{row} B[row][column] r_row r_column = (B^T r)_column for r_column = 1
-            for (row, &set) in random_bits.iter().enumerate().take(n_random) {
-                if set && self.quadratic_phase_matrix.row(row).index(column) {
-                    sign = !sign;
-                }
-            }
-        }
-        (2 * u8::from(linear_i) + 4 * u8::from(sign)) % 8
+        phase_form_exponent(
+            n_random,
+            |index| random_bits[index],
+            |index| self.linear_i_phase.index(index),
+            |index| self.linear_sign_phase.index(index),
+            |row, column| self.quadratic_phase_matrix.get((row, column)),
+        )
     }
 
     /// Sample measurement outcomes from all `2^{n_r}` branches.
@@ -362,8 +353,9 @@ impl PhasedOutcomeCompleteSimulation {
     /// Measures a Pauli observable using an anti-commuting hint operator, tracking the exact phase.
     ///
     /// Implements case 5 of Algorithm 4.2. Given an anti-commuting hint `P'` with preimage
-    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← (-1)^α e^{iπ/4 (i P' P)} R` and the
-    /// quadratic and linear `-1` phases absorb the outcome-dependent stabiliser sign.
+    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← e^{iπ/4 (i P' P)} R`, the quadratic
+    /// and linear `-1` phases absorb the outcome-dependent stabiliser sign, and the `(-1)^α` sign
+    /// relabels the reported outcome (`m = r ⊕ α`) via `outcome_shift` rather than a global phase.
     ///
     /// # Panics
     ///
@@ -392,9 +384,6 @@ impl PhasedOutcomeCompleteSimulation {
             rotation.mul_assign_right(hint);
             rotation.add_assign_phase_exp(3);
             self.phased_clifford.left_mul_pauli_exp(&rotation);
-            if alpha == 1 {
-                self.phased_clifford.left_mul_global_phase(4);
-            }
 
             // a = A^T b', with the new random bit appended: a_with_zero and a_with_one = a ⊕ {0,1}.
             let a_with_zero = row_sum(&self.sign_matrix, preimage.z_bits().support());
@@ -410,6 +399,10 @@ impl PhasedOutcomeCompleteSimulation {
             if alpha == 1 {
                 self.linear_sign_phase
                     .assign_index(new_random_bit, !self.linear_sign_phase.index(new_random_bit));
+                // (-1)^alpha relabels the reported outcome (m = r ⊕ alpha), not the global phase.
+                let outcome_position = self.outcome_count() - 1;
+                self.outcome_shift
+                    .assign_index(outcome_position, !self.outcome_shift.index(outcome_position));
             }
 
             // Apply P' conditioned on the random bits indicated by (a ⊕ 1).

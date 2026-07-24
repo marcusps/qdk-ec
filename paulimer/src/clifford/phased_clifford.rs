@@ -150,11 +150,9 @@ impl PhasedCliffordUnitary {
 
     fn relative_phase(&self, target: &AlignedBitVec) -> Option<i64> {
         let num_qubits = self.num_qubits();
-        let mut difference = BitVec::zeros(num_qubits);
-        for qubit in 0..num_qubits {
-            let bit = target.index(qubit) ^ self.reference_string.index(qubit);
-            difference.assign_index(qubit, bit);
-        }
+        let difference: BitVec = (0..num_qubits)
+            .map(|qubit| target.index(qubit) ^ self.reference_string.index(qubit))
+            .collect();
         let echelon = EchelonForm::new(self.x_parts_matrix());
         let combination = echelon.transpose_solve(&difference.as_view())?;
         let mut product = self.clifford.image_z(0);
@@ -423,19 +421,10 @@ impl PhasedCliffordUnitary {
         if self.num_qubits() == 0 {
             return;
         }
-        let num_qubits = self.num_qubits();
-        let mut x_part = BitVec::zeros(num_qubits);
-        let mut z_part = BitVec::zeros(num_qubits);
-        for qubit in pauli.x_bits().support() {
-            x_part.assign_index(qubit, true);
-        }
-        for qubit in pauli.z_bits().support() {
-            z_part.assign_index(qubit, true);
-        }
         let pauli_phase = i64::from(pauli.xz_phase_exponent());
 
         let mut shifted = self.reference_string.clone();
-        for qubit in x_part.support() {
+        for qubit in pauli.x_bits().support() {
             shifted.assign_index(qubit, !shifted.index(qubit));
         }
         let candidates = [self.reference_string.clone(), shifted];
@@ -449,14 +438,14 @@ impl PhasedCliffordUnitary {
             }
             let mut source = candidate.clone();
             let mut sign_parity = false;
-            for qubit in z_part.support() {
-                let flipped = source.index(qubit) ^ x_part.index(qubit);
+            for qubit in pauli.z_bits().support() {
+                let flipped = source.index(qubit) ^ pauli.x_bits().index(qubit);
                 if flipped {
                     sign_parity = !sign_parity;
                 }
             }
-            for qubit in x_part.support() {
-                source.assign_index(qubit, source.index(qubit) ^ true);
+            for qubit in pauli.x_bits().support() {
+                source.assign_index(qubit, !source.index(qubit));
             }
             if let Some(relative) = self.relative_phase(&source) {
                 let coefficient = 2 + 2 * pauli_phase + if sign_parity { 4 } else { 0 };
