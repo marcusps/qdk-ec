@@ -20,6 +20,12 @@ use crate::{CliffordUnitary, Pauli, PauliMutable, SparsePauli};
 /// [arXiv:2603.24717](https://arxiv.org/abs/2603.24717): decompose each Clifford factor and replay it
 /// on a [`PhasedCliffordUnitary`](crate::clifford::PhasedCliffordUnitary).
 ///
+/// # Algorithm
+///
+/// Reduce a working copy to the identity by left-multiplying `π/4` exponents `E₁, …, E_m`, so that
+/// `E_m ⋯ E₁ · clifford = I` and hence `clifford = E₁⁻¹ ⋯ E_m⁻¹`. Replaying the inverses in reverse
+/// order (each `exp(iπ/4·P)⁻¹ = exp(iπ/4·(−P))`) rebuilds `clifford` from the identity.
+///
 /// # Examples
 ///
 /// ```
@@ -40,10 +46,7 @@ use crate::{CliffordUnitary, Pauli, PauliMutable, SparsePauli};
 /// ```
 #[must_use]
 pub fn clifford_to_pauli_exponents(clifford: &CliffordUnitary) -> Vec<SparsePauli> {
-    // Reduce a working copy to the identity by left-multiplying `π/4` exponents `E₁, …, E_m`, so that
-    // `E_m ⋯ E₁ · clifford = I` and hence `clifford = E₁⁻¹ ⋯ E_m⁻¹`. Replaying the inverses in reverse
-    // order (each `exp(iπ/4·P)⁻¹ = exp(iπ/4·(−P))`) rebuilds `clifford` from the identity.
-    let mut recorded = Reduction::new(clifford.num_qubits());
+    let mut recorded = Reduction::new();
     let mut working = clifford.clone();
     for pivot in 0..working.num_qubits() {
         recorded.clear_x_image(&mut working, pivot);
@@ -55,16 +58,12 @@ pub fn clifford_to_pauli_exponents(clifford: &CliffordUnitary) -> Vec<SparsePaul
 
 /// Accumulates the `π/4` exponents applied while reducing a Clifford to the identity.
 struct Reduction {
-    qubit_count: usize,
     applied: Vec<SparsePauli>,
 }
 
 impl Reduction {
-    fn new(qubit_count: usize) -> Self {
-        Reduction {
-            qubit_count,
-            applied: Vec::new(),
-        }
+    fn new() -> Self {
+        Reduction { applied: Vec::new() }
     }
 
     /// Left-multiplies `working` by `exp(iπ/4·pauli)` and records the factor.
@@ -73,73 +72,81 @@ impl Reduction {
         self.applied.push(pauli);
     }
 
-    fn single_x(&self, qubit: usize) -> SparsePauli {
-        SparsePauli::x(qubit, self.qubit_count)
+    fn single_x(qubit: usize, qubit_count: usize) -> SparsePauli {
+        SparsePauli::x(qubit, qubit_count)
     }
 
-    fn single_z(&self, qubit: usize) -> SparsePauli {
-        SparsePauli::z(qubit, self.qubit_count)
+    fn single_z(qubit: usize, qubit_count: usize) -> SparsePauli {
+        SparsePauli::z(qubit, qubit_count)
     }
 
     /// `Z_control · X_target`, the generator of a controlled-`X`.
-    fn control_x(&self, control: usize, target: usize) -> SparsePauli {
-        let mut pauli = SparsePauli::z(control, self.qubit_count);
+    fn control_x(control: usize, target: usize, qubit_count: usize) -> SparsePauli {
+        let mut pauli = SparsePauli::z(control, qubit_count);
         pauli.mul_assign_left_x(target);
         pauli
     }
 
     /// `Z_a · Z_b`, the generator of a controlled-`Z`.
-    fn control_z(&self, first: usize, second: usize) -> SparsePauli {
-        let mut pauli = SparsePauli::z(first, self.qubit_count);
+    fn control_z(first: usize, second: usize, qubit_count: usize) -> SparsePauli {
+        let mut pauli = SparsePauli::z(first, qubit_count);
         pauli.mul_assign_left_z(second);
         pauli
     }
 
     fn hadamard(&mut self, working: &mut CliffordUnitary, qubit: usize) {
-        self.exp(working, self.single_x(qubit));
-        self.exp(working, self.single_z(qubit));
-        self.exp(working, self.single_x(qubit));
+        let count = working.num_qubits();
+        self.exp(working, Self::single_x(qubit, count));
+        self.exp(working, Self::single_z(qubit, count));
+        self.exp(working, Self::single_x(qubit, count));
     }
 
     fn root_z(&mut self, working: &mut CliffordUnitary, qubit: usize) {
-        self.exp(working, self.single_z(qubit));
+        let count = working.num_qubits();
+        self.exp(working, Self::single_z(qubit, count));
     }
 
     fn root_z_inverse(&mut self, working: &mut CliffordUnitary, qubit: usize) {
-        self.exp(working, negated(self.single_z(qubit)));
+        let count = working.num_qubits();
+        self.exp(working, negated(Self::single_z(qubit, count)));
     }
 
     fn root_x(&mut self, working: &mut CliffordUnitary, qubit: usize) {
-        self.exp(working, self.single_x(qubit));
+        let count = working.num_qubits();
+        self.exp(working, Self::single_x(qubit, count));
     }
 
     fn controlled_x(&mut self, working: &mut CliffordUnitary, control: usize, target: usize) {
-        self.exp(working, self.control_x(control, target));
-        self.exp(working, negated(self.single_z(control)));
-        self.exp(working, negated(self.single_x(target)));
+        let count = working.num_qubits();
+        self.exp(working, Self::control_x(control, target, count));
+        self.exp(working, negated(Self::single_z(control, count)));
+        self.exp(working, negated(Self::single_x(target, count)));
     }
 
     fn controlled_z(&mut self, working: &mut CliffordUnitary, first: usize, second: usize) {
-        self.exp(working, self.control_z(first, second));
-        self.exp(working, negated(self.single_z(first)));
-        self.exp(working, negated(self.single_z(second)));
+        let count = working.num_qubits();
+        self.exp(working, Self::control_z(first, second, count));
+        self.exp(working, negated(Self::single_z(first, count)));
+        self.exp(working, negated(Self::single_z(second, count)));
     }
 
     /// Conjugation by the Pauli `Z_qubit`, flipping the sign of an `X`-type image on `qubit`.
     fn pauli_z(&mut self, working: &mut CliffordUnitary, qubit: usize) {
-        self.exp(working, self.single_z(qubit));
-        self.exp(working, self.single_z(qubit));
+        let count = working.num_qubits();
+        self.exp(working, Self::single_z(qubit, count));
+        self.exp(working, Self::single_z(qubit, count));
     }
 
     /// Conjugation by the Pauli `X_qubit`, flipping the sign of a `Z`-type image on `qubit`.
     fn pauli_x(&mut self, working: &mut CliffordUnitary, qubit: usize) {
-        self.exp(working, self.single_x(qubit));
-        self.exp(working, self.single_x(qubit));
+        let count = working.num_qubits();
+        self.exp(working, Self::single_x(qubit, count));
+        self.exp(working, Self::single_x(qubit, count));
     }
 
     /// Turns the image of `X_pivot` into `+X_pivot` using gates supported on qubits `≥ pivot`.
     fn clear_x_image(&mut self, working: &mut CliffordUnitary, pivot: usize) {
-        let count = self.qubit_count;
+        let count = working.num_qubits();
         let image = working.image_x(pivot);
         if !(pivot..count).any(|qubit| x_bit(&image, qubit)) {
             let qubit = (pivot..count)
@@ -178,7 +185,7 @@ impl Reduction {
     /// Turns the image of `Z_pivot` into `+Z_pivot`, assuming the image of `X_pivot` is already
     /// `+X_pivot`; every gate used fixes `X_pivot`.
     fn clear_z_image(&mut self, working: &mut CliffordUnitary, pivot: usize) {
-        let count = self.qubit_count;
+        let count = working.num_qubits();
         if x_bit(&working.image_z(pivot), pivot) {
             self.root_x(working, pivot);
         }

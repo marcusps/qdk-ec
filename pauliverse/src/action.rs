@@ -460,24 +460,12 @@ pub fn phased_action_of(
     output_qubits: &[QubitId],
 ) -> Result<PhasedCircuitAction, ActionError> {
     let (action, simulation) = build_action::<PhasedOutcomeCompleteSimulation>(circuit, input_qubits, output_qubits)?;
-    let phase = PhaseData {
-        linear_i: simulation.linear_i_phase(),
-        linear_sign: simulation.linear_sign_phase(),
-        quadratic: simulation.quadratic_phase_matrix(),
-    };
-    let symbolic_angles = indicator_to_bitvec(simulation.symbolic_angle_indicator());
     let qubit_count = circuit
         .qubit_count()
         .max(input_qubits.iter().max().map_or(0, |&q| q + 1))
         .max(output_qubits.iter().max().map_or(0, |&q| q + 1));
     let reference_qubits: Vec<QubitId> = (qubit_count..qubit_count + input_qubits.len()).collect();
-    let global_phase = recover_global_phase(&simulation, &reference_qubits, output_qubits);
-    Ok(PhasedCircuitAction {
-        action,
-        phase,
-        symbolic_angles,
-        global_phase,
-    })
+    Ok(phased_action(action, &simulation, &reference_qubits, output_qubits))
 }
 
 /// Computes a [`PhasedCircuitAction`] directly from a [`PhasedOutcomeCompleteSimulation`] whose Choi
@@ -513,19 +501,26 @@ pub fn phased_action_from_simulation(
         &reference_qubits,
         system_qubit_count,
     )?;
-    let phase = PhaseData {
-        linear_i: simulation.linear_i_phase(),
-        linear_sign: simulation.linear_sign_phase(),
-        quadratic: simulation.quadratic_phase_matrix(),
-    };
-    let symbolic_angles = indicator_to_bitvec(simulation.symbolic_angle_indicator());
-    let global_phase = recover_global_phase(simulation, &reference_qubits, output_qubits);
-    Ok(PhasedCircuitAction {
+    Ok(phased_action(action, simulation, &reference_qubits, output_qubits))
+}
+
+/// Assembles a [`PhasedCircuitAction`] from a computed `action` and the `simulation` that recorded
+/// the branch phase function, recovering the absolute global phase from the reference and output
+/// qubits.
+fn phased_action(
+    action: CircuitAction,
+    simulation: &PhasedOutcomeCompleteSimulation,
+    reference_qubits: &[QubitId],
+    output_qubits: &[QubitId],
+) -> PhasedCircuitAction {
+    let symbolic_angles: BitVec = simulation.symbolic_angle_indicator().iter().copied().collect();
+    let global_phase = recover_global_phase(simulation, reference_qubits, output_qubits);
+    PhasedCircuitAction {
         action,
-        phase,
+        phase: PhaseData::from_simulation(simulation),
         symbolic_angles,
         global_phase,
-    })
+    }
 }
 
 /// Recovers the absolute global `ζ₈` phase of the Choi-state encoder via the §4.3 auxiliary
@@ -850,7 +845,7 @@ impl PhasedCircuitAction {
 /// The `ζ₈` phase of branch `r` is `ζ₈^φ(r)` with `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)`, matching
 /// [`PhasedOutcomeCompleteSimulation::output_phase_exponent`].
 #[derive(Debug, Clone, PartialEq)]
-struct PhaseData {
+pub(crate) struct PhaseData {
     /// `p`: linear `i` phase.
     linear_i: BitVec,
     /// `s`: linear `-1` phase.
@@ -860,29 +855,61 @@ struct PhaseData {
 }
 
 impl PhaseData {
+    /// Extracts the branch phase function recorded by `simulation`.
+    pub(crate) fn from_simulation(simulation: &PhasedOutcomeCompleteSimulation) -> Self {
+        PhaseData {
+            linear_i: simulation.linear_i_phase(),
+            linear_sign: simulation.linear_sign_phase(),
+            quadratic: simulation.quadratic_phase_matrix(),
+        }
+    }
+
     fn random_count(&self) -> usize {
         self.linear_i.len()
     }
 
     /// The `ζ₈` exponent `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)` for the branch `random_bits`.
-    fn phase_exponent(&self, random_bits: &BitVec) -> u8 {
-        let random_count = self.random_count();
-        let mut linear_i = false;
-        let mut sign = false;
-        for column in 0..random_count {
-            if !random_bits.index(column) {
-                continue;
-            }
-            linear_i ^= self.linear_i.index(column);
-            sign ^= self.linear_sign.index(column);
-            for row in 0..random_count {
-                if random_bits.index(row) && self.quadratic.get((row, column)) {
-                    sign = !sign;
-                }
+    pub(crate) fn phase_exponent(&self, random_bits: &BitVec) -> u8 {
+        phase_form_exponent(
+            self.random_count(),
+            |index| random_bits.index(index),
+            |index| self.linear_i.index(index),
+            |index| self.linear_sign.index(index),
+            |row, column| self.quadratic.get((row, column)),
+        )
+    }
+}
+
+/// Evaluates the `ζ₈ = e^{iπ/4}` exponent of the F₂ phase form `i^⟨p, r⟩ (-1)^⟨B r + s, r⟩` for a
+/// random-bit assignment `r`.
+///
+/// The coefficients are read through accessor closures so the phased simulator and its lowered
+/// [`crate::action`] `PhaseData` — which store `p`, `s`, `B` and `r` in different (aligned vs.
+/// unaligned) representations — share a single implementation. `random_bit`, `linear_i` (`p`) and
+/// `linear_sign` (`s`) are indexed by column and `quadratic` reads `B[(row, column)]`, all over
+/// `0..random_count`.
+pub(crate) fn phase_form_exponent(
+    random_count: usize,
+    random_bit: impl Fn(usize) -> bool,
+    linear_i: impl Fn(usize) -> bool,
+    linear_sign: impl Fn(usize) -> bool,
+    quadratic: impl Fn(usize, usize) -> bool,
+) -> u8 {
+    let mut linear_i_parity = false;
+    let mut sign = false;
+    for column in 0..random_count {
+        if !random_bit(column) {
+            continue;
+        }
+        linear_i_parity ^= linear_i(column);
+        sign ^= linear_sign(column);
+        for row in 0..random_count {
+            if random_bit(row) && quadratic(row, column) {
+                sign = !sign;
             }
         }
-        (2 * u8::from(linear_i) + 4 * u8::from(sign)) % 8
     }
+    (2 * u8::from(linear_i_parity) + 4 * u8::from(sign)) % 8
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -983,17 +1010,6 @@ fn unit_vector(dimension: usize, set_indices: &[usize]) -> BitVec {
     let mut vector = BitVec::zeros(dimension);
     for &index in set_indices {
         vector.assign_index(index, true);
-    }
-    vector
-}
-
-/// Converts a per-bit boolean indicator into a [`BitVec`] of the same length.
-fn indicator_to_bitvec(indicator: &[bool]) -> BitVec {
-    let mut vector = BitVec::zeros(indicator.len());
-    for (index, &set) in indicator.iter().enumerate() {
-        if set {
-            vector.assign_index(index, true);
-        }
     }
     vector
 }
