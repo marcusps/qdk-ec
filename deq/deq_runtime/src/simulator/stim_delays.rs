@@ -32,9 +32,41 @@ use super::common::DelayBatch;
 ///
 /// Each target of these instructions contributes one measurement bit,
 /// except for `MPP` where each complete Pauli product term contributes one.
-const MEASUREMENT_INSTRUCTIONS: &[&str] = &[
+pub const MEASUREMENT_INSTRUCTIONS: &[&str] = &[
     "M", "MZ", "MX", "MY", "MR", "MRX", "MRY", "MRZ", "MXX", "MYY", "MZZ", "MPP", "MPAD",
 ];
+
+/// Count measurement bits in a Stim circuit by scanning the text line by line.
+///
+/// Unlike `stim::Circuit::num_measurements()`, this only requires that the
+/// measurement-producing instruction *names* be recognized (`M`, `MR`, `MZ`,
+/// etc.); arbitrary unrecognized instructions on other lines are silently
+/// ignored.  This makes the function safe to use on Stim files that contain
+/// extensions not understood by the upstream `stim` crate (e.g. QDK's
+/// `LOSS_ERROR`).
+///
+/// # Panics
+///
+/// - If a `REPEAT` instruction is encountered (we do not expand loops; the
+///   measurement count would otherwise depend on dynamic state).
+pub fn count_measurements(stim_text: &str) -> usize {
+    let mut measurement_count: usize = 0;
+    for line in stim_text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let instr_name = trimmed.split(|c: char| c.is_whitespace() || c == '(').next().unwrap_or("");
+        if instr_name == "REPEAT" {
+            panic!("REPEAT blocks are not supported.");
+        }
+        let name_upper = instr_name.to_uppercase();
+        if MEASUREMENT_INSTRUCTIONS.contains(&name_upper.as_str()) {
+            measurement_count += count_measurement_targets(trimmed, &name_upper);
+        }
+    }
+    measurement_count
+}
 
 /// Parse `#!delay` directives and measurement instructions from a Stim
 /// circuit's text to build a streaming delay schedule.
@@ -114,7 +146,10 @@ pub(crate) fn extract_delay_schedule(stim_text: &str, expected_measurements: usi
 ///
 /// For most instructions, each qubit target produces one measurement bit.
 /// For `MPP`, each `*`-separated Pauli product term produces one bit.
-fn count_measurement_targets(line: &str, instr_name: &str) -> usize {
+/// Return the number of measurement bits contributed by a single Stim
+/// instruction line.  `instr_name` must be the uppercased opcode from
+/// [`MEASUREMENT_INSTRUCTIONS`]; the caller is responsible for that check.
+pub fn count_measurement_targets(line: &str, instr_name: &str) -> usize {
     // Strip instruction name and optional parenthesized arguments
     let after_name = line
         .trim()

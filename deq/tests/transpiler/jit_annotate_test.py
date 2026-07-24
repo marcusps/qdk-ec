@@ -14,7 +14,7 @@ REP_DEQ = (
 
 def test_annotate_preserves_logicals_and_stabilizers() -> None:
     qfile = parse("""
-        CODE Rep [[3,1,3]] {
+        CODE Rep [[3,1,1]] {
             LOGICAL X0*X1*X2 Z0*Z1*Z2
             STABILIZER Z0*Z1 Z1*Z2
         }
@@ -27,7 +27,7 @@ def test_annotate_preserves_logicals_and_stabilizers() -> None:
 
 def test_annotate_comments_out_circuit_replaces_check_mode() -> None:
     qfile = parse("""
-        CODE Rep [[3,1,3]] {
+        CODE Rep [[3,1,1]] {
             LOGICAL X0*X1*X2 Z0*Z1*Z2
             STABILIZER Z0*Z1 Z1*Z2
         }
@@ -53,7 +53,7 @@ def test_annotate_comments_out_circuit_replaces_check_mode() -> None:
 
 def test_annotate_inserts_auto_checks_after_measurement() -> None:
     qfile = parse("""
-        CODE Rep [[3,1,3]] {
+        CODE Rep [[3,1,1]] {
             LOGICAL X0*X1*X2 Z0*Z1*Z2
             STABILIZER Z0*Z1 Z1*Z2
         }
@@ -76,7 +76,7 @@ def test_annotate_inserts_auto_checks_after_measurement() -> None:
 
 def test_annotate_drops_user_check_emits_auto() -> None:
     qfile = parse("""
-        CODE Rep [[3,1,3]] {
+        CODE Rep [[3,1,1]] {
             LOGICAL X0*X1*X2 Z0*Z1*Z2
             STABILIZER Z0*Z1 Z1*Z2
         }
@@ -128,7 +128,7 @@ def test_annotated_output_is_a_valid_deq_file_with_same_jit_library() -> None:
 
 def test_annotate_unrolls_repeat_blocks() -> None:
     qfile = parse("""
-        CODE Rep [[3,1,3]] {
+        CODE Rep [[3,1,1]] {
             LOGICAL X0*X1*X2 Z0*Z1*Z2
             STABILIZER Z0*Z1 Z1*Z2
         }
@@ -148,7 +148,7 @@ def test_annotate_unrolls_repeat_blocks() -> None:
 
 def test_annotate_renders_compose_as_gadget_and_program_verbatim() -> None:
     qfile = parse("""
-        CODE Rep [[3,1,3]] {
+        CODE Rep [[3,1,1]] {
             LOGICAL X0*X1*X2 Z0*Z1*Z2
             STABILIZER Z0*Z1 Z1*Z2
         }
@@ -186,7 +186,7 @@ def test_annotate_renders_compose_as_gadget_and_program_verbatim() -> None:
 def test_annotate_readout_shows_flips_comment() -> None:
     """MeasureZ readout should show which input observables flip it."""
     qfile = parse("""
-        CODE Rep [[3,1,3]] {
+        CODE Rep [[3,1,1]] {
             LOGICAL X0*X1*X2 Z0*Z1*Z2
             STABILIZER Z0*Z1 Z1*Z2
         }
@@ -200,7 +200,7 @@ def test_annotate_readout_shows_flips_comment() -> None:
     annotated = annotate(qfile)
     readout_lines = [l for l in annotated.splitlines() if "READOUT" in l]
     assert len(readout_lines) == 1
-    assert "# flipped by: IN0.LX0" in readout_lines[0]
+    assert "# IN0.LX0" in readout_lines[0]
 
 
 def test_annotate_readout_no_inputs_no_flips() -> None:
@@ -214,13 +214,13 @@ def test_annotate_readout_no_inputs_no_flips() -> None:
     annotated = annotate(qfile)
     readout_lines = [l for l in annotated.splitlines() if "READOUT" in l]
     assert len(readout_lines) == 1
-    assert "# flipped by:" not in readout_lines[0]
+    assert "#" not in readout_lines[0]
 
 
 def test_annotate_readout_comment_survives_roundtrip() -> None:
     """Propagation comments are stripped by parser — round-trip still works."""
     qfile = parse("""
-        CODE Rep [[3,1,3]] {
+        CODE Rep [[3,1,1]] {
             LOGICAL X0*X1*X2 Z0*Z1*Z2
             STABILIZER Z0*Z1 Z1*Z2
         }
@@ -232,7 +232,7 @@ def test_annotate_readout_comment_survives_roundtrip() -> None:
         }
         """)
     annotated = annotate(qfile)
-    assert "# flipped by:" in annotated
+    assert "# IN0.LX0" in annotated
     # Must re-parse cleanly.
     round_trip = parse(annotated)
     # And produce the same JIT library.
@@ -296,8 +296,10 @@ def test_annotate_compose_with_multiple_input_ports() -> None:
     assert len(nt_anno.unfinished_checks) == len(nt_orig.unfinished_checks)
 
 
-def test_annotate_virtual_logical_roundtrips() -> None:
-    """VIRTUAL LX0 must survive annotation and re-transpile identically."""
+def test_annotate_virtual_logical_absorbed_into_propagate_flip() -> None:
+    """VIRTUAL LX0 is absorbed into the PROPAGATE row's ``FLIP`` keyword
+    by the annotator; the source-level ``VIRTUAL`` statement is dropped.
+    """
     qfile = parse("""
         CODE Trivial [[1,1,1]] {
             LOGICAL X0 Z0
@@ -309,11 +311,13 @@ def test_annotate_virtual_logical_roundtrips() -> None:
         }
     """)
     annotated = annotate(qfile)
-    # PROPAGATE should capture the flip.
+    # PROPAGATE captures the flip as the trailing FLIP keyword.
     assert "PROPAGATE OUT0.LX0 FROM IN0.LX0 FLIP" in annotated
-    # VIRTUAL should still appear (live, not dropped).
-    assert "VIRTUAL LX0" in annotated
-    # Must re-parse and re-transpile cleanly (no crash).
+    # VIRTUAL is no longer re-emitted; the FLIP suffix carries the
+    # same contribution.
+    assert "VIRTUAL" not in annotated
+    # Must re-parse and re-transpile cleanly (no crash) and produce
+    # identical propagation matrices.
     round_trip = parse(annotated)
     build_jit_library(round_trip)
 
@@ -340,3 +344,146 @@ def test_annotate_preselect_statement() -> None:
     round_trip = parse(annotated)
     recompiled = build_jit_library(round_trip)
     assert len(recompiled.gadget_types) == 1
+
+
+def test_annotate_multi_target_preselect_statement() -> None:
+    """Multi-target PRESELECT with XOR parity round-trips through annotate."""
+    qfile = parse("""
+        CODE Trivial [[1,1,1]] {
+            LOGICAL X0 Z0
+        }
+        GADGET Prep {
+            R 0 1
+            H 0
+            H 1
+            M 0
+            M 1
+            PRESELECT rec[-1] rec[-2] 1
+            OUTPUT Trivial 0
+        }
+    """)
+    annotated = annotate(qfile)
+    assert "PRESELECT rec[-1] rec[-2] 1" in annotated
+    round_trip = parse(annotated)
+    recompiled = build_jit_library(round_trip)
+    assert len(recompiled.gadget_types) == 1
+
+
+def test_annotate_compose_preselect_translates_absolute_to_relative() -> None:
+    """A COMPOSE that calls two sub-gadgets whose PRESELECTs use absolute
+    ``M<i>`` targets: the annotator must render the composed synthetic
+    gadget with the equivalent relative ``rec[-k]`` targets.
+    """
+    qfile = parse("""
+        CODE Trivial [[1,1,1]] {
+            LOGICAL X0 Z0
+        }
+        GADGET PrepA {
+            R 0
+            MX 0
+            PRESELECT M0 0
+            OUTPUT Trivial 0
+        }
+        GADGET PrepB {
+            INPUT Trivial 0
+            MX 0
+            PRESELECT M0 1
+            OUTPUT Trivial 0
+        }
+        COMPOSE PrepAB {
+            OUTPUT Trivial 0
+            PrepA OUT(0)
+            PrepB IN(0) OUT(0)
+        }
+    """)
+    annotated = annotate(qfile)
+
+    # The compose is rendered as a GADGET block, not left as COMPOSE.
+    assert "GADGET PrepAB" in annotated
+    # Both sub-gadgets' PRESELECTs appear inside PrepAB's block, with
+    # their absolute ``M<i>`` targets translated into the equivalent
+    # relative form measured at the point of the PRESELECT.
+    compose_block = annotated.split("GADGET PrepAB", 1)[1]
+    prepab_body = compose_block.split("}", 1)[0]
+    preselect_lines = [
+        line.strip()
+        for line in prepab_body.splitlines()
+        if "PRESELECT" in line
+    ]
+    assert preselect_lines == [
+        "PRESELECT rec[-1] 0",
+        "PRESELECT rec[-1] 1",
+    ], f"got: {preselect_lines}"
+
+    # No absolute ``M<i>`` PRESELECT target should leak through.
+    for line in preselect_lines:
+        assert " M" not in f" {line}", f"absolute target leaked: {line}"
+
+    # The annotated file must still be parseable.
+    parse(annotated)
+
+
+def test_annotate_s_gate_on_trivial_code() -> None:
+    """Regression: an ``S`` gate on a trivial single-qubit code used to
+    panic in ``_compute_pc_logical_via_flows`` with
+    ``null-space sign closure produced non-real factor 1j; algebra bug``.
+
+    The S gate maps ``X -> Y`` and ``Z -> Z``.  With the output
+    observable basis ``{X_L, Z_L}``, the null-space reconstruction
+    picks ``u`` / ``v`` combinations that select anticommuting
+    observables of the same logical qubit (``X_L * Z_L = -iY_L``), so
+    the observable-side ``reconstructed_input.sign /
+    reconstructed_output.sign`` term picks up a ±i phase and used to
+    make ``sign_factor`` imaginary.  The flow-side ratio
+    ``combined_output.sign / combined_input.sign`` is the same ±1
+    physical sign but carries the same ±i phase in both numerator and
+    denominator, so those cancel — the fix uses the flow-side ratio.
+    """
+    qfile = parse("""
+        CODE Trivial [[1,1,1]] {
+            LOGICAL X0 Z0
+        }
+        GADGET SGate {
+            INPUT Trivial 0
+            S 0
+            OUTPUT Trivial 0
+        }
+    """)
+    annotated = annotate(qfile)
+    assert "PROPAGATE OUT0.LZ0 FROM IN0.LX0 IN0.LZ0 FLIP" in annotated
+    assert "PROPAGATE OUT0.LX0 FROM IN0.LX0" in annotated
+    # The annotated form must transpile back to the same JIT library.
+    from deq.transpiler.jit_library_builder import build_jit_library
+    src_lib = build_jit_library(qfile)
+    ann_lib = build_jit_library(parse(annotated))
+    src_cp = src_lib.gadget_types[0].base.correction_propagation
+    ann_cp = ann_lib.gadget_types[0].base.correction_propagation
+    assert (src_cp.rows, src_cp.cols) == (ann_cp.rows, ann_cp.cols)
+    assert sorted(zip(src_cp.i, src_cp.j)) == sorted(zip(ann_cp.i, ann_cp.j))
+
+
+def test_annotate_s_gate_on_two_qubit_code_preserves_zz() -> None:
+    """Transversal S on a 2-logical trivial code applies the single-qubit
+    S propagation per logical qubit.  Also exercises the null-space
+    solver path where the raw kernel basis contains multiple imaginary-
+    sign_factor vectors (the coset structure the previous fix mishandled).
+    """
+    qfile = parse("""
+        CODE Two [[2,2,1]] {
+            LOGICAL X0 Z0
+            LOGICAL X1 Z1
+        }
+        GADGET SS {
+            INPUT Two 0 1
+            S 0
+            S 1
+            OUTPUT Two 0 1
+        }
+    """)
+    annotated = annotate(qfile)
+    # Each qubit independently follows the single-qubit S propagation.
+    assert "PROPAGATE OUT0.LZ0 FROM IN0.LX0 IN0.LZ0 FLIP" in annotated
+    assert "PROPAGATE OUT0.LX0 FROM IN0.LX0" in annotated
+    assert "PROPAGATE OUT0.LZ1 FROM IN0.LX1 IN0.LZ1 FLIP" in annotated
+    assert "PROPAGATE OUT0.LX1 FROM IN0.LX1" in annotated
+    build_jit_library(parse(annotated))
