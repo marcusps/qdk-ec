@@ -77,7 +77,7 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
     // Reduce the symplectic action to the identity by left-multiplying transvections `T_{v₁}, …,
     // T_{v_k}`, so that `T_{v_k} ⋯ T_{v₁} · F = I` and hence `F = T_{v₁} ⋯ T_{v_k}`. Replaying the
     // factors in reverse order rebuilds `F` from the identity.
-    while let Some(transvection) = next_transvection(&working, qubit_count) {
+    while let Some(transvection) = next_transvection(&working) {
         working.left_mul_pauli_exp(&transvection);
         recorded.push(transvection);
         debug_assert!(
@@ -156,7 +156,8 @@ fn symplectic_basis(qubit_count: usize) -> impl Iterator<Item = SparsePauli> {
 /// — a residue vector — which lowers the residue rank by one. If no such `x` exists but `working`
 /// is non-trivial (the hyperbolic case), any nonzero residue vector `v` makes the action
 /// non-hyperbolic while preserving the residue space, costing one extra transvection.
-fn next_transvection(working: &CliffordUnitary, qubit_count: usize) -> Option<SparsePauli> {
+fn next_transvection(working: &CliffordUnitary) -> Option<SparsePauli> {
+    let qubit_count = working.num_qubits();
     let basis: Vec<SparsePauli> = symplectic_basis(qubit_count).collect();
     let images: Vec<DensePauli> = basis.iter().map(|pauli| working.image(pauli)).collect();
 

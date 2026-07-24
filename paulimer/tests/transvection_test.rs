@@ -6,8 +6,10 @@
 //! the centralizer contract, rather than exact minimality.
 
 use binar::Bitwise;
+use paulimer::UnitaryOp;
 use paulimer::clifford::{Clifford, CliffordMutable, CliffordUnitary, clifford_centralizer, clifford_to_transvections};
 use paulimer::pauli::{Pauli, SparsePauli};
+use proptest::collection::vec;
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -191,20 +193,69 @@ fn many_random_cliffords_reproduce_symplectic_action() {
     }
 }
 
+/// A single Clifford generator, modeled as an operation so proptest can shrink a failing input down
+/// to a minimal gate sequence (unlike an opaque RNG seed).
+#[derive(Clone, Debug)]
+enum Gate {
+    Single { op: UnitaryOp, qubit: usize },
+    Two { op: UnitaryOp, first: usize, second: usize },
+}
+
+fn distinct_pair(qubit_count: usize) -> impl Strategy<Value = (usize, usize)> {
+    (0..qubit_count, 0..qubit_count - 1)
+        .prop_map(|(first, second)| (first, if second < first { second } else { second + 1 }))
+}
+
+fn gate_strategy(qubit_count: usize) -> BoxedStrategy<Gate> {
+    use UnitaryOp::{ControlledX, ControlledZ, Hadamard, SqrtX, SqrtZ, Swap, X, Y, Z};
+    let single = (
+        prop::sample::select(vec![Hadamard, SqrtZ, SqrtX, X, Y, Z]),
+        0..qubit_count,
+    )
+        .prop_map(|(op, qubit)| Gate::Single { op, qubit });
+    if qubit_count < 2 {
+        return single.boxed();
+    }
+    let two = (
+        prop::sample::select(vec![ControlledX, ControlledZ, Swap]),
+        distinct_pair(qubit_count),
+    )
+        .prop_map(|(op, (first, second))| Gate::Two { op, first, second });
+    prop_oneof![3 => single, 1 => two].boxed()
+}
+
+fn clifford_from_gates(qubit_count: usize, gates: &[Gate]) -> CliffordUnitary {
+    let mut clifford = CliffordUnitary::identity(qubit_count);
+    for gate in gates {
+        match *gate {
+            Gate::Single { op, qubit } => clifford.left_mul(op, &[qubit]),
+            Gate::Two { op, first, second } => clifford.left_mul(op, &[first, second]),
+        }
+    }
+    clifford
+}
+
+/// A qubit count paired with a random gate sequence acting on it.
+fn scenario() -> impl Strategy<Value = (usize, Vec<Gate>)> {
+    (1usize..7).prop_flat_map(|qubit_count| {
+        vec(gate_strategy(qubit_count), 0..=3 * qubit_count).prop_map(move |gates| (qubit_count, gates))
+    })
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(512))]
 
     #[test]
-    fn reproduces_symplectic_action(qubit_count in 0usize..7, seed in any::<u64>()) {
-        let clifford = random_clifford(qubit_count, seed);
+    fn reproduces_symplectic_action((qubit_count, gates) in scenario()) {
+        let clifford = clifford_from_gates(qubit_count, &gates);
         let transvections = clifford_to_transvections(&clifford);
         let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
         prop_assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
     }
 
     #[test]
-    fn decomposition_is_linear_and_no_shorter_than_minimum(qubit_count in 0usize..7, seed in any::<u64>()) {
-        let clifford = random_clifford(qubit_count, seed);
+    fn decomposition_is_linear_and_no_shorter_than_minimum((qubit_count, gates) in scenario()) {
+        let clifford = clifford_from_gates(qubit_count, &gates);
         let transvection_count = clifford_to_transvections(&clifford).len();
         let minimum = residue_rank(&clifford);
         prop_assert!(
@@ -218,8 +269,8 @@ proptest! {
     }
 
     #[test]
-    fn centralizer_is_conjugation_fixed(qubit_count in 0usize..7, seed in any::<u64>()) {
-        let clifford = random_clifford(qubit_count, seed);
+    fn centralizer_is_conjugation_fixed((qubit_count, gates) in scenario()) {
+        let clifford = clifford_from_gates(qubit_count, &gates);
         for generator in clifford_centralizer(&clifford) {
             prop_assert!(is_conjugation_fixed(&clifford, &generator));
             prop_assert!(is_non_identity(&generator), "centralizer generators must be non-identity");
