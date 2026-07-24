@@ -230,7 +230,7 @@ fn claimed_state(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool], qu
     for qubit in 0..qubit_count {
         let mut bit = false;
         for (column, random_bit) in random_bits.iter().enumerate().take(random_outcome_count) {
-            if random_bits[column] && sign_matrix[(qubit, column)] {
+            if *random_bit && sign_matrix[(qubit, column)] {
                 bit = !bit;
             }
         }
@@ -258,8 +258,8 @@ fn outcome_vector(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool]) -
     (0..sim.outcome_count())
         .map(|row| {
             let mut bit = shift.index(row);
-            for column in 0..random_outcome_count {
-                if random_bits[column] && outcome_matrix.row(row).index(column) {
+            for (column, random_bit) in random_bits.iter().enumerate().take(random_outcome_count) {
+                if *random_bit && outcome_matrix.row(row).index(column) {
                     bit = !bit;
                 }
             }
