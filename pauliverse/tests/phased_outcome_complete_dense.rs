@@ -244,7 +244,7 @@ fn claimed_state(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool], qu
 
     let exponent = i64::from(sim.output_phase_exponent(random_bits));
     for amplitude in &mut dense.amp {
-        *amplitude = amplitude.mul(zeta8(exponent));
+        *amplitude *= zeta8(exponent);
     }
     let mut amp = dense.amp;
     normalize(&mut amp);

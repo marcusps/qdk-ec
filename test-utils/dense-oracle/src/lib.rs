@@ -17,40 +17,17 @@
 )]
 
 use binar::{Bitwise, BitwiseMut};
+use num_complex::Complex;
 use paulimer::clifford::{Clifford, PhasedCliffordUnitary};
 use paulimer::pauli::Pauli;
 use paulimer::{DensePauli, UnitaryOp};
 
-/// Minimal complex-number type used by the dense oracle.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct C {
-    pub re: f64,
-    pub im: f64,
-}
-
-impl C {
-    pub const ZERO: C = C { re: 0.0, im: 0.0 };
-    pub fn new(re: f64, im: f64) -> C {
-        C { re, im }
-    }
-    pub fn add(self, o: C) -> C {
-        C::new(self.re + o.re, self.im + o.im)
-    }
-    pub fn mul(self, o: C) -> C {
-        C::new(self.re * o.re - self.im * o.im, self.re * o.im + self.im * o.re)
-    }
-    pub fn scale(self, s: f64) -> C {
-        C::new(self.re * s, self.im * s)
-    }
-    pub fn abs2(self) -> f64 {
-        self.re * self.re + self.im * self.im
-    }
-}
+/// Complex amplitude type used throughout the dense oracle.
+pub type C = Complex<f64>;
 
 /// `exp(i * pi/4 * k)`, i.e. the `k`-th power of the primitive 8th root of unity.
 pub fn zeta8(k: i64) -> C {
-    let angle = std::f64::consts::FRAC_PI_4 * (k.rem_euclid(8)) as f64;
-    C::new(angle.cos(), angle.sin())
+    Complex::cis(std::f64::consts::FRAC_PI_4 * k.rem_euclid(8) as f64)
 }
 
 /// `1 / sqrt(2)`.
@@ -74,8 +51,8 @@ impl Dense {
             if base & bit == 0 {
                 let amplitude_0 = self.amp[base];
                 let amplitude_1 = self.amp[base | bit];
-                self.amp[base] = matrix[0][0].mul(amplitude_0).add(matrix[0][1].mul(amplitude_1));
-                self.amp[base | bit] = matrix[1][0].mul(amplitude_0).add(matrix[1][1].mul(amplitude_1));
+                self.amp[base] = matrix[0][0] * amplitude_0 + matrix[0][1] * amplitude_1;
+                self.amp[base | bit] = matrix[1][0] * amplitude_0 + matrix[1][1] * amplitude_1;
             }
         }
     }
@@ -98,7 +75,7 @@ impl Dense {
         let second_bit = 1usize << (self.qubit_count - 1 - second_qubit);
         for base in 0..(1 << self.qubit_count) {
             if base & first_bit != 0 && base & second_bit != 0 {
-                self.amp[base] = self.amp[base].scale(-1.0);
+                self.amp[base] = -self.amp[base];
             }
         }
     }
@@ -135,7 +112,7 @@ impl Dense {
                 }
             }
             let coeff = zeta8(2 * phase + 4 * sign_parity);
-            out[target] = out[target].add(self.amp[base].mul(coeff));
+            out[target] += self.amp[base] * coeff;
         }
         out
     }
@@ -145,9 +122,7 @@ impl Dense {
     pub fn apply_pauli_exp(&mut self, x_bits: &[bool], z_bits: &[bool], phase: i64) {
         let pauli_applied = self.pauli_applied(x_bits, z_bits, phase);
         for base in 0..self.amp.len() {
-            self.amp[base] = self.amp[base]
-                .add(pauli_applied[base].mul(C::new(0.0, 1.0)))
-                .scale(ROOT_HALF);
+            self.amp[base] = (self.amp[base] + pauli_applied[base] * Complex::I) * ROOT_HALF;
         }
     }
     pub fn apply_controlled_pauli(
@@ -158,24 +133,24 @@ impl Dense {
         // controlled_pauli(first, second) = (I + first)/2 + (I - first)/2 * second
         let first_pauli_applied = self.pauli_applied(&first_pauli.0, &first_pauli.1, first_pauli.2);
         let plus: Vec<C> = (0..self.amp.len())
-            .map(|index| self.amp[index].add(first_pauli_applied[index]).scale(0.5))
+            .map(|index| (self.amp[index] + first_pauli_applied[index]) * 0.5)
             .collect();
         let minus = Dense {
             qubit_count: self.qubit_count,
             amp: (0..self.amp.len())
-                .map(|index| self.amp[index].add(first_pauli_applied[index].scale(-1.0)).scale(0.5))
+                .map(|index| (self.amp[index] - first_pauli_applied[index]) * 0.5)
                 .collect(),
         };
         let second_pauli_applied_to_minus = minus.pauli_applied(&second_pauli.0, &second_pauli.1, second_pauli.2);
         for index in 0..self.amp.len() {
-            self.amp[index] = plus[index].add(second_pauli_applied_to_minus[index]);
+            self.amp[index] = plus[index] + second_pauli_applied_to_minus[index];
         }
     }
     pub fn project(&mut self, x_bits: &[bool], z_bits: &[bool], phase: i64, outcome: bool) {
         let pauli_applied = self.pauli_applied(x_bits, z_bits, phase);
         let sign = if outcome { -1.0 } else { 1.0 };
         for index in 0..self.amp.len() {
-            self.amp[index] = self.amp[index].add(pauli_applied[index].scale(sign)).scale(0.5);
+            self.amp[index] = (self.amp[index] + pauli_applied[index] * sign) * 0.5;
         }
         normalize(&mut self.amp);
     }
@@ -186,11 +161,11 @@ impl Dense {
 /// # Panics
 /// Panics if the state has (near) zero norm.
 pub fn normalize(amp: &mut [C]) {
-    let norm = amp.iter().map(|amplitude| amplitude.abs2()).sum::<f64>().sqrt();
+    let norm = amp.iter().map(|amplitude| amplitude.norm_sqr()).sum::<f64>().sqrt();
     assert!(norm > 1e-9, "attempted to normalize a vanishing state");
     let inv = 1.0 / norm;
     for amplitude in amp.iter_mut() {
-        *amplitude = amplitude.scale(inv);
+        *amplitude *= inv;
     }
 }
 
@@ -211,20 +186,20 @@ pub fn gate_matrix(op: UnitaryOp) -> [[C; 2]; 2] {
         UnitaryOp::SqrtZ => [[C::new(1.0, 0.0), C::ZERO], [C::ZERO, C::new(0.0, 1.0)]],
         UnitaryOp::SqrtZInv => [[C::new(1.0, 0.0), C::ZERO], [C::ZERO, C::new(0.0, -1.0)]],
         UnitaryOp::SqrtX => [
-            [zeta8(1).scale(root_half), zeta8(7).scale(root_half)],
-            [zeta8(7).scale(root_half), zeta8(1).scale(root_half)],
+            [zeta8(1) * root_half, zeta8(7) * root_half],
+            [zeta8(7) * root_half, zeta8(1) * root_half],
         ],
         UnitaryOp::SqrtXInv => [
-            [zeta8(7).scale(root_half), zeta8(1).scale(root_half)],
-            [zeta8(1).scale(root_half), zeta8(7).scale(root_half)],
+            [zeta8(7) * root_half, zeta8(1) * root_half],
+            [zeta8(1) * root_half, zeta8(7) * root_half],
         ],
         UnitaryOp::SqrtY => [
-            [zeta8(1).scale(root_half), zeta8(5).scale(root_half)],
-            [zeta8(1).scale(root_half), zeta8(1).scale(root_half)],
+            [zeta8(1) * root_half, zeta8(5) * root_half],
+            [zeta8(1) * root_half, zeta8(1) * root_half],
         ],
         UnitaryOp::SqrtYInv => [
-            [zeta8(7).scale(root_half), zeta8(7).scale(root_half)],
-            [zeta8(3).scale(root_half), zeta8(7).scale(root_half)],
+            [zeta8(7) * root_half, zeta8(7) * root_half],
+            [zeta8(3) * root_half, zeta8(7) * root_half],
         ],
         other => panic!("gate_matrix called on multi-qubit op {other:?}"),
     }
@@ -254,7 +229,7 @@ pub fn statevector(phased: &PhasedCliffordUnitary) -> Vec<C> {
             }
         }
         if let Some(exp) = phased.state_amplitude_phase_exponent_usize(value) {
-            out[idx] = zeta8(i64::from(exp)).scale(mag);
+            out[idx] = zeta8(i64::from(exp)) * mag;
         }
     }
     out
@@ -280,5 +255,5 @@ pub fn close(left: &[C], right: &[C]) -> bool {
         && left
             .iter()
             .zip(right)
-            .all(|(left_value, right_value)| left_value.add(right_value.scale(-1.0)).abs2() < 1e-6)
+            .all(|(left_value, right_value)| (left_value - right_value).norm_sqr() < 1e-6)
 }
