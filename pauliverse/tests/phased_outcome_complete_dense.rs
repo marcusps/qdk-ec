@@ -229,7 +229,7 @@ fn claimed_state(sim: &PhasedOutcomeCompleteSimulation, random_bits: &[bool], qu
     let mut register = AlignedBitVec::zeros(qubit_count);
     for qubit in 0..qubit_count {
         let mut bit = false;
-        for column in 0..random_outcome_count {
+        for (column, random_bit) in random_bits.iter().enumerate().take(random_outcome_count) {
             if random_bits[column] && sign_matrix.row(qubit).index(column) {
                 bit = !bit;
             }
