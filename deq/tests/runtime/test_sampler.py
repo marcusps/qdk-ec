@@ -21,7 +21,7 @@ from deq.runtime import RawSampler, Sampler
 # A self-contained 3-qubit repetition-code memory experiment we can inline
 # so the tests don't depend on a specific file on disk.
 _DEQ_SOURCE = """
-CODE RepetitionCode [[3,1,3]] {
+CODE RepetitionCode [[3,1,1]] {
     LOGICAL X0*X1*X2 Z0*Z1*Z2
     STABILIZER Z0*Z1 Z1*Z2
 }
@@ -143,7 +143,7 @@ def test_sampler_supports_program_with_virtual_pauli_corrections():
     shape that ``compile_program_for_jit`` reads to record VIRTUAL
     toggles, even though the matrix entries stay empty."""
     src = """
-    CODE Rep [[3,1,3]] {
+    CODE Rep [[3,1,1]] {
         LOGICAL X0*X1*X2 Z0*Z1*Z2
         STABILIZER Z0*Z1 Z1*Z2
     }
@@ -175,7 +175,7 @@ def test_sampler_supports_program_with_compose():
     Sampler accepts ``.deq`` files that build up programs with COMPOSE
     blocks — the same way the CLI's transpile pipeline does."""
     src = """
-    CODE Rep [[3,1,3]] {
+    CODE Rep [[3,1,1]] {
         LOGICAL X0*X1*X2 Z0*Z1*Z2
         STABILIZER Z0*Z1 Z1*Z2
     }
@@ -307,5 +307,62 @@ def test_simulator_config_rejects_unknown_field():
             program="Simulation",
             simulator="preselect",
             simulator_config={"max_attempts_typo": 100},
+        )
+
+
+# ── multi-target PRESELECT (XOR parity, PREPARE/REQUIRE emission) ────────────
+
+
+_PRESELECT_XOR_DEQ = """
+CODE Trivial [[1,1,1]] {
+    LOGICAL X0 Z0
+}
+
+GADGET Prep {
+    R 0 1
+    MX 0
+    MX 1
+    PRESELECT rec[-1] rec[-2] 1
+    OUTPUT Trivial 0
+}
+
+GADGET Measure {
+    INPUT Trivial 0
+    M 0
+    READOUT rec[-1]
+}
+
+PROGRAM Simulation {
+    Prep OUT(0)
+    Measure IN(0)
+}
+"""
+
+
+def _shot_bits(shot) -> list[int]:
+    data = shot.outcomes.data
+    return [
+        (data[i // 8] >> (7 - (i % 8))) & 1
+        for i in range(int(shot.outcomes.size))
+    ]
+
+
+@pytest.mark.parametrize("simulator", ["stim", "preselect"])
+def test_multi_target_preselect_enforces_odd_parity(simulator):
+    """``PRESELECT rec[-1] rec[-2] 1`` must reject shots whose XOR is 0.
+
+    Both backends (resample-mode via ``stim`` and retry-mode via
+    ``preselect``) must produce only odd-parity shots.
+    """
+    sampler = Sampler.from_source(
+        _PRESELECT_XOR_DEQ, program="Simulation", simulator=simulator, seed=42
+    )
+    shots = sampler.sample(30)
+    assert len(shots) == 30
+    for shot in shots:
+        bits = _shot_bits(shot)
+        # Measurement layout: Prep's M 0, Prep's M 1, Measure's M 0.
+        assert bits[0] ^ bits[1] == 1, (
+            f"multi-target PRESELECT with parity=1 was violated: {bits}"
         )
 

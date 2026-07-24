@@ -1491,3 +1491,155 @@ def test_program_validity_2_4_success_remote_reference() -> None:
     assert result, f"Expected valid program but got: {result}"
     assert isinstance(result, ExpandedProgram)
     assert 2 in result.expanded_remote_conditional_corrections
+
+
+def test_program_validity_gadget_modifier_logical_and_physical_correction_valid() -> None:
+    """``logical_correction_mod`` and ``physical_correction_mod`` apply cleanly
+    to their base matrices when the modifier dimensions match."""
+    lib = pb.Library(
+        port_types=[pb.PortType(ptype=1, observables=[pb.PortType.Observable()])],
+        gadget_types=[
+            pb.GadgetType(
+                gtype=1,
+                measurements=[pb.GadgetType.Measurement()],
+                outputs=[pb.GadgetType.Port(ptype=1)],
+                readouts=[pb.GadgetType.Readout(measurement_indices=[0])],
+                correction_propagation=util_pb.BitMatrix(rows=1, cols=1),
+                readout_propagation=util_pb.BitMatrix(rows=1, cols=1),
+                logical_correction=util_pb.BitMatrix(rows=1, cols=1),
+                physical_correction=util_pb.BitMatrix(rows=1, cols=1),
+            ),
+        ],
+        check_model_types=[pb.CheckModelType(ctype=1, checks=[])],
+        error_model_types=[pb.ErrorModelType(etype=1, errors=[])],
+        program=[
+            pb.Instruction(
+                gadget=pb.Gadget(
+                    gtype=1,
+                    modifier=pb.GadgetModifier(
+                        logical_correction_mod=pb.BitMatrixModifier(
+                            toggle=util_pb.BitMatrix(rows=1, cols=1, i=[0], j=[0]),
+                        ),
+                        physical_correction_mod=pb.BitMatrixModifier(
+                            toggle=util_pb.BitMatrix(rows=1, cols=1, i=[0], j=[0]),
+                        ),
+                    ),
+                )
+            ),
+            pb.Instruction(check_model=pb.CheckModel(ctype=1, gid=1)),
+            pb.Instruction(error_model=pb.ErrorModel(etype=1, cid=1)),
+        ],
+    )
+    result = is_valid(lib)
+    assert isinstance(result, ExpandedProgram)
+    modified = result.modified_gadget_types[1]
+    assert list(zip(modified.logical_correction.i, modified.logical_correction.j)) == [(0, 0)]
+    assert list(zip(modified.physical_correction.i, modified.physical_correction.j)) == [(0, 0)]
+
+
+def test_program_validity_4_3_3_sparse_probabilities_valid() -> None:
+    """Valid ``sparse_probabilities`` (each in [0,1]) applies without violation."""
+    lib_error_type = default_library.error_model_types[0]
+    valid_index = 0
+    assert 0 <= valid_index < len(lib_error_type.errors)
+    result = is_valid(
+        pb.Library(
+            **common,
+            program=[
+                *gadgets,
+                *check_models,
+                pb.Instruction(
+                    error_model=pb.ErrorModel(
+                        etype=1,
+                        cid=1,
+                        modifier=pb.ErrorModel.ErrorModelModifier(
+                            probability_modifier=pb.ProbabilityModifier(
+                                sparse_indices=[valid_index],
+                                sparse_probabilities=[0.25],
+                            )
+                        ),
+                    )
+                ),
+            ],
+        )
+    )
+    assert isinstance(result, ExpandedProgram)
+    assert result.modified_error_model_types[1].errors[valid_index].probability == 0.25
+
+
+def test_program_validity_absolute_gid_and_absolute_cid() -> None:
+    """Exercise the ``absolute_gid`` / ``absolute_cid`` branches of
+    ``_expand_gid`` / ``_expand_cid`` (else branch after the
+    ``absolute_gid == 0`` / ``absolute_cid == 0`` check).
+
+    A ``RemoteGadget`` with a non-zero ``absolute_gid`` resolves directly
+    to that gid without walking input/output/peer relationships; the
+    same applies to ``RemoteCheckModel`` with ``absolute_cid``.  Both
+    branches were previously uncovered because every fixture used the
+    relative (input/output) referencing style.
+    """
+    result = is_valid(
+        pb.Library(
+            port_types=[pb.PortType(ptype=1)],
+            gadget_types=[
+                pb.GadgetType(
+                    gtype=1,
+                    measurements=[pb.GadgetType.Measurement()],
+                    outputs=[pb.GadgetType.Port(ptype=1)],
+                    correction_propagation=util_pb.BitMatrix(rows=0, cols=1),
+                    physical_correction=util_pb.BitMatrix(rows=0, cols=1),
+                ),
+            ],
+            check_model_types=[
+                pb.CheckModelType(
+                    ctype=1,
+                    gtype=1,
+                    remote_gadgets=[
+                        pb.CheckModelType.RemoteGadget(
+                            absolute_gid=1, expecting_gtype=1
+                        ),
+                    ],
+                    checks=[
+                        pb.CheckModelType.Check(
+                            measurements=[
+                                pb.CheckModelType.RemoteMeasurement(
+                                    remote_gadget=0
+                                ),
+                            ]
+                        ),
+                    ],
+                ),
+            ],
+            error_model_types=[
+                pb.ErrorModelType(
+                    etype=1,
+                    ctype=1,
+                    remote_check_models=[
+                        pb.ErrorModelType.RemoteCheckModel(
+                            absolute_cid=1, expecting_ctype=1
+                        ),
+                    ],
+                    errors=[
+                        pb.ErrorModelType.Error(
+                            probability=0.1,
+                            checks=[
+                                pb.ErrorModelType.RemoteCheck(
+                                    remote_check_model=0, check_index=0
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+            program=[
+                pb.Instruction(gadget=pb.Gadget(gtype=1)),
+                pb.Instruction(check_model=pb.CheckModel(ctype=1, gid=1)),
+                pb.Instruction(error_model=pb.ErrorModel(etype=1, cid=1)),
+            ],
+        )
+    )
+    assert isinstance(result, ExpandedProgram)
+    # The absolute_gid reference resolved to gid=1.
+    assert result.remote_gadget_gid_vecs[1] == [1]
+    # The absolute_cid reference resolved to cid=1.
+    assert result.remote_check_model_cid_vecs[1] == [1]

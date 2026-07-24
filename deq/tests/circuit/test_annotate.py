@@ -32,9 +32,7 @@ CIRCUIT_DIR = Path(__file__).parent
 
 def _assert_annotate_roundtrip(deq_path: Path) -> None:
     """Verify that annotating a .deq file preserves transpilation output."""
-    qfile = render_and_parse_file(
-        str(deq_path), mako_defs=None, skip_mako_warning=True
-    )
+    qfile = render_and_parse_file(str(deq_path), mako_defs=None, skip_mako_warning=True)
     orig_lib = build_jit_library(qfile)
     rendered = annotate_impl(qfile)
     anno_lib = build_jit_library(parse_deq(rendered))
@@ -115,5 +113,57 @@ def test_annotate_trivial_gadgets() -> None:
     _assert_annotate_roundtrip(CIRCUIT_DIR / "fixtures" / "trivial_gadgets.deq")
 
 
+def test_annotate_trivial_surgery() -> None:
+    _assert_annotate_roundtrip(CIRCUIT_DIR / "fixtures" / "trivial_surgery.deq")
+
+
 def test_annotate_floquet666() -> None:
     _assert_annotate_roundtrip(CIRCUIT_DIR / "fixtures" / "floquet666.deq")
+
+
+def test_annotate_teleportation_d3() -> None:
+    _assert_annotate_roundtrip(CIRCUIT_DIR / "surface_code" / "teleportation_d3.deq")
+
+
+def test_annotate_lattice_surgery_d3() -> None:
+    _assert_annotate_roundtrip(CIRCUIT_DIR / "surface_code" / "lattice_surgery_d3.deq")
+
+
+def test_annotate_chained_conditional_same_row() -> None:
+    qfile = render_and_parse_file(
+        str(CIRCUIT_DIR / "surface_code" / "teleportation_d3.deq"),
+        mako_defs=None,
+        skip_mako_warning=True,
+    )
+    orig_lib = build_jit_library(qfile)
+    annotated = annotate_impl(qfile)
+    anno_lib = build_jit_library(parse_deq(annotated))
+    _assert_stripped_bytes_equal(
+        orig_lib, anno_lib, "DoubleTeleportConditional + TripleTeleportConditional"
+    )
+    # Annotated compose GADGETs never emit ``CONDITIONAL``: step-9
+    # absorption clears ``logical_correction`` on every merged gadget,
+    # so the annotator has no readout-conditioned flip to re-emit.
+    for name in (
+        "DoubleTeleportConditional",
+        "TripleTeleportConditional",
+    ):
+        block = annotated.split(f"GADGET {name} {{", 1)[1].split("\n}", 1)[0]
+        assert "\n    CONDITIONAL " not in block, (
+            f"unexpected CONDITIONAL line in {name}: annotator should have "
+            f"dropped every source CONDITIONAL (they are absorbed into "
+            f"cp/pc by canonical.merge step 9):\n{block}"
+        )
+
+
+def test_annotate_conditional_readout_flip() -> None:
+    """Regression for issue #122: a conditional Pauli correction whose
+    flipped output observable feeds a downstream ``READOUT`` (the
+    ``Surgery`` gadget's ``CONDITIONAL R0 OUT1.LX0`` followed by a
+    ``MeasureZ``) must survive compose-flatten.
+
+    Prior to the fix the final Z-basis readout of the ``|1⟩``-prepared
+    qubit lost its ``FLIP`` and the annotate byte-equality verification
+    failed, so a plain roundtrip assertion is sufficient to guard it.
+    """
+    _assert_annotate_roundtrip(CIRCUIT_DIR / "fixtures" / "conditional_readout_flip.deq")
