@@ -223,23 +223,8 @@ impl PhasedOutcomeCompleteSimulation {
             random_bits.len() >= n_random,
             "random_bits is shorter than the number of random outcomes"
         );
-
-        let mut linear_i = false;
-        let mut sign = false;
-        for column in 0..n_random {
-            if !random_bits[column] {
-                continue;
-            }
-            linear_i ^= self.linear_i_phase.index(column);
-            sign ^= self.linear_sign_phase.index(column);
-            // quadratic term: sum_{row} B[row][column] r_row r_column = (B^T r)_column for r_column = 1
-            for (row, &set) in random_bits.iter().enumerate().take(n_random) {
-                if set && self.quadratic_phase_matrix.row(row).index(column) {
-                    sign = !sign;
-                }
-            }
-        }
-        (2 * u8::from(linear_i) + 4 * u8::from(sign)) % 8
+        let random: BitVec = random_bits[..n_random].iter().copied().collect();
+        crate::action::PhaseData::from_simulation(self).phase_exponent(&random)
     }
 
     /// Sample measurement outcomes from all `2^{n_r}` branches.
