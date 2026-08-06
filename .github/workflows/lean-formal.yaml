@@ -1,0 +1,29 @@
+name: Lean formal proof
+
+on:
+  pull_request:
+    paths:
+      - "paulimer/formal/**"
+      - ".github/workflows/lean-formal.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "paulimer/formal/**"
+      - ".github/workflows/lean-formal.yaml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: paulimer/formal
+          auto-config: false
+          build: true
+      - name: Reject admitted proofs and project axioms
+        working-directory: paulimer/formal
+        run: |
+          ! grep -R -nE '(^|[[:space:]])(sorry|axiom)([[:space:]]|$)' \
+            PaulimerFormal PaulimerFormal.lean

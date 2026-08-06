@@ -49,9 +49,9 @@ The **correct criterion**, which we adopt in the implementation, is:
 > $r+1$ sub-case, but it is **not** the only one: non-alternating cores can fail to be
 > triangularizable too.
 
-(The exact binary length function in full generality is the more intricate object studied by Callan
-and by Spengler–Wolff; see §6 and the references. Our criterion and the $r/(r+1)$ range are
-verified computationally for up to six qubits.)
+Callan states the universal binary bound $r\leq\ell(\mathbf F)\leq r+1$ in §1.1.
+The mathlib-only Lean development in [`formal/`](../formal/) now supplies a checked proof of that
+bound, the criterion above, strict minimality, and the one-fix theorem used by the implementation.
 
 Triangularizability is *strictly stronger* than being non-alternating; it depends on the
 non-symmetric part of $\mathbf E$ and is not captured by any invariant of the associated quadratic
@@ -267,16 +267,13 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
   the non-hyperbolic analogue of the paper's hyperbolic Lemma 1 patch — the case the paper's
   algorithm omits — and fixes Issue 1.
 
-We verify the result in the test suite against a brute-force BFS oracle on one and two qubits, and
-against the $\{r,\,r+1\}$ range on up to six qubits. Two honest caveats about *strict minimality* for
-large systems: (i) O'Meara's §2.3 warns that over $\mathbb{F}_2$ the exact length function is
-"considerably more complicated" than $r/(r+1)$, so we do **not** claim $\ell(\mathbf F)\in\{r,r+1\}$
-holds for *all* $m$ — only that it does in every case we have checked (through $m=6$), and that
-whenever `find_fix_vector` succeeds the returned length $r+1$ *is* minimal (since a non-triangularizable
-core rules out length $r$). The exact binary length is the object studied by Callan and by
-Spengler–Wolff. (ii) Our `find_fix_vector` restores triangularizability with a *single* extra
-transvection in all tested cases; a rigorous proof that one fix always suffices — or a construction
-handling the rare cases where it might not for large $m$ — is left as a follow-up.
+The test suite additionally checks the result against a brute-force BFS oracle on one and two
+qubits and against the $\{r,r+1\}$ range on up to six qubits. These computations are regression
+checks, not the justification for generality. The Lean proof establishes for every finite $m$ that
+$r\leq\ell(\mathbf F)\leq r+1$, that length $r$ is equivalent to core triangularizability, and that
+otherwise a nonzero $\mathbf w\in\operatorname{Res}(\mathbf F)$ exists for which
+$\mathbf F\mathbf T_{\mathbf w}$ has the same residue rank and a triangularizable core. Thus the
+exhaustive `find_fix_vector` search is total on valid symplectic input.
 
 **Why "non-alternating" is not enough.** Triangularizability of $\mathbf E$ is not determined by any
 symmetric invariant of $\psi_{\mathbf E}$: neither the Arf invariant of $\psi_{\mathbf E}$ nor
@@ -294,7 +291,8 @@ The counterexample of Section 4 is fully finite and self-contained. Both checks 
 $\mathrm{Sp}(4;2)$ Cayley-distance BFS (720 group elements) and the $\mathrm{GL}(3;2)$ congruence
 enumeration (168 candidates) — are small enough to run by hand or in a few lines of code, and the
 repository's own `clifford_to_transvections_minimal` reproduces $\ell(\mathbf F)=r+1$ on the same
-map. No floating point or randomness is involved.
+map. No floating point or randomness is involved. The symbolic proof is reproduced with
+`cd formal && lake build`; it contains no admitted theorem or project-defined axiom.
 
 ## 8. References (verified)
 
