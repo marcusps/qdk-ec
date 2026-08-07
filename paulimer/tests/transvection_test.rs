@@ -1,11 +1,11 @@
 //! Tests for the Clifford -> transvection decomposition (arXiv:2102.11380).
 //!
-//! The decomposition reproduces the *symplectic action* (ignoring Pauli-image signs and the global
-//! phase) with a linear number of factors. It is not guaranteed to hit the strict `r`/`r + 1`
-//! minimum, so these tests validate the symplectic-action round trip, the linear factor bound, and
-//! the centralizer contract, rather than exact minimality.
+//! The greedy decomposition reproduces the *symplectic action* (ignoring Pauli-image signs and the
+//! global phase) with a linear number of factors. It is not guaranteed to hit the strict minimum,
+//! so its tests validate the symplectic-action round trip, the linear factor bound, and the
+//! centralizer contract. Separate tests cover the minimal decomposition.
 
-use binar::Bitwise;
+use binar::{Bitwise, IndexSet};
 use paulimer::UnitaryOp;
 use paulimer::clifford::{Clifford, CliffordMutable, CliffordUnitary, clifford_centralizer, clifford_to_transvections};
 use paulimer::pauli::{Pauli, SparsePauli};
@@ -33,8 +33,7 @@ fn is_non_identity(pauli: &SparsePauli) -> bool {
     !(pauli.x_bits().is_zero() && pauli.z_bits().is_zero())
 }
 
-/// The strict minimal factor count `r = 2n - dim Fix(F)`; the greedy decomposition returns `r` or a
-/// little more.
+/// The residue rank `r = 2n - dim Fix(F)`, a lower bound on every decomposition.
 fn residue_rank(clifford: &CliffordUnitary) -> usize {
     2 * clifford.num_qubits() - clifford_centralizer(clifford).len()
 }
@@ -55,10 +54,10 @@ fn assert_valid_decomposition(clifford: &CliffordUnitary) {
         assert!(is_non_identity(transvection), "factors are non-identity Paulis");
     }
 
-    let minimum = residue_rank(clifford);
+    let lower_bound = residue_rank(clifford);
     assert!(
-        transvections.len() >= minimum,
-        "a decomposition cannot be shorter than the minimum {minimum}, got {}",
+        transvections.len() >= lower_bound,
+        "a decomposition cannot be shorter than the residue rank {lower_bound}, got {}",
         transvections.len()
     );
     assert!(
@@ -257,10 +256,10 @@ proptest! {
     fn decomposition_is_linear_and_no_shorter_than_minimum((qubit_count, gates) in scenario()) {
         let clifford = clifford_from_gates(qubit_count, &gates);
         let transvection_count = clifford_to_transvections(&clifford).len();
-        let minimum = residue_rank(&clifford);
+        let lower_bound = residue_rank(&clifford);
         prop_assert!(
-            transvection_count >= minimum,
-            "got {transvection_count} factors, below the minimum {minimum}"
+            transvection_count >= lower_bound,
+            "got {transvection_count} factors, below the residue rank {lower_bound}"
         );
         prop_assert!(
             transvection_count <= 4 * qubit_count + 2,
@@ -410,10 +409,10 @@ fn assert_valid_minimal_decomposition(clifford: &CliffordUnitary) {
         assert!(is_non_identity(transvection), "factors are non-identity Paulis");
     }
 
-    let minimum = residue_rank(clifford);
+    let rank = residue_rank(clifford);
     assert!(
-        transvections.len() == minimum || transvections.len() == minimum + 1,
-        "the minimal count is r or r + 1 (r = {minimum}), got {}",
+        transvections.len() == rank || transvections.len() == rank + 1,
+        "the minimal count is r or r + 1 (r = {rank}), got {}",
         transvections.len()
     );
     assert!(
@@ -449,6 +448,32 @@ fn minimal_swap_needs_r_plus_one() {
     assert_valid_minimal_decomposition(&swap);
     assert_eq!(residue_rank(&swap), 2);
     assert_eq!(clifford_to_transvections_minimal(&swap).len(), 3);
+}
+
+#[test]
+fn minimal_callan_class_a_needs_r_plus_one() {
+    let centers = [
+        SparsePauli::x(0, 2),
+        SparsePauli::x(1, 2),
+        SparsePauli::from_bits([0, 1].into_iter().collect(), IndexSet::new(), 0),
+        SparsePauli::z(0, 2),
+    ];
+    let clifford = symplectic_action_from_transvections(&centers, 2);
+    let action = action_of(&clifford);
+
+    assert_eq!(
+        action,
+        vec![
+            vec![true, false, true, false],
+            vec![false, true, false, false],
+            vec![false, true, true, false],
+            vec![true, false, true, true],
+        ]
+    );
+    assert!(action[0][2], "⟨X₀, X₀F⟩ = 1, so F is non-hyperbolic");
+    assert_eq!(residue_rank(&clifford), 3);
+    assert_eq!(minimal_length_oracle(&clifford), 4);
+    assert_eq!(clifford_to_transvections_minimal(&clifford).len(), 4);
 }
 
 #[test]
