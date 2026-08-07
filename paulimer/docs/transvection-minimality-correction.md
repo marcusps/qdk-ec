@@ -8,16 +8,17 @@ This note reassesses the minimal-transvection construction in
 > DOI [10.1109/GLOBECOM46510.2021.9685501](https://doi.org/10.1109/GLOBECOM46510.2021.9685501),
 > arXiv:[2102.11380](https://arxiv.org/abs/2102.11380).
 
-against its cited primary source, Callan (1976), an exhaustive two-qubit
-calculation, and the Lean development in [`formal/`](../formal/).
+against its cited primary source, Callan (1976), and an exhaustive two-qubit
+calculation.
 
 The paper's structural matrix identities are correct, and its top-level
 existence claim -- that a minimal decomposition algorithm exists -- is true.
 However, the construction given in and immediately before **Theorem 3** assumes
 that every non-hyperbolic binary symplectic map has a length-$r$
 decomposition. Callan explicitly classifies non-hyperbolic exceptions, and the
-assumption fails on two qubits. The Lean proof repairs this step; it does not
-prove the paper's non-hyperbolic criterion.
+assumption fails on two qubits. The replacement proof was checked independently
+with an interactive theorem prover. It repairs this step; it does not prove the
+paper's non-hyperbolic criterion.
 
 All matrices below are over $\mathbb{F}_2$.
 
@@ -58,10 +59,8 @@ The **correct criterion**, which we adopt in the implementation, is:
 > $r+1$ sub-case, but it is **not** the only one: non-alternating cores can fail to be
 > triangularizable too.
 
-The mathlib-only Lean development supplies a checked proof of that bound, the
-criterion above, strict minimality, and the one-fix theorem used by the
-implementation. Its [proof guide](lean-transvection-minimality-proof.md)
-describes the replacement bordered construction.
+That independent check covers the bound, the criterion above, strict
+minimality, and the one-fix theorem used by the implementation.
 
 The Rust implementation should therefore retain its complete congruence search
 and $r+1$ fallback. No semantic rollback to the paper's non-hyperbolic branch is
@@ -134,10 +133,10 @@ Together these give the correct reduction: **a length-$r$ transvection decomposi
 exists iff there is $\mathbf Q\in\mathrm{GL}(r;2)$ making $\mathbf Q\mathbf E\mathbf Q^{\mathsf T}$
 lower-triangular** — i.e. iff $\mathbf E$ is congruence-triangularizable. So far, so good.
 
-The Lean presentation writes
+An equivalent faithful residue presentation writes
 $\widehat{\mathbf F}=\mathbf V^{\mathsf T}\mathbf D\mathbf V$ and defines
 its core as $\mathbf D^{-\mathsf T}$. From the paper's row-reduction
-identity, $\mathbf D=\mathbf E^{-\mathsf T}$, so the Lean core is exactly
+identity, $\mathbf D=\mathbf E^{-\mathsf T}$, so this core is exactly
 the paper's $\mathbf E$. The difference is notation, not a transpose or
 action convention.
 
@@ -261,8 +260,8 @@ not needed for the paper counterexample or the correctness argument here.
 
 ## 6. Corrected result and implementation
 
-Combining the correct Lemmas 2–3, Callan's $r+1$ bound, and the Lean
-bordered construction gives:
+Combining the correct Lemmas 2–3, Callan's $r+1$ bound, and the bordered
+construction gives:
 
 $$
 \ell(\mathbf F)=
@@ -286,7 +285,7 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
 
 The test suite additionally checks the result against a brute-force BFS oracle on one and two
 qubits and against the $\{r,r+1\}$ range on up to six qubits. These computations are regression
-checks, not the justification for generality. The Lean proof establishes for every finite $m$ that
+checks, not the justification for generality. The proof establishes for every finite $m$ that
 $r\leq\ell(\mathbf F)\leq r+1$, that length $r$ is equivalent to core triangularizability, and that
 otherwise a nonzero $\mathbf w\in\operatorname{Res}(\mathbf F)$ exists for which
 $\mathbf F\mathbf T_{\mathbf w}$ has the same residue rank and a triangularizable core. Thus the
