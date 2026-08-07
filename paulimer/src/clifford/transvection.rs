@@ -9,9 +9,9 @@
 //!
 //! where `⟨·,·⟩` is the symplectic (commutation) form. This module follows the transvection
 //! framework of [arXiv:2102.11380](https://arxiv.org/abs/2102.11380) (Pllaha, Volanto & Tirkkonen,
-//! *Decomposition of Clifford Gates*): every Clifford is a product of transvections, and the
-//! *minimal* number of factors is `r = 2n − dim Fix(F)` (or `r + 1` when the symplectic action `F`
-//! is hyperbolic), where `Fix(F)` is the space of Pauli operators fixed by conjugation.
+//! *Decomposition of Clifford Gates*). The exact minimum is `r` or `r + 1`, where
+//! `r = 2n − dim Fix(F)`; congruence-triangularizability of the residue core, not hyperbolicity
+//! alone, decides which value occurs.
 //!
 //! Two decompositions are provided:
 //!
@@ -20,7 +20,7 @@
 //!   **not guaranteed to hit the strict `r`/`r + 1` minimum** — intermediate maps can become
 //!   hyperbolic, adding an occasional extra factor.
 //! * [`clifford_to_transvections_minimal`] produces the **strict minimum** number of factors
-//!   (`r` or `r + 1`) via a congruence-triangulation of the residue matrix.
+//!   (`r` or `r + 1`) via a congruence-triangulation of the residue core.
 //!
 //! Unlike a sign-exact decomposition into Pauli exponents (which reproduces the full signed tableau,
 //! and hence an exact global phase when replayed on a phased operator, at `O(n²)` factors via
@@ -29,15 +29,15 @@
 //!
 //! ## The minimum factor count
 //!
-//! [arXiv:2102.11380](https://arxiv.org/abs/2102.11380) states (Theorem 1) that the residue matrix
-//! `F̂` of any *non-hyperbolic* symplectic map can be triangularized by congruence, giving a
-//! decomposition into exactly `r = dim Res(F)` transvections. This is **not correct**: there exist
-//! non-hyperbolic maps whose residue core is *not* congruence-triangularizable and which therefore
-//! require `r + 1` transvections. The smallest examples occur already on two qubits; for instance
-//! the symplectic action with residue rank `3` fixed by the standard basis order
-//! `X₀, X₁, Z₀, Z₁` requires four transvections despite being non-hyperbolic. The correct
-//! criterion, used here, is: the minimum is `r` when the residue core is congruence-triangularizable
-//! and `r + 1` otherwise (hyperbolicity is the special case where the core is *alternating*).
+//! [arXiv:2102.11380](https://arxiv.org/abs/2102.11380) states before and within Theorem 3 that the
+//! residue matrix `F̂` of any *non-hyperbolic* symplectic map can be triangularized by congruence,
+//! giving a decomposition into exactly `r = dim Res(F)` transvections. This is **not correct**:
+//! there exist non-hyperbolic maps whose residue core is *not* congruence-triangularizable and
+//! which therefore require `r + 1` transvections. The smallest examples occur on two qubits:
+//! `T_X₀ T_X₁ T_{X₀X₁} T_Z₀` has residue rank `3` and minimal length `4` despite being
+//! non-hyperbolic. The correct criterion, used here, is: the minimum is `r` when the residue core is
+//! congruence-triangularizable and `r + 1` otherwise (hyperbolicity is the special case where the
+//! core is *alternating*).
 
 use std::collections::HashSet;
 
@@ -56,11 +56,10 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 /// signs and the global phase are *not* reproduced; a sign-exact decomposition into Pauli
 /// exponents would preserve them, at the cost of `O(n²)` factors (see the module docs).
 ///
-/// The number of factors is **linear** in the qubit count (`O(n)`). It is close to, but not
-/// guaranteed to equal, the strict minimum `r = 2n − dim Fix(clifford)` (`r + 1` when the
-/// symplectic action is hyperbolic) of [arXiv:2102.11380](https://arxiv.org/abs/2102.11380); the
-/// greedy reduction here can add an occasional extra factor when an intermediate map becomes
-/// hyperbolic. The count is always at least `r`.
+/// The number of factors is **linear** in the qubit count (`O(n)`). The strict minimum is either
+/// `r` or `r + 1`, where `r = 2n − dim Fix(clifford)`; the greedy reduction here can add an
+/// occasional extra factor when an intermediate map becomes hyperbolic. The count is always at
+/// least `r`.
 ///
 /// Every factor is returned with phase exponent `0`; the sign of a transvection does not affect its
 /// symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
@@ -115,7 +114,7 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
 /// This is `Fix(F)`, the kernel of the residue map `P ↦ conj(P) · P`, computed as the left null
 /// space of the residue matrix over GF(2). The returned Paulis are independent generators (with
 /// phase exponent `0`); the centralizer they span has dimension `dim Fix(F) = 2n − r`, where `r` is
-/// the number of factors returned by [`clifford_to_transvections`] for a non-hyperbolic action.
+/// the residue rank and a lower bound on every transvection decomposition.
 ///
 /// # Examples
 ///

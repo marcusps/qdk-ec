@@ -1,6 +1,6 @@
-# A correction to the minimal transvection decomposition of Clifford gates (arXiv:2102.11380)
+# Reassessment of the minimal transvection decomposition in arXiv:2102.11380
 
-This note documents two issues we uncovered in
+This note reassesses the minimal-transvection construction in
 
 > T. Pllaha, K. Volanto, and O. Tirkkonen,
 > *Decomposition of Clifford Gates*,
@@ -8,38 +8,47 @@ This note documents two issues we uncovered in
 > DOI [10.1109/GLOBECOM46510.2021.9685501](https://doi.org/10.1109/GLOBECOM46510.2021.9685501),
 > arXiv:[2102.11380](https://arxiv.org/abs/2102.11380).
 
-while implementing [`clifford_to_transvections_minimal`](../src/clifford/transvection.rs)
-(the minimal-length decomposition of a Clifford's symplectic action into `π/4` Pauli exponents).
-It states the correct minimality criterion we adopted, and backs every claim with a finite,
-machine-checkable computation. All matrices below are over $\mathbb{F}_2$.
+against its cited primary source, Callan (1976), an exhaustive two-qubit
+calculation, and the Lean development in [`formal/`](../formal/).
+
+The paper's structural matrix identities are correct, and its top-level
+existence claim -- that a minimal decomposition algorithm exists -- is true.
+However, the construction given in and immediately before **Theorem 3** assumes
+that every non-hyperbolic binary symplectic map has a length-$r$
+decomposition. Callan explicitly classifies non-hyperbolic exceptions, and the
+assumption fails on two qubits. The Lean proof repairs this step; it does not
+prove the paper's non-hyperbolic criterion.
+
+All matrices below are over $\mathbb{F}_2$.
 
 ## 1. Summary
 
-The paper decomposes a symplectic map $\mathbf{F}\in\mathrm{Sp}(2m;2)$ into *symplectic
-transvections* and claims (Theorem 6, "Transvection Decomposition of Symplectic Matrices", and the
-paragraph preceding it) that the number of factors equals the **residue rank**
+The paper decomposes a symplectic map $\mathbf{F}\in\mathrm{Sp}(2m;2)$ into
+*symplectic transvections* and claims in the discussion preceding Theorem 3
+that the number of factors equals the **residue rank**
 
 $$
 r \;=\; \dim\operatorname{Res}(\mathbf F) \;=\; 2m-\dim\operatorname{Fix}(\mathbf F)
 $$
 
-whenever $\mathbf F$ is **non-hyperbolic**, and $r+1$ when $\mathbf F$ is hyperbolic. Concretely,
-the paper argues (in the paragraph immediately following Lemmas 2–3; line 411 of the arXiv v1
-source) that the *residue matrix* $\widehat{\mathbf F}$ **can always be
-triangularized by congruence when $\mathbf F$ is non-hyperbolic**, which is what would make the
-length-$r$ decomposition exist.
+whenever $\mathbf F$ is **non-hyperbolic**, and $r+1$ when $\mathbf F$
+is hyperbolic. Concretely, line 411 of the arXiv v1 source asserts that the
+residue core **can always be triangularized by congruence for a
+non-hyperbolic map**.
 
-**This is not correct over $\mathbb{F}_2$** — the field of interest for qubit Cliffords. The clean
-"$r$ if non-hyperbolic, $r+1$ if hyperbolic" dichotomy is a classical theorem of Dieudonné (see
-O'Meara, *Symplectic Groups*, Theorem 2.1.11), but that theorem is **stated only for fields
-$F\neq\mathbb{F}_2$**, and O'Meara explicitly warns that over $\mathbb{F}_2$ "the theorem fails … it
-is no longer possible to express every $\sigma$ … as a product of $\operatorname{res}\sigma$ or of
-$(\operatorname{res}\sigma)+1$ transvections" (§2.3, Comments). The paper invokes the dichotomy over
-exactly the one field the classical result excludes. Consequently there exist non-hyperbolic
-symplectic maps whose residue core is *not* congruence-triangularizable and whose minimal
-transvection length is therefore $r+1$, not $r$. The **smallest such example already occurs on two
-qubits** ($m=2$), with residue rank $r=3$ and minimal length $4$; we exhibit one explicitly and
-verify it two independent ways by exhaustive search.
+That assertion is false over $\mathbb{F}_2$. Callan defines an element as
+*exceptional* precisely when it cannot be expressed using $r$ transvections.
+His §1.1 proves the universal bounds
+
+$$
+r\leq\ell(\mathbf F)\leq r+1,
+$$
+
+and Theorem 5.1 classifies the binary exceptions. They include
+non-hyperbolic maps. Thus the part that fails is the
+hyperbolic/non-hyperbolic classification, not the universal $r$/$r+1$ range.
+The smallest non-hyperbolic example already occurs on two qubits, with
+$r=3$ and $\ell(\mathbf F)=4$.
 
 The **correct criterion**, which we adopt in the implementation, is:
 
@@ -49,14 +58,14 @@ The **correct criterion**, which we adopt in the implementation, is:
 > $r+1$ sub-case, but it is **not** the only one: non-alternating cores can fail to be
 > triangularizable too.
 
-(The exact binary length function in full generality is the more intricate object studied by Callan
-and by Spengler–Wolff; see §6 and the references. Our criterion and the $r/(r+1)$ range are
-verified computationally for up to six qubits.)
+The mathlib-only Lean development supplies a checked proof of that bound, the
+criterion above, strict minimality, and the one-fix theorem used by the
+implementation. Its [proof guide](lean-transvection-minimality-proof.md)
+describes the replacement bordered construction.
 
-Triangularizability is *strictly stronger* than being non-alternating; it depends on the
-non-symmetric part of $\mathbf E$ and is not captured by any invariant of the associated quadratic
-form alone. This is exactly the subtle question studied in Botha's work on GF(2) congruence
-triangularization, which the paper itself cites but does not use to qualify the claim.
+The Rust implementation should therefore retain its complete congruence search
+and $r+1$ fallback. No semantic rollback to the paper's non-hyperbolic branch is
+warranted.
 
 ## 2. Setup and notation
 
@@ -93,10 +102,12 @@ $$
 \operatorname{rank}(\widehat{\mathbf F})=r,
 $$
 
-and $\mathbf x\,\widehat{\mathbf F}^{\mathsf T}\mathbf x^{\mathsf T}=\langle\mathbf x,\mathbf x\mathbf F\rangle$,
-so $\widehat{\mathbf F}$ has all-zero diagonal iff $\mathbf F$ is hyperbolic (in which case
-$\widehat{\mathbf F}$ is *alternating*: symmetric with zero diagonal). Row-reducing
-$\widehat{\mathbf F}$ with a transform $\mathbf R$ yields the invertible **core**
+The correct matrix test is that $\mathbf F$ is hyperbolic iff
+$\widehat{\mathbf F}$ is *alternating*, meaning symmetric with zero diagonal.
+Zero diagonal alone is necessary but not sufficient: a non-involution can have
+a nonsymmetric residue matrix with zero diagonal. Row-reducing
+$\widehat{\mathbf F}$ with a transform $\mathbf R$ yields the invertible
+**core**
 
 $$
 \mathbf R\,\widehat{\mathbf F}\,\mathbf R^{\mathsf T}=\begin{pmatrix}\mathbf E&\mathbf 0\\\mathbf 0&\mathbf 0\end{pmatrix},
@@ -123,6 +134,13 @@ Together these give the correct reduction: **a length-$r$ transvection decomposi
 exists iff there is $\mathbf Q\in\mathrm{GL}(r;2)$ making $\mathbf Q\mathbf E\mathbf Q^{\mathsf T}$
 lower-triangular** — i.e. iff $\mathbf E$ is congruence-triangularizable. So far, so good.
 
+The Lean presentation writes
+$\widehat{\mathbf F}=\mathbf V^{\mathsf T}\mathbf D\mathbf V$ and defines
+its core as $\mathbf D^{-\mathsf T}$. From the paper's row-reduction
+identity, $\mathbf D=\mathbf E^{-\mathsf T}$, so the Lean core is exactly
+the paper's $\mathbf E$. The difference is notation, not a transpose or
+action convention.
+
 The error is the very next sentence (the paragraph following Lemmas 2–3; line 411 of the arXiv v1
 source), which asserts existence unconditionally:
 
@@ -135,25 +153,24 @@ attributed to O'Meara and Callan:
 
 > "a non-hyperbolic map $\mathbf F$ can be written as a product of $r$ *independent* transvections."
 
-Theorem 6 (T-main1) then instructs one to "let $\mathbf Q$ be such that
+Theorem 3 (T-main1) then instructs one to "let $\mathbf Q$ be such that
 $\mathbf Q\mathbf E\mathbf Q^{\mathsf T}$ is lower triangular", assuming such $\mathbf Q$ exists for
 every non-hyperbolic $\mathbf F$.
 
-**Why the attribution does not carry over to $\mathbb{F}_2$.** The cited length statement is
-O'Meara's Theorem 2.1.11 (originally Dieudonné): *if $\sigma\neq 1$ is non-hyperbolic it is a product
-of $\operatorname{res}\sigma$ transvections; if hyperbolic, of $(\operatorname{res}\sigma)+1$ but not
-$\operatorname{res}\sigma$.* **Its hypothesis is $F\neq\mathbb{F}_2$.** O'Meara devotes separate
-results (2.1.17–2.1.19) to characteristic $2$ and proves the dichotomy for $\mathbb{F}_2$ only for
-*involutions* (2.1.18) and, in the general case, again only for $F\neq\mathbb{F}_2$ (2.1.19). His
-§2.3 "Comments" then states plainly: "If the underlying field is $\mathbb{F}_2$, then the theorem
-fails … There is a theorem for $\mathbb{F}_2$, but it is considerably more complicated," pointing to
-Callan (1976) and to Spengler–Wolff, *Die Länge einer symplektischen Abbildung* ("The length of a
-symplectic map"). The proof of 2.1.19 makes the gap explicit: it needs, at each step, a transvection
-$\mathbf T$ with $\operatorname{res}(\mathbf T\sigma)<\operatorname{res}\sigma$ **and $\mathbf T\sigma$
-still non-hyperbolic**, and finding such a $\mathbf T$ uses the extra field elements available only
-when $F\neq\mathbb{F}_2$.
+**What the cited literature actually says.** O'Meara's Theorem 2.1.11
+gives the simple non-hyperbolic/hyperbolic dichotomy under the hypothesis
+$F\neq\mathbb F_2$. His 2.1.18 extends it to involutions in characteristic
+two, including $\mathbb F_2$, while 2.1.19 again excludes $\mathbb F_2$ for
+general maps. The §2.3 comment that the binary theorem is "considerably more
+complicated" refers to the exceptional-class classification, not to failure
+of the $r+1$ upper bound.
 
-**The flaw in the paper's own justification.** Independently of the mis-cited hypothesis, the line-411
+Callan is decisive because the paper cites it directly. Callan §1.1 proves
+that every binary symplectic map has length at most $r+1$, §2.4 identifies
+the residue-$3$ class-A exceptions in dimension $4$, and Theorem 5.1 gives
+the complete exceptional list. The paper overlooks those exceptions.
+
+**The flaw in the paper's own justification.** Independently of the incorrect attribution, the line-411
 argument is circular: "a transvection decomposition always exists" is true (transvections generate
 the group), but it only guarantees *some* decomposition — possibly of length $r+1$. A
 length-$(r+1)$ decomposition does **not** correspond to any $\mathbf Q\in\mathrm{GL}(r;2)$
@@ -166,7 +183,7 @@ intermediate map **hyperbolic** before the residue is exhausted, at which point 
 spend an *extra* transvection, yielding $r+1$ overall. Over $\mathbb{F}_2$, non-hyperbolicity of the
 *initial* map does not prevent this.
 
-## 4. Issue 1: non-hyperbolic does **not** imply triangularizable (a machine-checked counterexample)
+## 4. The gap: non-hyperbolic does **not** imply triangularizable
 
 Take $m=2$ qubits, coordinates $(x_0,x_1,z_0,z_1)$. The symplectic matrix (acting on the right)
 
@@ -177,8 +194,9 @@ $$
 satisfies:
 
 - **Symplectic and non-hyperbolic.** $\mathbf F\in\mathrm{Sp}(4;2)$, and
-  $\langle\mathbf v,\mathbf v\mathbf F\rangle=1$ for some $\mathbf v$, so $\mathbf F$ is *not*
-  hyperbolic. The paper would therefore predict minimal length $r=3$.
+  $\langle\mathbf e_0,\mathbf e_0\mathbf F\rangle=1$, so $\mathbf F$
+  is not hyperbolic. The paper would therefore predict minimal length
+  $r=3$.
 - **Residue rank $r=3$.** $\operatorname{rank}(\mathbf I+\mathbf F)=3$.
 - **Residue matrix and core.**
 
@@ -203,7 +221,12 @@ Two independent exhaustive computations refute the paper's claim for this $\math
    lower-triangular. So the length-$r$ criterion of Section 3 fails, consistent with (1).
 
 Because $\mathbf F$ is non-hyperbolic yet requires $r+1$ transvections, the sentence at line 411 —
-and Theorem 6's assumption that a triangularizing $\mathbf Q$ always exists — are false.
+and Theorem 3's assumption that a triangularizing $\mathbf Q$ always exists — are false.
+
+This is a concrete instance of Callan's class A, not a new exceptional
+family. Callan §2.4 characterizes the residue-$3$ exceptions in
+$\mathrm{Sp}(4;2)$ as class A, and Theorem 5.1 includes class A in the
+complete binary exception list.
 
 **Cross-check against this repository's code.** Building the same map in `paulimer` (as the product
 of the four transvections $X_0,\,X_1,\,X_0X_1,\,Z_0$ found by the search) and calling the shipped
@@ -216,7 +239,7 @@ to_transvections       len = 4
 to_transvections_minimal len = 4    # = r + 1, not r
 ```
 
-**Non-hyperbolic maps of this kind are the rule, not the exception.** An exhaustive census of
+**The phenomenon is common, not isolated.** An exhaustive census of
 $\mathrm{Sp}(4;2)$ (all $720$ elements) shows that $225$ of the $719$ non-identity maps require
 $r+1$ transvections — and of those $225$, **$210$ are non-hyperbolic** and only $15$ are hyperbolic.
 So over two qubits the paper's rule "non-hyperbolic $\Rightarrow$ length $r$" is violated by $210$
@@ -224,27 +247,22 @@ distinct symplectic maps. The phenomenon first appears at $r=3$; the map above i
 (The same census confirms the minimal length never exceeds $r+1$ for $m=2$, so hyperbolicity is the
 *wrong* invariant, not the count $r+1$ itself — at least at this size.)
 
-## 5. Issue 2: even when a triangularization exists, the greedy search is incomplete
+## 5. Implementation note: triangularization requires a complete decision procedure
 
-The paper does not give an explicit triangularization procedure; it defers to Botha's algorithms.
-A natural but naive implementation extends O'Meara's idea directly: pick a vector $\mathbf u$ with
-$\psi_{\mathbf E}(\mathbf u)=1$ (a "unit-diagonal pivot"), use it as the first triangularization
-step, and recurse into its right-orthogonal complement. **This forward-greedy search is incomplete
-for $r\ge 5$:** a locally valid pivot choice can drive the remaining subspace to become entirely
-$\psi$-isotropic (alternating) and dead-end, *even when a triangularization of the whole core
-exists* via a different sequence of pivots. We encountered this on a 4-qubit instance (residue rank
-$r=7$) where the greedy triangularization returns an obstruction although the core is in fact
-triangularizable and a length-$r$ decomposition exists; a one-step look-ahead pivot rule does not
-fix it either. This case is preserved as a regression seed in
-[`tests/transvection_test.proptest-regressions`](../tests/transvection_test.proptest-regressions).
+The paper does not specify a greedy triangularization algorithm; it refers to
+Botha's work. Therefore a dead-ending greedy pivot choice is not a second
+error in the paper. It is an implementation pitfall.
 
-This is a *practical* pitfall distinct from Issue 1: Issue 1 is a false mathematical claim (the
-target $\mathbf Q$ may not exist); Issue 2 is that *finding* $\mathbf Q$ when it does exist requires
-more than a greedy pivot walk.
+The Rust implementation explores every non-isotropic pivot and memoizes
+subspaces already proved unsolvable, so its decision procedure does not depend
+on a greedy choice. The earlier version of this note cited a specific
+proptest regression file that is no longer present; that historical claim is
+not needed for the paper counterexample or the correctness argument here.
 
-## 6. The correction we adopted
+## 6. Corrected result and implementation
 
-Combining the (correct) Lemmas 2–3 with the two issues above, the length our algorithm produces is:
+Combining the correct Lemmas 2–3, Callan's $r+1$ bound, and the Lean
+bordered construction gives:
 
 $$
 \ell(\mathbf F)=
@@ -259,34 +277,27 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
 - **Triangularization by complete search.** `congruence_triangularize` performs an exhaustive
   backtracking search for $\mathbf Q$: at each node it enumerates all $\psi$-non-isotropic pivots,
   recurses into the right-orthogonal complement, and **memoizes subspaces proven untriangularizable**
-  by a canonical row-reduced key. Memoization keeps the search tractable (a few thousand nodes even
-  at $r=9$) while guaranteeing completeness — fixing Issue 2.
+  by a canonical row-reduced key.
 - **The $r+1$ fix vector.** When (and only when) no $\mathbf Q$ exists, `find_fix_vector` appends one
   extra transvection $\mathbf T_{\mathbf w}$ chosen so that the residue-preserving update
   $\mathbf F\mathbf T_{\mathbf w}$ *becomes* triangularizable at the same rank, and recurses. This is
   the non-hyperbolic analogue of the paper's hyperbolic Lemma 1 patch — the case the paper's
-  algorithm omits — and fixes Issue 1.
+  construction omits.
 
-We verify the result in the test suite against a brute-force BFS oracle on one and two qubits, and
-against the $\{r,\,r+1\}$ range on up to six qubits. Two honest caveats about *strict minimality* for
-large systems: (i) O'Meara's §2.3 warns that over $\mathbb{F}_2$ the exact length function is
-"considerably more complicated" than $r/(r+1)$, so we do **not** claim $\ell(\mathbf F)\in\{r,r+1\}$
-holds for *all* $m$ — only that it does in every case we have checked (through $m=6$), and that
-whenever `find_fix_vector` succeeds the returned length $r+1$ *is* minimal (since a non-triangularizable
-core rules out length $r$). The exact binary length is the object studied by Callan and by
-Spengler–Wolff. (ii) Our `find_fix_vector` restores triangularizability with a *single* extra
-transvection in all tested cases; a rigorous proof that one fix always suffices — or a construction
-handling the rare cases where it might not for large $m$ — is left as a follow-up.
+The test suite additionally checks the result against a brute-force BFS oracle on one and two
+qubits and against the $\{r,r+1\}$ range on up to six qubits. These computations are regression
+checks, not the justification for generality. The Lean proof establishes for every finite $m$ that
+$r\leq\ell(\mathbf F)\leq r+1$, that length $r$ is equivalent to core triangularizability, and that
+otherwise a nonzero $\mathbf w\in\operatorname{Res}(\mathbf F)$ exists for which
+$\mathbf F\mathbf T_{\mathbf w}$ has the same residue rank and a triangularizable core. Thus the
+exhaustive `find_fix_vector` search is total on valid symplectic input.
 
-**Why "non-alternating" is not enough.** Triangularizability of $\mathbf E$ is not determined by any
-symmetric invariant of $\psi_{\mathbf E}$: neither the Arf invariant of $\psi_{\mathbf E}$ nor
-whether $\psi_{\mathbf E}$ is nonzero on the radical of its polar form
-$B(\mathbf x,\mathbf y)=\mathbf x(\mathbf E+\mathbf E^{\mathsf T})\mathbf y^{\mathsf T}$ decides it —
-solvability depends on the *non-symmetric* part of $\mathbf E$. (Empirically, an odd Arf invariant or
-a $\psi$ that is nonzero on the radical is always solvable; only the remaining regime is mixed,
-which is why no closed-form symmetric criterion exists and a search is required.) The precise
-characterization of GF(2) congruence triangularization is the subject of Botha (1997), which the
-paper cites but does not use to qualify Theorem 6.
+**Why "non-alternating" is not enough.** Alternating cores are
+untriangularizable, but the explicit core in Section 4 is non-alternating and
+still untriangularizable. The exact condition is congruence
+triangularizability of the full core, not merely its diagonal or associated
+quadratic form. Botha (1997), which the paper cites, studies this GF(2)
+congruence problem directly.
 
 ## 7. Reproducing the verification
 
@@ -294,12 +305,13 @@ The counterexample of Section 4 is fully finite and self-contained. Both checks 
 $\mathrm{Sp}(4;2)$ Cayley-distance BFS (720 group elements) and the $\mathrm{GL}(3;2)$ congruence
 enumeration (168 candidates) — are small enough to run by hand or in a few lines of code, and the
 repository's own `clifford_to_transvections_minimal` reproduces $\ell(\mathbf F)=r+1$ on the same
-map. No floating point or randomness is involved.
+map. No floating point or randomness is involved. The symbolic proof is reproduced with
+`cd paulimer/formal && lake build`; it contains no admitted theorem or project-defined axiom.
 
-## 8. References (verified)
+## 8. References
 
-Bibliographic details are taken from the corrected paper's reference list and from O'Meara's own
-bibliography and §2.3, and confirmed against the sources.
+Bibliographic details are taken from the paper's reference list and the cited
+primary sources.
 
 1. T. Pllaha, K. Volanto, O. Tirkkonen. *Decomposition of Clifford Gates.* 2021 IEEE Global
    Communications Conference (GLOBECOM), 2021.
@@ -313,16 +325,16 @@ bibliography and §2.3, and confirmed against the sources.
    vol. 3, pp. 149–179, 1955. *(Original proof of the transvection-length theorem for
    $F\neq\mathbb{F}_2$, as cited by O'Meara §2.3.)*
 4. D. Callan. *The generation of $\mathrm{Sp}(\mathbb{F}_2)$ by transvections.* Journal of Algebra,
-   vol. 42, no. 2, pp. 378–390, 1976. *(The $\mathbb{F}_2$ case, which O'Meara notes is "considerably
-   more complicated" and which Callan shows Dieudonné's treatment handled incompletely.)*
+   vol. 42, no. 2, pp. 378–390, 1976. *(Section 1.1 proves the $r/r+1$ bound,
+   §2.4 identifies the class-A residue-$3$ exceptions, and Theorem 5.1 gives
+   the complete binary exception list.)*
 5. U. Spengler and H. Wolff. *Die Länge einer symplektischen Abbildung* ("The length of a symplectic
    map"). Journal für die reine und angewandte Mathematik, vol. 274/275, pp. 150–157, 1975. *(The
    transvection-length function itself, as cited by O'Meara §2.3.)*
 6. J. D. Botha. *Triangularizing matrices over GF(2) by congruence.* Linear and Multilinear Algebra,
    vol. 42, no. 2, pp. 109–158, 1997.
-   DOI [10.1080/03081089708818495](https://doi.org/10.1080/03081089708818495). *(The precise
-   criterion and algorithms for GF(2) congruence triangularization — the subject the flawed claim
-   glosses over.)*
+   DOI [10.1080/03081089708818495](https://doi.org/10.1080/03081089708818495).
+   *(GF(2) congruence triangularization.)*
 7. D. Maslov, M. Roetteler. *Shorter stabilizer circuits via Bruhat decomposition and quantum
    circuit transformations.* IEEE Transactions on Information Theory, vol. 64, no. 7, pp. 4729–4738,
    2018. *(Related symplectic/Bruhat structure.)*
