@@ -6,6 +6,8 @@ Lean 4 proofs for the minimal symplectic-transvection decomposition used by
 The theorem concerns the Clifford's binary symplectic action. Pauli-image signs
 and global phase are outside its scope.
 
+See the [proof strategy and module guide](../docs/lean-transvection-minimality-proof.md).
+
 The main results are:
 
 - `CorePresentation.exists_factorization_iff_isTriangularizable`
