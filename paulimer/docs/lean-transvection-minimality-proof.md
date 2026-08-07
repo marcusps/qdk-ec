@@ -49,10 +49,7 @@ that length $r$ is equivalent to congruence triangularizability of the full
 nonsymmetric core, then supplies the bordered construction proving length
 $r+1$ in every remaining case. This also proves that paulimer's complete
 triangularizer search and residue-fix fallback are necessary; replacing them
-with the paper's non-hyperbolic branch would reject valid inputs. A separate
-Claude Opus 4.8 adversarial review independently reached the same assessment:
-the proof step has a real gap, the existence conclusion remains true, and no
-action convention removes the class-A counterexample.
+with the paper's non-hyperbolic branch would reject valid inputs.
 
 ## Statement and scope
 
@@ -86,7 +83,10 @@ $$
 \widehat F = V^T D V
 $$
 
-with $D$ invertible, and define the residue core $E=D^{-T}$. Lean proves
+with $D$ invertible, and define the residue core $E=D^{-T}$. Different
+faithful residue bases give cores related by congruence, so the
+criterion below and the value of $\ell(F)$ do not depend on this choice. Lean
+proves
 
 $$
 \ell(F) =
@@ -223,8 +223,10 @@ induction on $r`.
 
 If $\beta$ is alternating, the proof builds a symplectic simplex: $r+1$
 vectors that span the space, sum to zero, and pair to one whenever they are
-distinct. Taking every $z_i=1$ makes $L$ the identity. The simplex itself is
-constructed recursively by splitting off a hyperbolic pair and using its
+distinct. A nondegenerate alternating form has even dimension, so the simplex
+has odd cardinality and taking every $z_i=1$ also gives
+$\sum_i z_i^2=1$. With that choice, $L$ is the identity. The simplex itself
+is constructed recursively by splitting off a hyperbolic pair and using its
 orthogonal complement.
 
 If $\beta$ is not alternating, choose an anisotropic vector $q$ with
