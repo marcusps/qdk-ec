@@ -604,3 +604,63 @@ def test_pickle_larger_clifford():
 
 def test_symplectic_matrix_type_identity():
     """Test that symplectic_matrix returns the same BitMatrix type as binar"""
+    pass
+
+
+import random as _random
+
+
+def _random_clifford(num_qubits: int) -> "CliffordUnitary":
+    """Build a random Clifford by composing random 1- and 2-qubit named gates."""
+    gates_1q = [UnitaryOpcode.Hadamard, UnitaryOpcode.SqrtZ, UnitaryOpcode.SqrtX]
+    gates_2q = [UnitaryOpcode.ControlledX, UnitaryOpcode.ControlledZ]
+    c = CliffordUnitary.identity(num_qubits)
+    rng = _random.Random()
+    for _ in range(num_qubits * num_qubits + 4):
+        qubit = rng.randrange(num_qubits)
+        c.left_mul(rng.choice(gates_1q), [qubit])
+        if num_qubits >= 2:
+            ctrl, tgt = rng.sample(range(num_qubits), 2)
+            c.left_mul(rng.choice(gates_2q), [ctrl, tgt])
+    return c
+
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+
+@given(num_qubits=st.integers(min_value=1, max_value=6))
+@settings(max_examples=100)
+def test_from_symplectic_matrix_roundtrip(num_qubits):
+    """
+    Round-trip property: from_symplectic_matrix(U.symplectic_matrix)
+    must produce a valid Clifford whose symplectic matrix equals U.symplectic_matrix.
+
+    The result may differ from U by a Pauli (phases are dropped), so we compare
+    symplectic matrices rather than Clifford objects.
+    """
+    original = _random_clifford(num_qubits)
+    symp = original.symplectic_matrix
+    reconstructed = CliffordUnitary.from_symplectic_matrix(symp)
+    assert reconstructed is not None
+    assert reconstructed.is_valid
+    assert reconstructed.symplectic_matrix == symp
+
+
+@given(num_qubits=st.integers(min_value=1, max_value=6))
+@settings(max_examples=100)
+def test_from_symplectic_matrix_preimage_bits(num_qubits):
+    """
+    The binary parts of all preimages must be recovered exactly.
+    Characters encode X/Z/Y/I without phase, so comparing characters
+    verifies that all x-bits and z-bits are preserved.
+    """
+    original = _random_clifford(num_qubits)
+    reconstructed = CliffordUnitary.from_symplectic_matrix(
+        original.symplectic_matrix
+    )
+    for qubit in range(num_qubits):
+        assert original.preimage_x(qubit).characters == reconstructed.preimage_x(qubit).characters
+        assert original.preimage_z(qubit).characters == reconstructed.preimage_z(qubit).characters
+
+
