@@ -547,9 +547,20 @@ impl BitAnd for &PauliGroup {
 
         let insensitive_intersection = phase_insensitive_intersection_of(self, other);
         let mut generators = Vec::new();
+        let mut phase_obstruction_anchor: Option<SparsePauli> = None;
         for pauli_base in insensitive_intersection.generators {
             if let Some(phased_pauli) = common_phase_variant_of(&pauli_base, self, other) {
                 generators.push(phased_pauli);
+            } else if let Some(anchor) = phase_obstruction_anchor.as_ref() {
+                // Phase disagreement is one F_2-valued obstruction. Together
+                // with compatible generators, anchored products span its kernel.
+                let combined = anchor.clone() * &pauli_base;
+                generators.push(
+                    common_phase_variant_of(&combined, self, other)
+                        .expect("incompatible phase differences must cancel"),
+                );
+            } else {
+                phase_obstruction_anchor = Some(pauli_base);
             }
         }
 

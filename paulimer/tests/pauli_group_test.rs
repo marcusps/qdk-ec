@@ -67,6 +67,35 @@ fn pauli_group_pairs() -> BoxedStrategy<(PauliGroup, PauliGroup)> {
     (small_pauli_group(), small_pauli_group()).boxed()
 }
 
+fn phase_obstructed_group_pairs() -> BoxedStrategy<(PauliGroup, PauliGroup)> {
+    (vec(any::<bool>(), 4), any::<bool>())
+        .prop_map(|(left_signs, fourth_mismatch)| {
+            let mut right_signs = left_signs.clone();
+            for sign in &mut right_signs[..3] {
+                *sign = !*sign;
+            }
+            if fourth_mismatch {
+                right_signs[3] = !right_signs[3];
+            }
+            let group_from_signs = |signs: Vec<bool>| {
+                let generators = signs
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, negative)| {
+                        let mut generator = SparsePauli::x(index, 4);
+                        if negative {
+                            generator.negate();
+                        }
+                        generator
+                    })
+                    .collect::<Vec<_>>();
+                PauliGroup::new(&generators)
+            };
+            (group_from_signs(left_signs), group_from_signs(right_signs))
+        })
+        .boxed()
+}
+
 proptest! {
     #[test]
     fn test_generators_match_construction_argument(generators in sparse_paulis(1, 5, small_sparse_pauli())) {
@@ -461,6 +490,29 @@ proptest! {
         // Phase count should also be bounded
         prop_assert!(intersection.phases().len() <= group1.phases().len());
         prop_assert!(intersection.phases().len() <= group2.phases().len());
+    }
+
+    #[test]
+    fn intersection_matches_exhaustive_intersection(pair in pauli_group_pairs()) {
+        let (left, right) = pair;
+        let expected: HashSet<_> = left
+            .elements()
+            .filter(|element| right.contains(element))
+            .collect();
+        let actual: HashSet<_> = (&left & &right).elements().collect();
+        prop_assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn intersection_preserves_phase_obstruction_kernel(pair in phase_obstructed_group_pairs()) {
+        let (left, right) = pair;
+        let expected: HashSet<_> = left
+            .elements()
+            .filter(|element| right.contains(element))
+            .collect();
+        let actual: HashSet<_> = (&left & &right).elements().collect();
+        prop_assert_eq!(expected.len(), 8);
+        prop_assert_eq!(actual, expected);
     }
 
     #[test]
