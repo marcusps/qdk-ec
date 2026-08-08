@@ -1398,11 +1398,32 @@ impl<const WORD_COUNT: usize, const QUBIT_COUNT: usize> MutablePreImages
     type PhaseExponentValue = ();
 }
 
+fn fixed_projective_image_at<const WORD_COUNT: usize, const QUBIT_COUNT: usize>(
+    clifford: &CliffordModPauliBatch<WORD_COUNT, QUBIT_COUNT>,
+    qubit_index: usize,
+    image: XOrZ,
+) -> PauliUnitaryProjective<[u64; WORD_COUNT]> {
+    assert!(QUBIT_COUNT <= WORD_COUNT * 64);
+    assert!(qubit_index < QUBIT_COUNT);
+    // Row-vector convention: S^-1 = Omega S^T Omega = [[D^T, B^T], [C^T, A^T]].
+    let (x_source, z_source) = match image {
+        XOrZ::X => (&clifford.preimages[3], &clifford.preimages[1]),
+        XOrZ::Z => (&clifford.preimages[2], &clifford.preimages[0]),
+    };
+    let mut x_bits = [0; WORD_COUNT];
+    let mut z_bits = [0; WORD_COUNT];
+    for row_index in 0..QUBIT_COUNT {
+        x_bits.assign_index(row_index, x_source[row_index].index(qubit_index));
+        z_bits.assign_index(row_index, z_source[row_index].index(qubit_index));
+    }
+    PauliUnitaryProjective::from_bits(x_bits, z_bits)
+}
+
 impl<const WORD_COUNT: usize, const QUBIT_COUNT: usize> PreimageViews
     for CliffordModPauliBatch<WORD_COUNT, QUBIT_COUNT>
 {
     type PreImageView<'life> = PauliUnitaryProjective<&'life [u64; WORD_COUNT]>;
-    type ImageViewUpToPhase<'life> = PauliUnitaryProjective<&'life [u64; WORD_COUNT]>;
+    type ImageViewUpToPhase<'life> = PauliUnitaryProjective<[u64; WORD_COUNT]>;
 
     fn preimage_x_view(&self, index: usize) -> Self::PreImageView<'_> {
         PauliUnitaryProjective::from_bits(&self.preimages[0][index], &self.preimages[1][index])
@@ -1412,12 +1433,12 @@ impl<const WORD_COUNT: usize, const QUBIT_COUNT: usize> PreimageViews
         PauliUnitaryProjective::from_bits(&self.preimages[2][index], &self.preimages[3][index])
     }
 
-    fn x_image_view_up_to_phase(&self, _qubit_index: usize) -> Self::ImageViewUpToPhase<'_> {
-        todo!()
+    fn x_image_view_up_to_phase(&self, qubit_index: usize) -> Self::ImageViewUpToPhase<'_> {
+        fixed_projective_image_at(self, qubit_index, XOrZ::X)
     }
 
-    fn z_image_view_up_to_phase(&self, _qubit_index: usize) -> Self::ImageViewUpToPhase<'_> {
-        todo!()
+    fn z_image_view_up_to_phase(&self, qubit_index: usize) -> Self::ImageViewUpToPhase<'_> {
+        fixed_projective_image_at(self, qubit_index, XOrZ::Z)
     }
 
     type PhaseExponentValue = ();

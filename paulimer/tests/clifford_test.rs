@@ -4,10 +4,12 @@ use itertools::enumerate;
 use paulimer::PauliGroup;
 use paulimer::StringLayout::{Dense, Sparse};
 use paulimer::StringNotation::{Ascii, Tex, Unicode};
-use paulimer::clifford::generic_algos::{clifford_from_images, clifford_to_prepare_bell_states};
+use paulimer::clifford::generic_algos::{
+    clifford_from_images, clifford_to_prepare_bell_states, mul_assign_right_clifford_preimage,
+};
 use paulimer::clifford::{
-    Clifford, CliffordMutable, CliffordStringParsingError, MutablePreImages, PreimageViews, XOrZ,
-    apply_qubit_clifford_by_axis, group_encoding_clifford_of, prepare_all_plus, prepare_all_zero,
+    Clifford, CliffordModPauliBatch, CliffordMutable, CliffordStringParsingError, MutablePreImages, PreimageViews,
+    XOrZ, apply_qubit_clifford_by_axis, group_encoding_clifford_of, prepare_all_plus, prepare_all_zero,
     random_clifford_via_operations_sampling, split_clifford_encoder_mod_pauli, split_phased_css,
     split_qubit_cliffords_and_css, split_qubit_tensor_product_encoder, standard_restriction_with_sign_matrix,
     z_images_partition_transform,
@@ -19,7 +21,7 @@ use paulimer::pauli::{
     DensePauli, DensePauliProjective, PauliMutable, SparsePauliProjective, anti_commutes_with, apply_pauli_exponent,
     apply_root_x, apply_root_y, apply_root_z, pauli_random, pauli_random_order_two, remapped_sparse,
 };
-use paulimer::pauli::{Pauli, PauliBinaryOps, PauliUnitary, Phase, SparsePauli, commutes_with};
+use paulimer::pauli::{Pauli, PauliBinaryOps, PauliUnitary, PauliUnitaryProjective, Phase, SparsePauli, commutes_with};
 
 use paulimer::core::{PositionedPauliObservable, x, y, z};
 use paulimer::operations::{css_operations, diagonal_operations};
@@ -98,6 +100,38 @@ fn identity_preimages() {
 }
 
 proptest! {
+    #[test]
+    fn fixed_tableau_images_match_dynamic(operations in prop::collection::vec(0u8..8, 0..64)) {
+        let mut fixed = fixed_projective_identity::<1, 2>();
+        let mut dynamic = CliffordUnitaryModPauli::identity(2);
+
+        for operation in operations {
+            apply_two_qubit_projective_operation(&mut fixed, operation);
+            apply_two_qubit_projective_operation(&mut dynamic, operation);
+        }
+
+        for qubit_index in 0..2 {
+            let fixed_x = fixed.x_image_view_up_to_phase(qubit_index);
+            let fixed_z = fixed.z_image_view_up_to_phase(qubit_index);
+            let dynamic_x = dynamic.x_image_view_up_to_phase(qubit_index);
+            let dynamic_z = dynamic.z_image_view_up_to_phase(qubit_index);
+            let mut recovered_x = PauliUnitaryProjective::from_bits([0], [0]);
+            let mut recovered_z = PauliUnitaryProjective::from_bits([0], [0]);
+            mul_assign_right_clifford_preimage(&mut recovered_x, &fixed, &fixed_x);
+            mul_assign_right_clifford_preimage(&mut recovered_z, &fixed, &fixed_z);
+            for bit_index in 0..2 {
+                prop_assert_eq!(fixed_x.x_bits().index(bit_index), dynamic_x.x_bits().index(bit_index));
+                prop_assert_eq!(fixed_x.z_bits().index(bit_index), dynamic_x.z_bits().index(bit_index));
+                prop_assert_eq!(fixed_z.x_bits().index(bit_index), dynamic_z.x_bits().index(bit_index));
+                prop_assert_eq!(fixed_z.z_bits().index(bit_index), dynamic_z.z_bits().index(bit_index));
+                prop_assert_eq!(recovered_x.x_bits().index(bit_index), bit_index == qubit_index);
+                prop_assert!(!recovered_x.z_bits().index(bit_index));
+                prop_assert!(!recovered_z.x_bits().index(bit_index));
+                prop_assert_eq!(recovered_z.z_bits().index(bit_index), bit_index == qubit_index);
+            }
+        }
+    }
+
     #[test]
     fn from_images(clifford in arbitrary_clifford(0..1)) {
         let images = images_of(&clifford);
@@ -501,6 +535,47 @@ proptest! {
         css_clifford_and_bitmatrix_identity_test(dimension, seed);
     }
 
+}
+
+fn fixed_projective_identity<const WORD_COUNT: usize, const QUBIT_COUNT: usize>()
+-> CliffordModPauliBatch<WORD_COUNT, QUBIT_COUNT> {
+    let mut clifford = CliffordModPauliBatch::default();
+    for qubit_index in 0..QUBIT_COUNT {
+        clifford
+            .preimage_bits_mut(qubit_index, 0, 0)
+            .assign_index(qubit_index, true);
+        clifford
+            .preimage_bits_mut(qubit_index, 1, 1)
+            .assign_index(qubit_index, true);
+    }
+    clifford
+}
+
+#[test]
+fn fixed_tableau_images_cross_word_boundary() {
+    let fixed = fixed_projective_identity::<2, 65>();
+    let x_image = fixed.x_image_view_up_to_phase(64);
+    let z_image = fixed.z_image_view_up_to_phase(64);
+    assert_eq!(x_image.x_bits().weight(), 1);
+    assert!(x_image.x_bits().index(64));
+    assert!(x_image.z_bits().is_zero());
+    assert!(z_image.x_bits().is_zero());
+    assert_eq!(z_image.z_bits().weight(), 1);
+    assert!(z_image.z_bits().index(64));
+}
+
+fn apply_two_qubit_projective_operation(clifford: &mut impl CliffordMutable, operation: u8) {
+    match operation {
+        0 => clifford.left_mul_hadamard(0),
+        1 => clifford.left_mul_hadamard(1),
+        2 => clifford.left_mul_root_z(0),
+        3 => clifford.left_mul_root_z(1),
+        4 => clifford.left_mul_cx(0, 1),
+        5 => clifford.left_mul_cx(1, 0),
+        6 => clifford.left_mul_cz(0, 1),
+        7 => clifford.left_mul_swap(0, 1),
+        _ => unreachable!(),
+    }
 }
 
 prop_compose! {
