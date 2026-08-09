@@ -1219,7 +1219,8 @@ where
     }
 
     let max_index = entries.iter().map(|(_, idx)| *idx).max().unwrap_or(0);
-    let mut pauli: T = <T as NeutralElement>::neutral_element_of_size(max_index + 1);
+    let size = max_index.checked_add(1).ok_or(PauliStringParsingError)?;
+    let mut pauli: T = <T as NeutralElement>::neutral_element_of_size(size);
     pauli.add_assign_phase_exp(phase_exp);
 
     for (pauli_char, index) in &entries {

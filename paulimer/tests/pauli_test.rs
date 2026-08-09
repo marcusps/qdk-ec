@@ -330,6 +330,15 @@ fn sparse_parsing_with_large_qubit_index() {
 }
 
 #[test]
+fn maximum_sparse_pauli_index_returns_error() {
+    let pauli = format!("X_{}", usize::MAX);
+    assert!(pauli.parse::<DensePauli>().is_err());
+    assert!(pauli.parse::<SparsePauli>().is_err());
+    assert!(pauli.parse::<DensePauliProjective>().is_err());
+    assert!(pauli.parse::<SparsePauliProjective>().is_err());
+}
+
+#[test]
 fn sparse_parsing_rejects_digits_without_a_pauli() {
     for invalid_pauli in ["00", "0X0"] {
         assert!(invalid_pauli.parse::<DensePauli>().is_err());
