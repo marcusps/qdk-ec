@@ -81,6 +81,27 @@ fn centralizer_reports_abelian_property() {
 
 proptest! {
     #[test]
+    fn trivial_centralizer_contains_all_scalar_phases(support_size in 0usize..16) {
+        let support = (0..support_size).collect::<Vec<_>>();
+        let centralizer = centralizer_within(&support, &PauliGroup::new(&[]));
+        for phase in 0..4 {
+            let scalar = SparsePauli::from_bits(IndexSet::new(), IndexSet::new(), phase);
+            prop_assert!(centralizer.contains(&scalar));
+        }
+        prop_assert_eq!(centralizer.log2_size(), 2 * support_size + 2);
+    }
+
+    #[test]
+    fn empty_support_centralizer_contains_only_scalar_phases(group in small_pauli_group()) {
+        let centralizer = centralizer_within(&[], &group);
+        for phase in 0..4 {
+            let scalar = SparsePauli::from_bits(IndexSet::new(), IndexSet::new(), phase);
+            prop_assert!(centralizer.contains(&scalar));
+        }
+        prop_assert_eq!(centralizer.log2_size(), 2);
+    }
+
+    #[test]
     fn test_generators_match_construction_argument(generators in sparse_paulis(1, 5, small_sparse_pauli())) {
         let group = PauliGroup::new(&generators);
         prop_assert_eq!(group.generators(), generators);
