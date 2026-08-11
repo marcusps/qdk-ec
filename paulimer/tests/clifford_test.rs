@@ -101,13 +101,15 @@ fn identity_preimages() {
 
 proptest! {
     #[test]
-    fn fixed_tableau_images_match_dynamic(operations in prop::collection::vec(0u8..8, 0..64)) {
+    fn fixed_tableau_images_match_dynamic(
+        operations in prop::collection::vec(two_qubit_clifford_operation(), 0..64)
+    ) {
         let mut fixed = fixed_projective_identity::<1, 2>();
         let mut dynamic = CliffordUnitaryModPauli::identity(2);
 
         for operation in operations {
-            apply_two_qubit_projective_operation(&mut fixed, operation);
-            apply_two_qubit_projective_operation(&mut dynamic, operation);
+            operation.apply(&mut fixed);
+            operation.apply(&mut dynamic);
         }
 
         for qubit_index in 0..2 {
@@ -564,18 +566,38 @@ fn fixed_tableau_images_cross_word_boundary() {
     assert!(z_image.z_bits().index(64));
 }
 
-fn apply_two_qubit_projective_operation(clifford: &mut impl CliffordMutable, operation: u8) {
-    match operation {
-        0 => clifford.left_mul_hadamard(0),
-        1 => clifford.left_mul_hadamard(1),
-        2 => clifford.left_mul_root_z(0),
-        3 => clifford.left_mul_root_z(1),
-        4 => clifford.left_mul_cx(0, 1),
-        5 => clifford.left_mul_cx(1, 0),
-        6 => clifford.left_mul_cz(0, 1),
-        7 => clifford.left_mul_swap(0, 1),
-        _ => unreachable!(),
+#[derive(Clone, Copy, Debug)]
+enum TwoQubitCliffordOperation {
+    Hadamard(usize),
+    RootZ(usize),
+    ControlledX { control: usize, target: usize },
+    ControlledZ,
+    Swap,
+}
+
+impl TwoQubitCliffordOperation {
+    fn apply(self, clifford: &mut impl CliffordMutable) {
+        match self {
+            Self::Hadamard(qubit_index) => clifford.left_mul_hadamard(qubit_index),
+            Self::RootZ(qubit_index) => clifford.left_mul_root_z(qubit_index),
+            Self::ControlledX { control, target } => clifford.left_mul_cx(control, target),
+            Self::ControlledZ => clifford.left_mul_cz(0, 1),
+            Self::Swap => clifford.left_mul_swap(0, 1),
+        }
     }
+}
+
+fn two_qubit_clifford_operation() -> impl Strategy<Value = TwoQubitCliffordOperation> {
+    prop_oneof![
+        Just(TwoQubitCliffordOperation::Hadamard(0)),
+        Just(TwoQubitCliffordOperation::Hadamard(1)),
+        Just(TwoQubitCliffordOperation::RootZ(0)),
+        Just(TwoQubitCliffordOperation::RootZ(1)),
+        Just(TwoQubitCliffordOperation::ControlledX { control: 0, target: 1 }),
+        Just(TwoQubitCliffordOperation::ControlledX { control: 1, target: 0 }),
+        Just(TwoQubitCliffordOperation::ControlledZ),
+        Just(TwoQubitCliffordOperation::Swap),
+    ]
 }
 
 prop_compose! {
