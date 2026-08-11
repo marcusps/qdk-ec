@@ -97,6 +97,21 @@ fn identity_preimages() {
     }
 }
 
+#[test]
+fn zero_qubit_clifford_string_roundtrip() {
+    let exact = CliffordUnitary::identity(0);
+    assert_eq!(exact.to_string().parse::<CliffordUnitary>().unwrap(), exact);
+
+    let projective = CliffordUnitaryModPauli::identity(0);
+    assert_eq!(
+        projective.to_string().parse::<CliffordUnitaryModPauli>().unwrap(),
+        projective
+    );
+
+    assert!(",,,".parse::<CliffordUnitary>().is_err());
+    assert!(",,,".parse::<CliffordUnitaryModPauli>().is_err());
+}
+
 proptest! {
     #[test]
     fn from_images(clifford in arbitrary_clifford(0..1)) {
@@ -501,6 +516,16 @@ proptest! {
         css_clifford_and_bitmatrix_identity_test(dimension, seed);
     }
 
+}
+
+#[test]
+fn group_encoding_clifford_preserves_generator_sign() {
+    let generator: DensePauli = "-X".parse().unwrap();
+    let encoding_clifford = group_encoding_clifford_of(std::slice::from_ref(&generator), 1);
+    assert_eq!(
+        encoding_clifford.preimage(&generator),
+        "Z".parse::<DensePauli>().unwrap()
+    );
 }
 
 prop_compose! {
@@ -943,6 +968,36 @@ fn clifford_identity_test() {
     let max_qubits = 10usize;
     generic_clifford_identity_test::<CliffordUnitaryModPauli>(max_qubits);
     generic_clifford_identity_test::<CliffordUnitary>(max_qubits);
+}
+
+#[test]
+#[ignore = "subprocess helper"]
+fn validate_invalid_cliffords() {
+    assert!(!CliffordUnitary::zero(1).is_valid());
+
+    let mut cross_qubit_failure = CliffordUnitary::identity(2);
+    cross_qubit_failure
+        .preimage_x_view_mut(1)
+        .assign(&"XI".parse::<DensePauli>().unwrap());
+    assert!(!cross_qubit_failure.is_valid());
+}
+
+#[test]
+fn invalid_clifford_validation_is_silent() {
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "validate_invalid_cliffords", "--ignored", "--nocapture"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "child test failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("test validate_invalid_cliffords"));
+    assert!(!stdout.contains("commutes_with failed"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("commutes_with failed"));
 }
 
 fn two_qubit_clifford<CliffordLike: TestableClifford>(
