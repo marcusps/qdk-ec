@@ -455,7 +455,7 @@ impl PhasedOutcomeCompleteSimulation {
         self.random_outcome_indicator.push(true);
         self.symbolic_angle_indicator.push(is_symbolic_angle);
         self.random_bit_count += 1;
-        self.random_bit_count - 1
+        outcome_pos
     }
 }
 
