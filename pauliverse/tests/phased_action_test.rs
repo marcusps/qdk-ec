@@ -1,3 +1,4 @@
+use binar::{AffineMap, BitMatrix};
 use paulimer::core::{x, y, z};
 use paulimer::pauli::SparsePauli;
 use paulimer::{PositionedPauliObservable, UnitaryOp};
@@ -167,6 +168,37 @@ fn surplus_randomness_is_checked_symmetrically() {
     harmless
         .is_equivalent(&pure)
         .expect("harmless surplus randomness equivalence must be symmetric");
+}
+
+#[test]
+fn angle_columns_may_contribute_to_true_random_coordinates() {
+    let source = build_circuit(|builder| {
+        let first = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), first);
+        let second = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), second);
+        builder.allocate_random_bit();
+    });
+    let target = build_circuit(|builder| {
+        let first = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), first);
+        builder.allocate_random_bit();
+        let second = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), second);
+    });
+    let source_action = phased_action_of(&source, &[0], &[0]).expect("source action");
+    let target_action = phased_action_of(&target, &[0], &[0]).expect("target action");
+
+    let mut matrix = BitMatrix::zeros(3, 3);
+    matrix.set((0, 0), true);
+    matrix.set((1, 2), true);
+    matrix.set((2, 0), true);
+    matrix.set((2, 1), true);
+    let outcome_map = AffineMap::linear(matrix);
+
+    source_action
+        .is_equivalent_with_map(&target_action, Some(&outcome_map))
+        .expect("only angle rows must be one-to-one");
 }
 
 #[test]

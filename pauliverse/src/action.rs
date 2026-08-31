@@ -674,11 +674,8 @@ impl PhasedCircuitAction {
     /// is `None`, the zero map is used, as is common for circuits with unitary action.
     ///
     /// This is the lower-level escape hatch behind [`Self::is_equivalent`]. The supplied map may
-    /// affinely remap *true* random bits, but **symbolic-angle (virtual) random bits must be mapped
-    /// one to one** in allocation order. Any map whose induced random-bit correspondence affinely
-    /// combines angle bits, or mixes them with true random bits, is rejected with
-    /// [`ActionsInequivalenceReason::SymbolicAngleMixed`]; prefer [`Self::is_equivalent`] unless you
-    /// specifically need to relabel true random bits.
+    /// affinely remap *true* random bits, but every symbolic-angle row must equal the corresponding
+    /// angle coordinate in allocation order. True-random rows may also depend on angle bits.
     ///
     /// # Errors
     ///
@@ -761,10 +758,7 @@ impl PhasedCircuitAction {
 
     /// Guards against an outcome remapping that does not respect the virtual/true distinction.
     ///
-    /// Returns `true` iff the induced random-bit correspondence maps the symbolic-angle bits of
-    /// `other` one to one onto those of `self` (in allocation order) with no leakage: each angle bit
-    /// of `other` maps exactly to the matching angle bit of `self`, and no angle bit of `self` is
-    /// driven by a true (non-angle) bit of `other`.
+    /// Returns `true` iff each symbolic-angle row is the corresponding angle coordinate of `other`.
     fn angle_correspondence_is_clean(
         &self,
         other: &PhasedCircuitAction,
@@ -783,16 +777,9 @@ impl PhasedCircuitAction {
             return false;
         }
         for (&self_angle, &other_angle) in self_angles.iter().zip(other_angles.iter()) {
-            for self_bit in 0..matrix.row_count() {
-                let expected = self_bit == self_angle;
-                if matrix.get((self_bit, other_angle)) != expected {
-                    return false;
-                }
-            }
-        }
-        for &self_angle in &self_angles {
             for other_bit in 0..matrix.column_count() {
-                if !other_angles.contains(&other_bit) && matrix.get((self_angle, other_bit)) {
+                let expected = other_bit == other_angle;
+                if matrix.get((self_angle, other_bit)) != expected {
                     return false;
                 }
             }
