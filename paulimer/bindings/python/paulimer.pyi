@@ -647,6 +647,16 @@ class CliffordUnitary:
         """Split into phased CSS components."""
         ...
 
+    def to_pauli_exponents(self) -> list[SparsePauli]:
+        """Decompose into an ordered product of pi/4 Pauli exponents.
+
+        Returns Paulis ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4 P_1)``, ...,
+        ``exp(i pi/4 P_k)`` to the identity via ``left_mul_pauli_exp`` reproduces this Clifford
+        exactly, including the Pauli-image signs. The sign of each returned Pauli selects
+        ``exp(+i pi/4 P)`` or ``exp(-i pi/4 P)``.
+        """
+        ...
+
     def __mul__(self, other: "CliffordUnitary", /) -> "CliffordUnitary": ...
     def left_mul(self, unitary_op: UnitaryOpcode, support: Sequence[int]) -> None: ...
     def left_mul_clifford(
@@ -1331,6 +1341,20 @@ class PhasedCircuitAction:
         This is the phaseless comparison; use :meth:`is_equivalent` to additionally
         require the relative branch phases to match.
         """
+        ...
+
+    def is_equivalent_with_global_phase(self, other: PhasedCircuitAction) -> bool:
+        """Whether two circuits are equivalent including the absolute global phase.
+
+        Like :meth:`is_equivalent`, but additionally requires the absolute global ``zeta8``
+        phases (see :attr:`global_phase`) to match, distinguishing operators that differ by
+        an overall phase such as ``Co`` and ``-Co``.
+        """
+        ...
+
+    @property
+    def global_phase(self) -> int:
+        """Absolute global ``zeta8`` phase of the Choi-state encoder, as an exponent in ``0..8``."""
         ...
 
 @final

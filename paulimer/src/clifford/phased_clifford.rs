@@ -117,6 +117,15 @@ impl PhasedCliffordUnitary {
             normalize_exponent(i64::from(self.reference_phase_exponent) + i64::from(exponent));
     }
 
+    /// Returns a computational-basis string `r` with `⟨r|C|0…0⟩ ≠ 0`.
+    ///
+    /// Every amplitude of the encoder state has the same magnitude, so the returned string is a
+    /// representative of the (affine) support of `C|0…0⟩`: [`Self::state_amplitude_phase_exponent`]
+    /// is guaranteed to return `Some` for it.
+    pub fn support_representative(&self) -> AlignedBitVec {
+        self.reference_string.clone()
+    }
+
     /// Returns the `ζ₈` exponent `e` such that `⟨basis|C|0…0⟩ = ζ₈^e · 2^{-k/2}` for some rank `k`,
     /// or `None` when that amplitude vanishes.
     #[must_use]
