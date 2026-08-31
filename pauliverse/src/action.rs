@@ -4,10 +4,11 @@ use crate::{
     OutcomeCompleteSimulation, PhasedOutcomeCompleteSimulation, Simulation,
     circuit::{Circuit, SimulationError},
 };
-use binar::{AffineMap, BitMatrix, BitVec, Bitwise, BitwiseMut, IndexSet};
+use binar::{AffineMap, BitMatrix, BitVec, Bitwise, BitwiseMut, IndexSet, vec::AlignedBitVec};
 use paulimer::{
-    CliffordUnitary, Pauli, PauliMutable, SparsePauli, clifford::separate_auxiliary_qubits,
+    CliffordUnitary, Pauli, PauliMutable, SparsePauli,
     clifford::standard_restriction_with_sign_matrix,
+    clifford::{AuxiliarySeparationError, SeparationPhase, separate_auxiliary_qubits},
 };
 
 type QubitId = crate::circuit::QubitId;
@@ -61,6 +62,8 @@ pub enum ActionError {
         state_encoder: CliffordUnitary,
         auxiliary_qubits: Vec<QubitId>,
     },
+    #[from]
+    AuxiliarySeparationFailed(AuxiliarySeparationError),
     #[from]
     SimulationFailed(SimulationError),
 }
@@ -341,26 +344,7 @@ impl CircuitAction {
         let self_outcomes_from_other_random = self_outcomes_from_other_outcomes.dot(&other.outcomes_from_random);
         let self_random_from_other_random = self.random_from_outcomes.dot(&self_outcomes_from_other_random);
 
-        let mut reasons = Vec::new();
-
-        if self
-            .observables
-            .is_equivalent_with_map(&other.observables, &self_random_from_other_random)
-        {
-            reasons.push(ActionsInequivalenceReason::ObservablesSigns);
-        }
-        if self
-            .stabilizers
-            .is_equivalent_with_map(&other.stabilizers, &self_random_from_other_random)
-        {
-            reasons.push(ActionsInequivalenceReason::StabilizersSigns);
-        }
-        if self
-            .choi_state_stabilizers
-            .is_equivalent_with_map(&other.choi_state_stabilizers, &self_random_from_other_random)
-        {
-            reasons.push(ActionsInequivalenceReason::ChoiStateSigns);
-        }
+        let reasons = self.sign_reasons_with_random_map(other, &self_random_from_other_random);
         if reasons.is_empty() { Ok(()) } else { Err(reasons) }
     }
 
@@ -414,6 +398,33 @@ impl CircuitAction {
     pub fn outcome_count(&self) -> usize {
         self.random_from_outcomes.input_dimension()
     }
+
+    fn sign_reasons_with_random_map(
+        &self,
+        other: &CircuitAction,
+        self_random_from_other_random: &AffineMap,
+    ) -> Vec<ActionsInequivalenceReason> {
+        let mut reasons = Vec::new();
+        if self
+            .observables
+            .is_equivalent_with_map(&other.observables, self_random_from_other_random)
+        {
+            reasons.push(ActionsInequivalenceReason::ObservablesSigns);
+        }
+        if self
+            .stabilizers
+            .is_equivalent_with_map(&other.stabilizers, self_random_from_other_random)
+        {
+            reasons.push(ActionsInequivalenceReason::StabilizersSigns);
+        }
+        if self
+            .choi_state_stabilizers
+            .is_equivalent_with_map(&other.choi_state_stabilizers, self_random_from_other_random)
+        {
+            reasons.push(ActionsInequivalenceReason::ChoiStateSigns);
+        }
+        reasons
+    }
 }
 
 /// The exact-global-phase analog of [`CircuitAction`], computed with a
@@ -435,6 +446,8 @@ impl CircuitAction {
 pub struct PhasedCircuitAction {
     action: CircuitAction,
     phase: PhaseData,
+    /// Outcome map with symbolic-angle allocation rows omitted.
+    physical_outcomes_from_random: BitMatrix,
     /// Indicator over the inner random bits: `true` where the bit is a symbolic rotation angle (a
     /// "virtual" random bit allocated via [`Simulation::allocate_symbolic_angle`]) rather than a
     /// genuine measurement-derived random bit.
@@ -465,7 +478,7 @@ pub fn phased_action_of(
         .max(input_qubits.iter().max().map_or(0, |&q| q + 1))
         .max(output_qubits.iter().max().map_or(0, |&q| q + 1));
     let reference_qubits: Vec<QubitId> = (qubit_count..qubit_count + input_qubits.len()).collect();
-    Ok(phased_action(action, &simulation, &reference_qubits, output_qubits))
+    phased_action(action, &simulation, &reference_qubits, output_qubits)
 }
 
 /// Computes a [`PhasedCircuitAction`] directly from a [`PhasedOutcomeCompleteSimulation`] whose Choi
@@ -501,7 +514,7 @@ pub fn phased_action_from_simulation(
         &reference_qubits,
         system_qubit_count,
     )?;
-    Ok(phased_action(action, simulation, &reference_qubits, output_qubits))
+    phased_action(action, simulation, &reference_qubits, output_qubits)
 }
 
 /// Assembles a [`PhasedCircuitAction`] from a computed `action` and the `simulation` that recorded
@@ -512,28 +525,54 @@ fn phased_action(
     simulation: &PhasedOutcomeCompleteSimulation,
     reference_qubits: &[QubitId],
     output_qubits: &[QubitId],
-) -> PhasedCircuitAction {
+) -> Result<PhasedCircuitAction, ActionError> {
     let symbolic_angles: BitVec = simulation.symbolic_angle_indicator().iter().copied().collect();
-    let global_phase = recover_global_phase(simulation, reference_qubits, output_qubits);
-    PhasedCircuitAction {
+    let phase = separated_phase(simulation, reference_qubits, output_qubits)?;
+    let global_phase = phase.phase_exponent(&BitVec::zeros(simulation.random_outcome_count()));
+    Ok(PhasedCircuitAction {
         action,
-        phase: PhaseData::from_simulation(simulation),
+        phase,
+        physical_outcomes_from_random: physical_outcome_matrix(simulation),
         symbolic_angles,
         global_phase,
-    }
+    })
 }
 
-/// Recovers the absolute global `ζ₈` phase of the Choi-state encoder via the §4.3 auxiliary
-/// separation: the constant term of the separation phase polynomial over the reference and output
-/// qubits. Falls back to `0` if the (already validated) split is unexpectedly entangled.
-fn recover_global_phase(
+fn physical_outcome_matrix(simulation: &PhasedOutcomeCompleteSimulation) -> BitMatrix {
+    let outcomes = simulation.outcome_matrix();
+    let mut physical_rows = Vec::new();
+    let mut random_bit = 0;
+    for (outcome, &is_random) in simulation.random_outcome_indicator().iter().enumerate() {
+        let is_symbolic_angle = if is_random {
+            let is_symbolic_angle = simulation.symbolic_angle_indicator()[random_bit];
+            random_bit += 1;
+            is_symbolic_angle
+        } else {
+            false
+        };
+        if !is_symbolic_angle {
+            physical_rows.push(outcome);
+        }
+    }
+    debug_assert_eq!(random_bit, simulation.symbolic_angle_indicator().len());
+
+    let mut physical = BitMatrix::zeros(physical_rows.len(), outcomes.column_count());
+    for (row, &source_row) in physical_rows.iter().enumerate() {
+        for column in outcomes.row(source_row).support() {
+            physical.set((row, column), true);
+        }
+    }
+    physical
+}
+
+fn separated_phase(
     simulation: &PhasedOutcomeCompleteSimulation,
     reference_qubits: &[QubitId],
     output_qubits: &[QubitId],
-) -> u8 {
+) -> Result<PhaseData, AuxiliarySeparationError> {
     let support: Vec<usize> = reference_qubits.iter().chain(output_qubits.iter()).copied().collect();
-    separate_auxiliary_qubits(&simulation.phased_state_encoder(), &support)
-        .map_or(0, |separation| separation.phase().constant())
+    let separation = separate_auxiliary_qubits(&simulation.phased_state_encoder(), &support)?;
+    Ok(PhaseData::from_simulation(simulation, separation.phase().clone()))
 }
 
 impl PhasedCircuitAction {
@@ -573,18 +612,14 @@ impl PhasedCircuitAction {
 
     /// Verifies that two phased actions implement the same operator on every input, enforcing the
     /// **virtual/true random-bit distinction**: symbolic-angle (virtual) random bits must correspond
-    /// *one to one* between the two actions, while true (measurement-derived) random bits may be
-    /// marginalized.
+    /// *one to one* between the two actions, while true random bits may differ.
     ///
     /// A symbolic rotation `e^{iα P}` is modelled by conditioning `P` on a bit allocated via
     /// [`Simulation::allocate_symbolic_angle`]. Two encodings of the same parameterised circuit are
     /// equivalent only when their angle bits match up identically — angle `α_k` of one maps to angle
     /// `α_k` of the other, in allocation order, with no affine mixing. True random bits (allocated
-    /// via [`Simulation::allocate_random_bit`] or produced by a genuine measurement) carry no such
-    /// constraint: surplus true bits present in only one action are projected out, matching the way
-    /// the phaseless [`CircuitAction::is_equivalent_with_map`] marginalizes measurement randomness.
-    /// This is exactly what makes measurement-based "ejection" gadgets compare equal to the operation
-    /// they implement directly.
+    /// via [`Simulation::allocate_random_bit`] or produced by a genuine measurement) are checked in
+    /// both comparison directions.
     ///
     /// The two actions must have the same number of symbolic angles (otherwise
     /// [`ActionsInequivalenceReason::SymbolicAngleCount`] is returned). When both actions also share
@@ -595,8 +630,13 @@ impl PhasedCircuitAction {
     ///
     /// Returns a list of [`ActionsInequivalenceReason`] if the actions differ.
     pub fn is_equivalent(&self, other: &PhasedCircuitAction) -> Result<(), Vec<ActionsInequivalenceReason>> {
-        let map = self.provenance_random_map(other).map_err(|reason| vec![reason])?;
-        self.check_with_random_map(other, &map)
+        let self_random_from_other_random = self.provenance_random_map(other).map_err(|reason| vec![reason])?;
+        let other_random_from_self_random = other.provenance_random_map(self).map_err(|reason| vec![reason])?;
+        self.check_with_random_map(
+            other,
+            &self_random_from_other_random,
+            Some(&other_random_from_self_random),
+        )
     }
 
     /// Like [`Self::is_equivalent`], but additionally requires the two actions' *absolute* global
@@ -657,12 +697,11 @@ impl PhasedCircuitAction {
         if !self.angle_correspondence_is_clean(other, &self_random_from_other_random) {
             return Err(vec![ActionsInequivalenceReason::SymbolicAngleMixed]);
         }
-        self.check_with_random_map(other, &self_random_from_other_random)
+        self.check_with_random_map(other, &self_random_from_other_random, None)
     }
 
-    /// Builds the random-bit correspondence used by [`Self::is_equivalent`]: identity (in allocation
-    /// order) on the symbolic-angle bits, identity on the true bits shared by both actions, and a
-    /// projection to zero of any surplus true bits present only in `other`.
+    /// Builds the random-bit correspondence used by [`Self::is_equivalent`]. Symbolic-angle bits and
+    /// shared true-random bits map by allocation order; surplus true-random bits map to zero.
     fn provenance_random_map(&self, other: &PhasedCircuitAction) -> Result<AffineMap, ActionsInequivalenceReason> {
         let self_angles: Vec<usize> = self.symbolic_angles.support().collect();
         let other_angles: Vec<usize> = other.symbolic_angles.support().collect();
@@ -693,32 +732,28 @@ impl PhasedCircuitAction {
         &self,
         other: &PhasedCircuitAction,
         self_random_from_other_random: &AffineMap,
+        reverse_random_map: Option<&AffineMap>,
     ) -> Result<(), Vec<ActionsInequivalenceReason>> {
         self.action.is_equivalent_up_to_signs(&other.action)?;
 
-        let mut reasons = Vec::new();
-        if self
+        let mut reasons = self
             .action
-            .observables
-            .is_equivalent_with_map(&other.action.observables, self_random_from_other_random)
-        {
-            reasons.push(ActionsInequivalenceReason::ObservablesSigns);
+            .sign_reasons_with_random_map(&other.action, self_random_from_other_random);
+        if let Some(other_random_from_self_random) = reverse_random_map {
+            for reason in other
+                .action
+                .sign_reasons_with_random_map(&self.action, other_random_from_self_random)
+            {
+                if !reasons.contains(&reason) {
+                    reasons.push(reason);
+                }
+            }
         }
-        if self
-            .action
-            .stabilizers
-            .is_equivalent_with_map(&other.action.stabilizers, self_random_from_other_random)
-        {
-            reasons.push(ActionsInequivalenceReason::StabilizersSigns);
-        }
-        if self
-            .action
-            .choi_state_stabilizers
-            .is_equivalent_with_map(&other.action.choi_state_stabilizers, self_random_from_other_random)
-        {
-            reasons.push(ActionsInequivalenceReason::ChoiStateSigns);
-        }
-        if !self.relative_phase_matches(other) {
+        let relative_phase_matches = self.relative_phase_matches(other, self_random_from_other_random)
+            && reverse_random_map.is_none_or(|other_random_from_self_random| {
+                other.relative_phase_matches(self, other_random_from_self_random)
+            });
+        if !relative_phase_matches {
             reasons.push(ActionsInequivalenceReason::RelativePhase);
         }
         if reasons.is_empty() { Ok(()) } else { Err(reasons) }
@@ -765,75 +800,87 @@ impl PhasedCircuitAction {
         true
     }
 
-    /// Checks that the branch phase functions of `self` and `other` agree up to a global phase
-    /// **on the symbolic-angle (virtual) random bits only**.
-    ///
-    /// Symbolic-angle bits carry the coherent, observable relative phases of the modelled rotations
-    /// `e^{iα P}`, so they must match. True (measurement-derived) random bits label incoherent,
-    /// traced-out measurement branches whose per-branch global phase is physically unobservable, so
-    /// the comparison ignores them entirely (it sets every true bit to zero). This is what makes the
-    /// phased equivalence reduce *exactly* to the phaseless [`CircuitAction`] equivalence when no
-    /// symbolic angles are present, and what lets measurement-based "ejection" gadgets — whose
-    /// corrected ancilla branches differ only by an unobservable per-branch phase — compare equal to
-    /// the operation they implement directly.
-    ///
-    /// The angle bits of `self` and `other` correspond one to one in allocation order. The phase
-    /// function `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)` restricted to the angle subspace is a
-    /// degree-≤2 polynomial, so it is fully determined by its values on the zero vector, the angle
-    /// unit vectors, and their pairwise sums. Equality up to a global phase is therefore equivalent
-    /// to equality of the linear coefficients `φ(e_i) − φ(0)` and the quadratic coefficients
-    /// `φ(e_i + e_j) − φ(e_i) − φ(e_j) + φ(0)` (ignoring the constant `φ(0)`, i.e. the global phase).
-    fn relative_phase_matches(&self, other: &PhasedCircuitAction) -> bool {
-        let self_angles: Vec<usize> = self.symbolic_angles.support().collect();
-        let other_angles: Vec<usize> = other.symbolic_angles.support().collect();
-        if self_angles.len() != other_angles.len() {
-            return false;
-        }
-        let angle_count = self_angles.len();
-        let self_dimension = self.phase.random_count();
+    /// Checks that the phase difference is constant on every physical-outcome fibre.
+    fn relative_phase_matches(&self, other: &PhasedCircuitAction, self_random_from_other_random: &AffineMap) -> bool {
         let other_dimension = other.phase.random_count();
-
-        let phase_self = |angles: &[usize]| {
-            let indices: Vec<usize> = angles.iter().map(|&order| self_angles[order]).collect();
-            self.phase.phase_exponent(&unit_vector(self_dimension, &indices))
+        let phase_difference = |other_random: &BitVec| {
+            let self_random = self_random_from_other_random.apply(other_random);
+            (i32::from(self.phase.phase_exponent(&self_random)) - i32::from(other.phase.phase_exponent(other_random)))
+                .rem_euclid(8)
         };
-        let phase_other = |angles: &[usize]| {
-            let indices: Vec<usize> = angles.iter().map(|&order| other_angles[order]).collect();
-            other.phase.phase_exponent(&unit_vector(other_dimension, &indices))
-        };
-
-        let constant_self = i32::from(phase_self(&[]));
-        let constant_other = i32::from(phase_other(&[]));
-
-        let mut linear_self = vec![0i32; angle_count];
-        let mut linear_other = vec![0i32; angle_count];
-        for order in 0..angle_count {
-            linear_self[order] = (i32::from(phase_self(&[order])) - constant_self).rem_euclid(8);
-            linear_other[order] = (i32::from(phase_other(&[order])) - constant_other).rem_euclid(8);
-        }
-        if linear_self != linear_other {
-            return false;
-        }
-
-        for first in 0..angle_count {
-            for second in (first + 1)..angle_count {
-                let quadratic_self = (i32::from(phase_self(&[first, second]))
-                    - constant_self
-                    - linear_self[first]
-                    - linear_self[second])
-                    .rem_euclid(8);
-                let quadratic_other = (i32::from(phase_other(&[first, second]))
-                    - constant_other
-                    - linear_other[first]
-                    - linear_other[second])
-                    .rem_euclid(8);
-                if quadratic_self != quadratic_other {
-                    return false;
-                }
+        let (linear, quadratic) = quadratic_phase_coefficients(&phase_difference, other_dimension);
+        let kernel = other.physical_outcomes_from_random.kernel();
+        for row in 0..kernel.row_count() {
+            let direction: BitVec = (&kernel.row(row)).into();
+            if !phase_is_invariant_along(&linear, &quadratic, &direction) {
+                return false;
             }
         }
         true
     }
+}
+
+fn quadratic_phase_coefficients(phase: &impl Fn(&BitVec) -> i32, dimension: usize) -> (Vec<i32>, Vec<i32>) {
+    let constant = phase(&BitVec::zeros(dimension));
+    let mut linear = vec![0; dimension];
+    for (first, coefficient) in linear.iter_mut().enumerate() {
+        *coefficient = (phase(&unit_vector(dimension, &[first])) - constant).rem_euclid(8);
+    }
+
+    let mut quadratic = vec![0; dimension * dimension];
+    for first in 0..dimension {
+        for second in (first + 1)..dimension {
+            quadratic[first * dimension + second] =
+                (phase(&unit_vector(dimension, &[first, second])) - constant - linear[first] - linear[second])
+                    .rem_euclid(8);
+        }
+    }
+    (linear, quadratic)
+}
+
+fn phase_is_invariant_along(linear: &[i32], quadratic: &[i32], direction: &BitVec) -> bool {
+    let dimension = linear.len();
+    let mut derivative_constant = 0;
+    let mut derivative_linear = vec![0; dimension];
+    for bit in direction.support() {
+        derivative_constant += linear[bit];
+        derivative_linear[bit] -= 2 * linear[bit];
+    }
+    for first in 0..dimension {
+        for second in (first + 1)..dimension {
+            let coefficient = quadratic[first * dimension + second];
+            match (direction.index(first), direction.index(second)) {
+                (true, true) => {
+                    derivative_constant += coefficient;
+                    derivative_linear[first] -= coefficient;
+                    derivative_linear[second] -= coefficient;
+                }
+                (true, false) => {
+                    if (2 * coefficient).rem_euclid(8) != 0 {
+                        return false;
+                    }
+                    derivative_linear[second] += coefficient;
+                }
+                (false, true) => {
+                    if (2 * coefficient).rem_euclid(8) != 0 {
+                        return false;
+                    }
+                    derivative_linear[first] += coefficient;
+                }
+                (false, false) => {}
+            }
+        }
+    }
+    if derivative_constant.rem_euclid(8) != 0 {
+        return false;
+    }
+    if derivative_linear
+        .iter()
+        .any(|coefficient| coefficient.rem_euclid(8) != 0)
+    {
+        return false;
+    }
+    true
 }
 
 // ================================================================================================
@@ -852,15 +899,24 @@ pub(crate) struct PhaseData {
     linear_sign: BitVec,
     /// `B`: quadratic `-1` phase.
     quadratic: BitMatrix,
+    /// `A`: branch labels as a function of the inner random bits.
+    branch_labels: BitMatrix,
+    /// Phase from auxiliary separation.
+    encoder_phase: SeparationPhase,
 }
 
 impl PhaseData {
-    /// Extracts the branch phase function recorded by `simulation`.
-    pub(crate) fn from_simulation(simulation: &PhasedOutcomeCompleteSimulation) -> Self {
+    /// Extracts the canonical branch phase recorded by `simulation`.
+    pub(crate) fn from_simulation(
+        simulation: &PhasedOutcomeCompleteSimulation,
+        encoder_phase: SeparationPhase,
+    ) -> Self {
         PhaseData {
             linear_i: simulation.linear_i_phase(),
             linear_sign: simulation.linear_sign_phase(),
             quadratic: simulation.quadratic_phase_matrix(),
+            branch_labels: simulation.sign_matrix(),
+            encoder_phase,
         }
     }
 
@@ -870,13 +926,16 @@ impl PhaseData {
 
     /// The `ζ₈` exponent `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)` for the branch `random_bits`.
     pub(crate) fn phase_exponent(&self, random_bits: &BitVec) -> u8 {
-        phase_form_exponent(
+        let explicit_phase = phase_form_exponent(
             self.random_count(),
             |index| random_bits.index(index),
             |index| self.linear_i.index(index),
             |index| self.linear_sign.index(index),
             |row, column| self.quadratic.get((row, column)),
-        )
+        );
+        let branch_label = &self.branch_labels * &random_bits.as_view();
+        let aligned_branch_label: AlignedBitVec = branch_label.into();
+        (explicit_phase + self.encoder_phase.evaluate(&aligned_branch_label)) % 8
     }
 }
 

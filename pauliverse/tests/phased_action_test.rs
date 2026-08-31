@@ -111,6 +111,65 @@ fn opposite_sign_rotations_differ_only_in_relative_phase() {
 }
 
 #[test]
+fn surplus_measurement_conditioned_rotation_sign_is_phase_relevant() {
+    let unconditional = build_circuit(|builder| {
+        let angle = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), angle);
+    });
+    let conditional = build_circuit(|builder| {
+        let measurement = builder.allocate_random_bit();
+        let angle = builder.allocate_symbolic_angle();
+        builder.conditional_pauli(&sparse(&[x(0)]), &[measurement], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), angle);
+        builder.conditional_pauli(&sparse(&[x(0)]), &[measurement], true);
+    });
+
+    let unconditional_action = phased_action_of(&unconditional, &[0], &[0]).expect("unconditional action");
+    let conditional_action = phased_action_of(&conditional, &[0], &[0]).expect("conditional action");
+
+    let reasons = unconditional_action
+        .is_equivalent(&conditional_action)
+        .expect_err("a surplus measurement-conditioned rotation sign must be phase relevant");
+    assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase]);
+    let reverse_reasons = conditional_action
+        .is_equivalent(&unconditional_action)
+        .expect_err("surplus mixed measurement-angle phase detection must be symmetric");
+    assert_eq!(reverse_reasons, vec![ActionsInequivalenceReason::RelativePhase]);
+}
+
+fn randomizes_prepared_output(randomize: bool) -> PhasedCircuitAction {
+    let circuit = build_circuit(|builder| {
+        if randomize {
+            let bit = builder.allocate_random_bit();
+            builder.conditional_pauli(&sparse(&[x(0)]), &[bit], true);
+        }
+    });
+    phased_action_of(&circuit, &[], &[0]).expect("prepared output action")
+}
+
+#[test]
+fn surplus_randomness_is_checked_symmetrically() {
+    let pure = randomizes_prepared_output(false);
+    let randomized = randomizes_prepared_output(true);
+    assert!(pure.is_equivalent(&randomized).is_err());
+    assert!(randomized.is_equivalent(&pure).is_err());
+    let harmless = phased_action_of(
+        &build_circuit(|builder| {
+            builder.allocate_random_bit();
+        }),
+        &[],
+        &[0],
+    )
+    .expect("harmless random action");
+
+    pure.is_equivalent(&harmless)
+        .expect("unused surplus randomness must not change the action");
+    harmless
+        .is_equivalent(&pure)
+        .expect("harmless surplus randomness equivalence must be symmetric");
+}
+
+#[test]
 fn rotation_equals_itself() {
     let (zz, zz_input, zz_output) = zz_rotation();
     let action = phased_action_of(&zz, &zz_input, &zz_output).expect("action");
@@ -770,6 +829,67 @@ fn detects_phase_only_state_preparation_difference() {
         .is_equivalent(&negative)
         .expect_err("exp(+iαZ) and exp(-iαZ) prepare states differing only in branch phase");
     assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase]);
+}
+
+fn x_rotation_with_z(pre: bool, post: bool) -> PhasedCircuitAction {
+    prepared_state_action(1, |builder| {
+        if pre {
+            builder.unitary_op(UnitaryOp::Z, &[0]);
+        }
+        let angle = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+        if post {
+            builder.unitary_op(UnitaryOp::Z, &[0]);
+        }
+    })
+}
+
+#[test]
+fn canonical_phase_includes_encoder_carried_branch_phase() {
+    let baseline = x_rotation_with_z(false, false);
+    let pre_z = x_rotation_with_z(true, false);
+    let post_z = x_rotation_with_z(false, true);
+
+    baseline
+        .is_equivalent(&pre_z)
+        .expect("a Z before the rotation fixes the prepared input state");
+    pre_z
+        .is_equivalent(&baseline)
+        .expect("the equivalent state-preparation comparison must be symmetric");
+
+    let reasons = baseline
+        .is_equivalent(&post_z)
+        .expect_err("a Z after the rotation changes its sign");
+    assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase]);
+    let reasons = post_z
+        .is_equivalent(&baseline)
+        .expect_err("the inequivalent state-preparation comparison must be symmetric");
+    assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase]);
+}
+
+fn measured_x_rotation(post_z: bool) -> PhasedCircuitAction {
+    let circuit = build_circuit(|builder| {
+        let angle = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+        if post_z {
+            builder.unitary_op(UnitaryOp::Z, &[0]);
+        }
+        let _ = builder.measure(&sparse(&[z(0)]));
+    });
+    phased_action_of(&circuit, &[], &[]).expect("measured state-preparation action")
+}
+
+#[test]
+fn physical_outcome_sectors_quotient_branch_global_phase() {
+    let baseline = measured_x_rotation(false);
+    let post_z = measured_x_rotation(true);
+
+    baseline
+        .is_equivalent(&post_z)
+        .expect("the Z phase is global after the physical measurement reveals the angle branch");
+    post_z
+        .is_equivalent(&baseline)
+        .expect("outcome-sector phase equivalence must be symmetric");
 }
 
 /// The §4.1 reduction generalizes to several independent symbolic angles. `exp(iα Z₀Z₁) exp(iβ Z₀)|++>`
