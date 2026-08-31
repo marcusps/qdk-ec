@@ -89,19 +89,22 @@ fn block_labels(
     combined
 }
 
-/// Run the separation on `co_clifford` with output qubits `[0, k1)` and check eq. aux-out-separation
-/// for every label `r`.
-fn check_separation(co_clifford: &CliffordUnitary, k1: usize) {
+fn check_separation_with_outputs(co_clifford: &CliffordUnitary, output: &[usize]) {
     let num_qubits = co_clifford.num_qubits();
-    let output: Vec<usize> = (0..k1).collect();
     let encoder = phased_from_clifford(co_clifford);
+    let output_set: BTreeSet<usize> = output.iter().copied().collect();
+    let auxiliary: Vec<usize> = (0..num_qubits).filter(|qubit| !output_set.contains(qubit)).collect();
+    let qubit_order: Vec<usize> = output.iter().chain(&auxiliary).copied().collect();
+    let all_qubits: Vec<usize> = (0..num_qubits).collect();
+    let mut ordered_encoder = encoder.clone();
+    ordered_encoder.left_mul_permutation(&qubit_order, &all_qubits);
 
-    let separation = separate_auxiliary_qubits(&encoder, &output).expect("disentangled auxiliary qubits separate");
+    let separation = separate_auxiliary_qubits(&encoder, output).expect("disentangled auxiliary qubits separate");
     let blocks = phased_from_clifford(&separation.output_encoder().tensor(separation.auxiliary_encoder()));
 
     for value in 0..(1usize << num_qubits) {
         let label = label_bits(value, num_qubits);
-        let encoder_state = encoded_basis_state(&encoder, &label);
+        let encoder_state = encoded_basis_state(&ordered_encoder, &label);
         let block_label = block_labels(separation.output_basis_map(), separation.auxiliary_basis_map(), &label);
         let block_state = encoded_basis_state(&blocks, &block_label);
 
@@ -109,15 +112,19 @@ fn check_separation(co_clifford: &CliffordUnitary, k1: usize) {
         assert_eq!(
             diffs.len(),
             1,
-            "n={num_qubits} k1={k1} r={value}: not a single global phase: {diffs:?}"
+            "n={num_qubits} output={output:?} r={value}: not a single global phase: {diffs:?}"
         );
         let expected = i64::from(separation.phase().evaluate(&label)).rem_euclid(8);
         assert_eq!(
             *diffs.iter().next().unwrap(),
             expected,
-            "n={num_qubits} k1={k1} r={value}: phase polynomial mismatch",
+            "n={num_qubits} output={output:?} r={value}: phase polynomial mismatch",
         );
     }
+}
+
+fn check_separation(co_clifford: &CliffordUnitary, k1: usize) {
+    check_separation_with_outputs(co_clifford, &(0..k1).collect::<Vec<_>>());
 }
 
 #[test]
@@ -172,4 +179,18 @@ fn invalid_output_qubits_are_rejected() {
         separate_auxiliary_qubits(&encoder, &[0, 0]).unwrap_err(),
         AuxiliarySeparationError::InvalidOutputQubits,
     );
+}
+
+#[test]
+fn non_leading_output_subset_preserves_exact_phase_and_basis_map() {
+    let mut rng = rand::rngs::StdRng::seed_from_u64(47);
+    let output = [2, 0];
+    let inverse_order = [1, 2, 0];
+    let all_qubits = [0, 1, 2];
+    for _ in 0..40 {
+        let ordered_product = CliffordUnitary::random(2, &mut rng).tensor(&CliffordUnitary::random(1, &mut rng));
+        let mut physical_encoder = ordered_product;
+        physical_encoder.left_mul_permutation(&inverse_order, &all_qubits);
+        check_separation_with_outputs(&physical_encoder, &output);
+    }
 }

@@ -173,17 +173,23 @@ pub fn separate_auxiliary_qubits(
         }
         is_output[qubit] = true;
     }
-    let output: Vec<usize> = output_qubits.to_vec();
     let auxiliary: Vec<usize> = (0..num_qubits).filter(|qubit| !is_output[*qubit]).collect();
+    let qubit_order: Vec<usize> = output_qubits.iter().chain(&auxiliary).copied().collect();
+    let all_qubits: Vec<usize> = (0..num_qubits).collect();
+    let mut ordered_encoder = encoder.clone();
+    ordered_encoder.left_mul_permutation(&qubit_order, &all_qubits);
 
-    let clifford = encoder.clifford();
+    let output: Vec<usize> = (0..output_qubits.len()).collect();
+    let auxiliary: Vec<usize> = (output_qubits.len()..num_qubits).collect();
+
+    let clifford = ordered_encoder.clifford();
     let output_encoder = marginal_encoder(clifford, &output)?;
     let auxiliary_encoder = marginal_encoder(clifford, &auxiliary)?;
     let blocks = phased_from_clifford(&output_encoder.tensor(&auxiliary_encoder));
 
     let basis_map = basis_label_map(clifford, &output_encoder, &auxiliary_encoder, &output, &auxiliary);
 
-    let phase = interpolate_phase(encoder, &blocks, &basis_map, num_qubits)?;
+    let phase = interpolate_phase(&ordered_encoder, &blocks, &basis_map, num_qubits)?;
 
     let (output_basis_map, auxiliary_basis_map) = split_rows(&basis_map, output.len());
 
