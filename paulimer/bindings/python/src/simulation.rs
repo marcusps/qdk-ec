@@ -375,23 +375,40 @@ impl_simulation!(
         #[getter]
         #[must_use]
         pub fn symbolic_angles(&self) -> Vec<PySymbolicAngle> {
-            self.inner
-                .symbolic_angle_indicator()
+            let symbolic_angle_indicator = self.inner.symbolic_angle_indicator();
+            let mut random_bit = 0;
+            let mut angle_index = 0;
+            let angles = self
+                .inner
+                .random_outcome_indicator()
                 .iter()
                 .enumerate()
-                .filter(|(_, &is_angle)| is_angle)
-                .enumerate()
-                .map(|(index, (outcome, _))| PySymbolicAngle { outcome, index })
-                .collect()
+                .filter_map(|(outcome, &is_random)| {
+                    if !is_random {
+                        return None;
+                    }
+                    let is_angle = symbolic_angle_indicator[random_bit];
+                    random_bit += 1;
+                    if !is_angle {
+                        return None;
+                    }
+                    let angle = PySymbolicAngle {
+                        outcome,
+                        index: angle_index,
+                    };
+                    angle_index += 1;
+                    Some(angle)
+                })
+                .collect();
+            debug_assert_eq!(random_bit, symbolic_angle_indicator.len());
+            angles
         }
 
         /// Apply a symbolic Pauli exponent `e^{iα P}` parameterised by `angle`.
         ///
         /// `angle` must be a [`SymbolicAngle`] obtained from [`allocate_symbolic_angle`] or
         /// [`allocate_symbolic_angles`]. This is the high-level way to add a free-angle exponent
-        /// `e^{iα P}` for an arbitrary Pauli `P`. The same `angle` may parameterise several exponents
-        /// to model a shared `α`, and angles with matching `index` in two circuits are what make those
-        /// circuits' exponents correspond when their phased actions are compared.
+        /// `e^{iα P}` for an arbitrary Pauli `P`.
         #[allow(clippy::needless_pass_by_value)]
         pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: &PySymbolicAngle) {
             self.inner.symbolic_pauli_exp(&observable.inner, angle.outcome);

@@ -320,6 +320,20 @@ class TestPhasedOutcomeCompleteSimulationSpecific:
         # The trivial assignment never contributes a phase.
         assert sim.output_phase_exponent([False]) == 0
 
+    def test_symbolic_angles_preserve_public_outcome_after_deterministic_measurement(self):
+        def action(use_retrieved_angle):
+            sim = PhasedOutcomeCompleteSimulation(1)
+            assert sim.measure(SparsePauli("Z_0")) == 0
+            allocated = sim.allocate_symbolic_angle()
+            retrieved = sim.symbolic_angles[0]
+            assert retrieved == allocated
+            angle = retrieved if use_retrieved_angle else allocated
+            sim.apply_symbolic_pauli_exp(SparsePauli("Z_0"), angle)
+            return sim.phased_action([], [0])
+
+        assert action(True).is_equivalent(action(False))
+
+
 def _choi_action(build_gadget, n=1):
     """Phased Choi action of a symbolic-rotation gadget on ``n`` system qubits.
 
