@@ -990,3 +990,26 @@ fn identical_circuit_matches_global_phase() {
     lhs.is_equivalent_with_global_phase(&rhs)
         .expect("a circuit must equal itself including the global phase");
 }
+
+#[test]
+fn global_phase_check_preserves_unrelated_inequivalence_reasons() {
+    let direct = build_circuit(|builder| builder.pauli(&sparse(&[y(0)])));
+    let factored = build_circuit(|builder| {
+        builder.pauli(&sparse(&[x(0)]));
+        builder.pauli(&sparse(&[z(0)]));
+    });
+
+    let direct_action = phased_action_of(&direct, &[0], &[0]).expect("direct action");
+    let unrelated_action = phased_action_of(&factored, &[], &[0]).expect("unrelated action");
+    assert_ne!(direct_action.global_phase(), unrelated_action.global_phase());
+
+    let base_reasons = direct_action
+        .is_equivalent(&unrelated_action)
+        .expect_err("actions with different input counts are unrelated");
+    let exact_reasons = direct_action
+        .is_equivalent_with_global_phase(&unrelated_action)
+        .expect_err("unrelated actions remain inequivalent");
+
+    assert_eq!(exact_reasons, base_reasons);
+    assert!(!exact_reasons.contains(&ActionsInequivalenceReason::GlobalPhase));
+}

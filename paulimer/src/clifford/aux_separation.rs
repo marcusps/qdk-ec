@@ -22,7 +22,7 @@ use binar::{BitMatrix, Bitwise, BitwiseMut};
 
 use super::{
     Clifford, CliffordUnitary, PhasedCliffordUnitary, clifford_to_pauli_exponents, group_encoding_clifford_of,
-    standard_restriction_with_sign_matrix,
+    phased_clifford::StateAmplitudePhaseQuery, standard_restriction_with_sign_matrix,
 };
 use crate::DensePauli;
 use crate::pauli::Pauli;
@@ -173,17 +173,23 @@ pub fn separate_auxiliary_qubits(
         }
         is_output[qubit] = true;
     }
-    let output: Vec<usize> = output_qubits.to_vec();
     let auxiliary: Vec<usize> = (0..num_qubits).filter(|qubit| !is_output[*qubit]).collect();
+    let qubit_order: Vec<usize> = output_qubits.iter().chain(&auxiliary).copied().collect();
+    let all_qubits: Vec<usize> = (0..num_qubits).collect();
+    let mut ordered_encoder = encoder.clone();
+    ordered_encoder.left_mul_permutation(&qubit_order, &all_qubits);
 
-    let clifford = encoder.clifford();
+    let output: Vec<usize> = (0..output_qubits.len()).collect();
+    let auxiliary: Vec<usize> = (output_qubits.len()..num_qubits).collect();
+
+    let clifford = ordered_encoder.clifford();
     let output_encoder = marginal_encoder(clifford, &output)?;
     let auxiliary_encoder = marginal_encoder(clifford, &auxiliary)?;
     let blocks = phased_from_clifford(&output_encoder.tensor(&auxiliary_encoder));
 
     let basis_map = basis_label_map(clifford, &output_encoder, &auxiliary_encoder, &output, &auxiliary);
 
-    let phase = interpolate_phase(encoder, &blocks, &basis_map, num_qubits)?;
+    let phase = interpolate_phase(&ordered_encoder, &blocks, &basis_map, num_qubits)?;
 
     let (output_basis_map, auxiliary_basis_map) = split_rows(&basis_map, output.len());
 
@@ -285,7 +291,9 @@ fn encoded_basis_state(clifford: &PhasedCliffordUnitary, bits: &AlignedBitVec) -
 /// (the auxiliary qubits are entangled).
 fn separation_phase_at(
     encoder: &PhasedCliffordUnitary,
+    encoder_phase_query: &StateAmplitudePhaseQuery,
     blocks: &PhasedCliffordUnitary,
+    blocks_phase_query: &StateAmplitudePhaseQuery,
     basis_map: &AlignedBitMatrix,
     label: &AlignedBitVec,
 ) -> Option<u8> {
@@ -293,8 +301,9 @@ fn separation_phase_at(
     let block_labels = basis_map * &label.as_view();
     let block_state = encoded_basis_state(blocks, &block_labels);
     let representative = encoder_state.support_representative();
-    let encoder_phase = encoder_state.state_amplitude_phase_exponent(&representative)?;
-    let block_phase = block_state.state_amplitude_phase_exponent(&representative)?;
+    let encoder_phase =
+        encoder_state.state_amplitude_phase_exponent_with_query(&representative, encoder_phase_query)?;
+    let block_phase = block_state.state_amplitude_phase_exponent_with_query(&representative, blocks_phase_query)?;
     Some(u8::try_from((i64::from(encoder_phase) - i64::from(block_phase)).rem_euclid(8)).expect("modulo 8"))
 }
 
@@ -306,8 +315,18 @@ fn interpolate_phase(
     basis_map: &AlignedBitMatrix,
     num_qubits: usize,
 ) -> Result<SeparationPhase, AuxiliarySeparationError> {
+    let encoder_phase_query = encoder.state_amplitude_phase_query();
+    let blocks_phase_query = blocks.state_amplitude_phase_query();
     let phase_at = |label: &AlignedBitVec| {
-        separation_phase_at(encoder, blocks, basis_map, label).ok_or(AuxiliarySeparationError::AuxiliaryQubitsEntangled)
+        separation_phase_at(
+            encoder,
+            &encoder_phase_query,
+            blocks,
+            &blocks_phase_query,
+            basis_map,
+            label,
+        )
+        .ok_or(AuxiliarySeparationError::AuxiliaryQubitsEntangled)
     };
     let unit = |index: usize| {
         let mut label = AlignedBitVec::zeros(num_qubits);

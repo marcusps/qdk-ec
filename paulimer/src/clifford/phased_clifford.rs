@@ -81,6 +81,10 @@ pub struct PhasedCliffordUnitary {
     reference_phase_exponent: u8,
 }
 
+pub(super) struct StateAmplitudePhaseQuery {
+    x_parts_echelon: EchelonForm,
+}
+
 impl PhasedCliffordUnitary {
     /// Returns the identity operator on `num_qubits` qubits, with encoder state `|0…0⟩`.
     pub fn identity(num_qubits: usize) -> Self {
@@ -130,7 +134,22 @@ impl PhasedCliffordUnitary {
     /// or `None` when that amplitude vanishes.
     #[must_use]
     pub fn state_amplitude_phase_exponent(&self, basis: &AlignedBitVec) -> Option<u8> {
-        let relative = self.relative_phase(basis)?;
+        let query = self.state_amplitude_phase_query();
+        self.state_amplitude_phase_exponent_with_query(basis, &query)
+    }
+
+    pub(super) fn state_amplitude_phase_query(&self) -> StateAmplitudePhaseQuery {
+        StateAmplitudePhaseQuery {
+            x_parts_echelon: EchelonForm::new(self.x_parts_matrix()),
+        }
+    }
+
+    pub(super) fn state_amplitude_phase_exponent_with_query(
+        &self,
+        basis: &AlignedBitVec,
+        query: &StateAmplitudePhaseQuery,
+    ) -> Option<u8> {
+        let relative = self.relative_phase_with_query(basis, query)?;
         Some(normalize_exponent(i64::from(self.reference_phase_exponent) + relative))
     }
 
@@ -158,12 +177,16 @@ impl PhasedCliffordUnitary {
     }
 
     fn relative_phase(&self, target: &AlignedBitVec) -> Option<i64> {
+        let query = self.state_amplitude_phase_query();
+        self.relative_phase_with_query(target, &query)
+    }
+
+    fn relative_phase_with_query(&self, target: &AlignedBitVec, query: &StateAmplitudePhaseQuery) -> Option<i64> {
         let num_qubits = self.num_qubits();
         let difference: BitVec = (0..num_qubits)
             .map(|qubit| target.index(qubit) ^ self.reference_string.index(qubit))
             .collect();
-        let echelon = EchelonForm::new(self.x_parts_matrix());
-        let combination = echelon.transpose_solve(&difference.as_view())?;
+        let combination = query.x_parts_echelon.transpose_solve(&difference.as_view())?;
         let mut product = self.clifford.image_z(0);
         let mut started = false;
         for generator in combination.support() {
