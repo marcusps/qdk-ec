@@ -417,7 +417,8 @@ impl_simulation!(
         #[allow(clippy::needless_pass_by_value)]
         /// # Errors
         ///
-        /// Returns a `ValueError` if the non-output system qubits remain entangled.
+        /// Returns a `ValueError` if the non-output system qubits remain entangled or auxiliary
+        /// separation fails.
         pub fn phased_action(
             &self,
             input_qubits: Vec<usize>,
