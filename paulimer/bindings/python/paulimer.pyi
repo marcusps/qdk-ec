@@ -1303,7 +1303,7 @@ class PhasedOutcomeCompleteSimulation:
 
         Raises:
             ValueError: If the non-output system qubits remain entangled with the rest of
-                the state.
+                the state or auxiliary separation fails.
         """
         ...
 
