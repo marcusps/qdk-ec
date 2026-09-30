@@ -31,6 +31,7 @@ enum Op {
     ControlledPauli(String, String),
     ConditionalPauli(String, Vec<usize>, bool),
     Measure(String),
+    MeasureHinted(String, String),
 }
 
 fn random_hermitian_pauli(rng: &mut impl RngExt, qubit_count: usize) -> String {
@@ -89,7 +90,7 @@ fn random_circuit(rng: &mut impl RngExt, qubit_count: usize) -> Vec<Op> {
     let mut measurement_count = 0usize;
     let op_count = rng.random_range(6..14);
     for _ in 0..op_count {
-        match rng.random_range(0..7) {
+        match rng.random_range(0..8) {
             0 => {
                 let qubit = rng.random_range(0..qubit_count);
                 ops.push(Op::Gate(
@@ -145,15 +146,40 @@ fn random_circuit(rng: &mut impl RngExt, qubit_count: usize) -> Vec<Op> {
                     }
                 }
             }
-            _ => {
+            6 => {
                 if measurement_count < 5 {
                     ops.push(Op::Measure(random_hermitian_pauli(rng, qubit_count)));
                     measurement_count += 1;
                 }
             }
+            // Measuring the hint first makes it a stabilizer up to sign. Enumerating every branch
+            // then covers both hint signs, so the negative-hint path is exercised.
+            _ => {
+                if let Some((hint, observable)) =
+                    anticommuting_pair(rng, qubit_count).filter(|_| measurement_count + 1 < 5)
+                {
+                    ops.push(Op::Measure(hint.clone()));
+                    ops.push(Op::MeasureHinted(observable, hint));
+                    measurement_count += 2;
+                }
+            }
         }
     }
     ops
+}
+
+/// Draws a Hermitian Pauli pair that anticommutes, or `None` if the draws keep commuting.
+fn anticommuting_pair(rng: &mut impl RngExt, qubit_count: usize) -> Option<(String, String)> {
+    let hint = random_hermitian_pauli(rng, qubit_count);
+    let hint_sparse: SparsePauli = hint.parse().unwrap();
+    for _ in 0..32 {
+        let observable = random_hermitian_pauli(rng, qubit_count);
+        let observable_sparse: SparsePauli = observable.parse().unwrap();
+        if !commutes_with(&hint_sparse, &observable_sparse) {
+            return Some((hint, observable));
+        }
+    }
+    None
 }
 
 fn run_simulation(ops: &[Op], qubit_count: usize) -> PhasedOutcomeCompleteSimulation {
@@ -171,6 +197,9 @@ fn run_simulation(ops: &[Op], qubit_count: usize) -> PhasedOutcomeCompleteSimula
             }
             Op::Measure(pauli) => {
                 sim.measure(&pauli.parse().unwrap());
+            }
+            Op::MeasureHinted(observable, hint) => {
+                sim.measure_with_hint(&observable.parse().unwrap(), &hint.parse().unwrap());
             }
         }
     }
@@ -210,7 +239,7 @@ fn dense_reference(ops: &[Op], outcome_bits: &[bool], qubit_count: usize) -> Vec
                     dense.apply_pauli(&x_bits, &z_bits, phase);
                 }
             }
-            Op::Measure(pauli) => {
+            Op::Measure(pauli) | Op::MeasureHinted(pauli, _) => {
                 let (x_bits, z_bits, phase) = pauli_arrays(&pauli.parse::<DensePauli>().unwrap(), qubit_count);
                 dense.project(&x_bits, &z_bits, phase, outcome_bits[measurement_index]);
                 measurement_index += 1;
@@ -277,6 +306,7 @@ fn describe(ops: &[Op]) -> String {
             Op::ControlledPauli(first_pauli, second_pauli) => format!("CPauli({first_pauli},{second_pauli})"),
             Op::ConditionalPauli(pauli, outcomes, parity) => format!("CondPauli({pauli},{outcomes:?},{parity})"),
             Op::Measure(pauli) => format!("Measure({pauli})"),
+            Op::MeasureHinted(observable, hint) => format!("MeasureHinted({observable}, {hint})"),
         })
         .collect::<Vec<_>>()
         .join(" | ")

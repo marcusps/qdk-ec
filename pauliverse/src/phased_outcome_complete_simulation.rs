@@ -377,32 +377,29 @@ impl PhasedOutcomeCompleteSimulation {
             // Ensure capacity for the new random bit before sizing the indicator vectors.
             self.ensure_outcome_capacity(true);
 
-            // R <- (-1)^alpha e^{i pi/4 (i P' P)} R.
-            // i P' P = -i P P', so the rotation Pauli is (observable * hint) with an i^3 = -i phase.
+            // R <- e^{i pi/4 (i P' P)} R, where the rotation Pauli is (observable * hint) carrying
+            // the phase i^(3 - k) and i^k is the phase of the preimage of the hint. This matches
+            // the unphased simulator, which arXiv:2603.24717 Algorithm 4.2 leaves unchanged.
             let alpha = preimage.xz_phase_exponent().value() / 2;
             let mut rotation = observable.clone();
             rotation.mul_assign_right(hint);
-            rotation.add_assign_phase_exp(3);
+            rotation.add_assign_phase_exp(3u8.wrapping_sub(preimage.xz_phase_exponent().raw_value()));
             self.phased_clifford.left_mul_pauli_exp(&rotation);
 
             // a = A^T b', with the new random bit appended: a_with_zero and a_with_one = a ⊕ {0,1}.
             let a_with_zero = row_sum(&self.sign_matrix, preimage.z_bits().support());
             let mut a_with_one = a_with_zero.clone();
             a_with_one.assign_index(self.random_bit_count, true);
-            let new_random_bit = self.random_bit_count;
             self.allocate_random_bit();
 
-            // B <- B + (a ⊕ 0)(a ⊕ 1)^T, s_{n(s)} <- s_{n(s)} + alpha.
+            // B <- B + (a ⊕ 0)(a ⊕ 1)^T.
             for row in a_with_zero.support() {
                 self.quadratic_phase_matrix.row_mut(row).bitxor_assign(&a_with_one);
             }
+            // A negative hint contributes the sign (-1)^(alpha <a ⊕ 1, r>), as stated in the prose
+            // after Proposition 4.4 of arXiv:2603.24717. The pseudo-code listing omits it.
             if alpha == 1 {
-                self.linear_sign_phase
-                    .assign_index(new_random_bit, !self.linear_sign_phase.index(new_random_bit));
-                // (-1)^alpha relabels the reported outcome (m = r ⊕ alpha), not the global phase.
-                let outcome_position = self.outcome_count() - 1;
-                self.outcome_shift
-                    .assign_index(outcome_position, !self.outcome_shift.index(outcome_position));
+                self.linear_sign_phase.bitxor_assign(&a_with_one);
             }
 
             // Apply P' conditioned on the random bits indicated by (a ⊕ 1).
