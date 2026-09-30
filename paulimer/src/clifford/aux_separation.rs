@@ -11,10 +11,23 @@
 //! Co|r⟩ = ζ₈^{φ(r)} (Co₁|A₁r⟩ ⊗ Co₂|A₂r⟩).
 //! ```
 //!
-//! The separation phase `φ(r)` is a degree-at-most-two polynomial in `r` modulo `8` (a constant
-//! `l`, a linear part and a quadratic part). This is exactly the `(l, p, s, B)` global-phase
-//! bookkeeping that the phased outcome-complete simulation already tracks, so the recovered
-//! polynomial folds directly into that data.
+//! The separation phase `φ(r)` is a degree-at-most-two polynomial in `r` modulo `8`: a constant
+//! `l`, a linear part and a quadratic part. The `pauliverse` action layer adds it to the branch
+//! phase the phased outcome-complete simulation already tracks, which is a polynomial of the same
+//! shape.
+//!
+//! # Difference from the paper
+//!
+//! Equation `aux-out-separation` states that a single scalar `i^l` relates the two sides whenever
+//! every state of the basis family is a product state. That statement is too strong. Take `Co = CZ`
+//! with output qubit `0`: all four basis-family states are product states, yet the phases at the
+//! four labels are `0, 0, 0, 4`, so no one scalar works. An exhaustive search over all `24 × 24`
+//! local Clifford factors and all six invertible relabelling maps, allowing any global scalar,
+//! finds no solution. The constant is also a full `ζ₈` exponent rather than a power of `i`; for
+//! example `(SH)³ = ζ₈·I` gives an odd constant.
+//!
+//! This module therefore returns the `r`-dependent polynomial that the identity actually needs. It
+//! reduces to the paper's form when the linear and quadratic parts vanish.
 
 use binar::matrix::AlignedBitMatrix;
 use binar::vec::AlignedBitVec;
