@@ -4,6 +4,11 @@ The decomposition reproduces a Clifford's symplectic (conjugation) action with a
 pi/4 Pauli exponents, ignoring Pauli-image signs and the global phase.
 """
 
+import sys
+import threading
+import time
+
+import pytest
 from binar import BitMatrix, rank
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -164,3 +169,27 @@ def test_random_centralizers_are_conjugation_fixed(clifford):
     for generator in clifford.centralizer():
         assert _is_conjugation_fixed(clifford, generator)
         assert generator.weight > 0
+
+
+@pytest.mark.skipif(
+    sys.platform == "emscripten",
+    reason="threading is unavailable under Emscripten/Pyodide",
+)
+def test_minimal_decomposition_releases_the_gil():
+    """A long minimal search must let other Python threads run."""
+    qubit_count = 20
+    permutation = []
+    for qubit in range(0, qubit_count, 2):
+        permutation += [qubit + 1, qubit]
+    swap_layer = CliffordUnitary.identity(qubit_count)
+    swap_layer.left_mul_permutation(permutation, list(range(qubit_count)))
+
+    worker = threading.Thread(target=swap_layer.to_transvections_minimal)
+    worker.start()
+    ticks = 0
+    while worker.is_alive():
+        time.sleep(0.001)
+        ticks += 1
+    worker.join()
+
+    assert ticks > 5, f"the search held the GIL. The main thread only ran {ticks} times"

@@ -308,14 +308,23 @@ impl PyCliffordUnitary {
     /// Decomposes this Clifford into a *minimal* ordered product of Clifford transvections (pi/4
     /// Pauli exponents), reproducing its symplectic action with the fewest possible factors.
     ///
-    /// Returns Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4 P_1)``, then
-    /// ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces the conjugation action of this
-    /// Clifford, with ``k`` equal to the minimal transvection count (``r`` or ``r + 1``, where ``r``
-    /// is the rank of the residue matrix). Pauli-image signs and the global phase are not
-    /// reproduced; see :meth:`to_transvections` for the linear-time greedy decomposition, which may
-    /// use more factors.
-    fn to_transvections_minimal(&self) -> Vec<PySparsePauli> {
-        clifford_to_transvections_minimal(&self.inner)
+    /// Returns Hermitian Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4
+    /// P_1)``, then ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces the conjugation
+    /// action of this Clifford, with ``k`` equal to the minimal transvection count (``r`` or
+    /// ``r + 1``, where ``r`` is the rank of the residue matrix). Pauli-image signs are not
+    /// reproduced. No tableau-level decomposition reproduces the global phase, because a tableau
+    /// does not record it. See :meth:`to_transvections` for the greedy O(n)-factor decomposition,
+    /// which can use more factors.
+    ///
+    /// The call can run for a long time on structured high-rank inputs, because the exact search
+    /// can be exponential in the residue rank, in both running time and memoization space. A
+    /// 20-qubit swap layer takes about one second, but a 10-qubit sum of five Callan class-A blocks
+    /// runs for minutes and uses hundreds of megabytes. The binding releases the GIL while the Rust
+    /// search runs, so other Python threads keep running, but the call itself cannot be interrupted
+    /// or cancelled.
+    fn to_transvections_minimal(&self, py: Python<'_>) -> Vec<PySparsePauli> {
+        let clifford = self.inner.clone();
+        py.detach(move || clifford_to_transvections_minimal(&clifford))
             .into_iter()
             .map(PySparsePauli::from)
             .collect()
