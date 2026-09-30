@@ -1,11 +1,13 @@
 //! Tests for the Clifford -> transvection decomposition (arXiv:2102.11380).
 //!
 //! The decomposition reproduces the *symplectic action* (ignoring Pauli-image signs and the global
-//! phase) with a linear number of factors. It is not guaranteed to hit the strict `r`/`r + 1`
-//! minimum, so these tests validate the symplectic-action round trip, the linear factor bound, and
-//! the centralizer contract, rather than exact minimality.
+//! phase) with a linear number of factors. It is a greedy reduction rather than a minimal-length
+//! algorithm, so these tests validate the symplectic-action round trip, the validity of the
+//! replayed tableau, the residue-rank lower bound, the linear upper bound, and the fixed-space
+//! contract, rather than exact minimality.
 
 use binar::Bitwise;
+use binar::matrix::AlignedBitMatrix;
 use paulimer::UnitaryOp;
 use paulimer::clifford::{Clifford, CliffordMutable, CliffordUnitary, clifford_centralizer, clifford_to_transvections};
 use paulimer::pauli::{Pauli, SparsePauli};
@@ -33,10 +35,27 @@ fn is_non_identity(pauli: &SparsePauli) -> bool {
     !(pauli.x_bits().is_zero() && pauli.z_bits().is_zero())
 }
 
-/// The strict minimal factor count `r = 2n - dim Fix(F)`; the greedy decomposition returns `r` or a
-/// little more.
+/// The residue rank `r = rank(I + F)` of the symplectic action.
+///
+/// This is computed from the symplectic matrix alone so that it stays independent of
+/// [`clifford_centralizer`]; deriving it from the centralizer length would make the fixed-space
+/// dimension assertions tautological.
 fn residue_rank(clifford: &CliffordUnitary) -> usize {
-    2 * clifford.num_qubits() - clifford_centralizer(clifford).len()
+    let mut residue = clifford.symplectic_matrix();
+    residue ^= &AlignedBitMatrix::identity(2 * clifford.num_qubits());
+    residue.rank()
+}
+
+/// The rank over GF(2) of the symplectic vectors of `paulis`.
+fn binary_rank(paulis: &[SparsePauli], qubit_count: usize) -> usize {
+    let mut matrix = AlignedBitMatrix::zeros(paulis.len(), 2 * qubit_count);
+    for (row, pauli) in paulis.iter().enumerate() {
+        for qubit in 0..qubit_count {
+            matrix.set((row, qubit), pauli.x_bits().index(qubit));
+            matrix.set((row, qubit_count + qubit), pauli.z_bits().index(qubit));
+        }
+    }
+    matrix.rank()
 }
 
 fn assert_valid_decomposition(clifford: &CliffordUnitary) {
@@ -57,10 +76,10 @@ fn assert_valid_decomposition(clifford: &CliffordUnitary) {
         assert!(is_non_identity(transvection), "factors are non-identity Paulis");
     }
 
-    let minimum = residue_rank(clifford);
+    let lower_bound = residue_rank(clifford);
     assert!(
-        transvections.len() >= minimum,
-        "a decomposition cannot be shorter than the minimum {minimum}, got {}",
+        transvections.len() >= lower_bound,
+        "a decomposition cannot be shorter than the residue rank {lower_bound}, got {}",
         transvections.len()
     );
     assert!(
@@ -173,14 +192,19 @@ fn centralizer_generators_are_conjugation_fixed_and_independent() {
     let centralizer = clifford_centralizer(&clifford);
     assert!(centralizer.iter().all(|pauli| is_conjugation_fixed(&clifford, pauli)));
     assert!(centralizer.iter().all(is_non_identity));
-    assert!(
-        centralizer.iter().all(|pauli| pauli.xyz_phase_exponent() == 0),
-        "centralizer generators must be positive Hermitian observables"
-    );
     assert_eq!(
         centralizer.len(),
         2 * clifford.num_qubits() - residue_rank(&clifford),
-        "the centralizer dimension is 2n - r"
+        "the fixed space has dimension 2n - rank(I + F)"
+    );
+    assert_eq!(
+        binary_rank(&centralizer, clifford.num_qubits()),
+        centralizer.len(),
+        "the generators must be independent"
+    );
+    assert!(
+        centralizer.iter().all(|pauli| pauli.xyz_phase_exponent() == 0),
+        "centralizer generators must be positive Hermitian observables"
     );
 }
 
@@ -269,33 +293,19 @@ proptest! {
 
     #[test]
     fn reproduces_symplectic_action((qubit_count, gates) in scenario()) {
-        let clifford = clifford_from_gates(qubit_count, &gates);
-        let transvections = clifford_to_transvections(&clifford);
-        let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
-        prop_assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
-    }
-
-    #[test]
-    fn decomposition_is_linear_and_no_shorter_than_minimum((qubit_count, gates) in scenario()) {
-        let clifford = clifford_from_gates(qubit_count, &gates);
-        let transvection_count = clifford_to_transvections(&clifford).len();
-        let minimum = residue_rank(&clifford);
-        prop_assert!(
-            transvection_count >= minimum,
-            "got {transvection_count} factors, below the minimum {minimum}"
-        );
-        prop_assert!(
-            transvection_count <= 4 * qubit_count + 2,
-            "got {transvection_count} factors, above the linear bound"
-        );
+        assert_valid_decomposition(&clifford_from_gates(qubit_count, &gates));
     }
 
     #[test]
     fn centralizer_is_conjugation_fixed((qubit_count, gates) in scenario()) {
         let clifford = clifford_from_gates(qubit_count, &gates);
-        for generator in clifford_centralizer(&clifford) {
+        let centralizer = clifford_centralizer(&clifford);
+        prop_assert_eq!(centralizer.len(), 2 * qubit_count - residue_rank(&clifford));
+        prop_assert_eq!(binary_rank(&centralizer, qubit_count), centralizer.len());
+        for generator in centralizer {
             prop_assert!(is_conjugation_fixed(&clifford, &generator));
             prop_assert!(is_non_identity(&generator), "centralizer generators must be non-identity");
+            prop_assert_eq!(generator.xyz_phase_exponent(), 0);
         }
     }
 }
