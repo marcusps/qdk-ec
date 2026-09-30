@@ -293,10 +293,11 @@ impl PyCliffordUnitary {
     /// Decomposes this Clifford into an ordered product of Clifford transvections (pi/4 Pauli
     /// exponents), reproducing its symplectic action with a linear number of factors.
     ///
-    /// Returns Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4 P_1)``, then
-    /// ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces the conjugation action of this
-    /// Clifford. Pauli-image signs and the global phase are not reproduced; see
-    /// :meth:`to_pauli_exponents` for the sign-exact (but ``O(n^2)``) decomposition.
+    /// Returns Hermitian Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4
+    /// P_1)``, then ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces the conjugation
+    /// action of this Clifford. Pauli-image signs and the global phase are not reproduced.
+    ///
+    /// This is a greedy reduction, not a minimal-length algorithm.
     fn to_transvections(&self) -> Vec<PySparsePauli> {
         clifford_to_transvections(&self.inner)
             .into_iter()
@@ -306,6 +307,8 @@ impl PyCliffordUnitary {
 
     /// Returns generators of this Clifford's centralizer: the Pauli operators fixed up to sign under
     /// conjugation (``clifford * P * clifford_dagger == +/- P``).
+    ///
+    /// The generators are independent Hermitian observables with phase ``1``.
     fn centralizer(&self) -> Vec<PySparsePauli> {
         clifford_centralizer(&self.inner)
             .into_iter()

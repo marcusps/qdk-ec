@@ -1,4 +1,4 @@
-//! Minimal decomposition of Clifford unitaries into Clifford transvections (`π/4` Pauli exponents).
+//! Decomposition of Clifford unitaries into Clifford transvections (`π/4` Pauli exponents).
 //!
 //! A *Clifford transvection* is the `π/4` Pauli exponent `exp(iπ/4·P_v)`, whose conjugation action
 //! on Pauli operators is the *symplectic transvection*
@@ -9,22 +9,24 @@
 //!
 //! where `⟨·,·⟩` is the symplectic (commutation) form. This module follows the transvection
 //! framework of [arXiv:2102.11380](https://arxiv.org/abs/2102.11380) (Pllaha, Volanto & Tirkkonen,
-//! *Decomposition of Clifford Gates*): every Clifford is a product of transvections, and the
-//! *minimal* number of factors is `r = 2n − dim Fix(F)` (or `r + 1` when the symplectic action `F`
-//! is hyperbolic), where `Fix(F)` is the space of Pauli operators fixed by conjugation.
+//! *Decomposition of Clifford Gates*): every Clifford is a product of transvections, and no
+//! decomposition is shorter than the residue rank `r = rank(I + F) = 2n − dim Fix(F)`, where `F` is
+//! the symplectic action and `Fix(F)` is the space of Pauli operators fixed by conjugation.
 //!
-//! The decomposition here uses a greedy O'Meara-style reduction: it always produces a **linear
-//! number of factors** (`O(n)`), reproducing the symplectic action exactly, but it is **not
-//! guaranteed to hit the strict `r`/`r + 1` minimum** — intermediate maps can become hyperbolic,
-//! adding an occasional extra factor. In practice it stays within a small additive constant of the
-//! minimum. The strict-minimum variant (via the paper's congruence-triangulation machinery) is
-//! tracked as a follow-up.
+//! A symplectic action is *hyperbolic* when `⟨v, vF⟩ = 0` for every `v`. That condition is stronger
+//! than the residue form having zero diagonal, which only tests the basis vectors. The paper states
+//! that every non-hyperbolic action attains `r` factors. That statement is too strong over GF(2).
+//! Of the 720 elements of `Sp(4;2)`, 210 non-hyperbolic elements need `r + 1` factors, and so does
+//! every non-identity hyperbolic element. For the 90 of those elements that have residue rank 3,
+//! every rank-lowering transvection leaves a hyperbolic action of rank 2.
 //!
-//! Unlike [`clifford_to_pauli_exponents`](super::clifford_to_pauli_exponents), which reproduces the
-//! full signed tableau (and hence an exact global phase when replayed on a phased operator), this
-//! decomposition reproduces only the **symplectic action** — it ignores Pauli-image signs and the
-//! global phase. Its advantage is the linear factor count `O(n)`, versus `O(n²)` for the
-//! Gaussian-elimination decomposition.
+//! The decomposition here uses a greedy O'Meara-style reduction. It returns a linear number of
+//! factors and reproduces the symplectic action exactly, but it is not a minimal-length algorithm.
+//! It attains the minimum on every element of `Sp(4;2)`. From three qubits upward it can exceed the
+//! minimum, and the excess can grow with the qubit count.
+//!
+//! This decomposition reproduces the symplectic action only. The Pauli-image signs and the global
+//! phase are not reproduced.
 
 use binar::matrix::{AlignedBitMatrix, kernel_basis_matrix};
 use binar::{Bitwise, IndexSet};
@@ -35,17 +37,14 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 
 /// Decomposes `clifford` into an ordered product of Clifford transvections.
 ///
-/// Returns a list of Pauli operators `[P₁, …, P_k]` such that left-multiplying the identity by the
-/// transvections `exp(iπ/4·P₁)`, then `exp(iπ/4·P₂)`, …, then `exp(iπ/4·P_k)` reproduces the
-/// **symplectic action** of `clifford` (its conjugation map on Pauli operators). The Pauli-image
-/// signs and the global phase are *not* reproduced; see the module docs for the contrast with
-/// [`clifford_to_pauli_exponents`](super::clifford_to_pauli_exponents).
+/// Returns a list of Hermitian Pauli operators `[P₁, …, P_k]` such that left-multiplying the
+/// identity by the transvections `exp(iπ/4·P₁)`, then `exp(iπ/4·P₂)`, …, then `exp(iπ/4·P_k)`
+/// reproduces the symplectic action of `clifford` (its conjugation map on Pauli operators).
+/// The Pauli-image signs and the global phase are not reproduced.
 ///
-/// The number of factors is **linear** in the qubit count (`O(n)`). It is close to, but not
-/// guaranteed to equal, the strict minimum `r = 2n − dim Fix(clifford)` (`r + 1` when the
-/// symplectic action is hyperbolic) of [arXiv:2102.11380](https://arxiv.org/abs/2102.11380); the
-/// greedy reduction here can add an occasional extra factor when an intermediate map becomes
-/// hyperbolic. The count is always at least `r`.
+/// The number of factors is linear in the qubit count and never fewer than the residue rank
+/// `r = rank(I + F) = 2n − dim Fix(clifford)`. This is a greedy reduction, not a minimal-length
+/// algorithm. See the module documentation for when the true minimum exceeds `r`.
 ///
 /// Every factor is returned with xyz phase exponent `0` (the positive Hermitian representative).
 /// Its xz phase exponent is its number of Y factors modulo 4. The sign of a transvection does not
@@ -101,8 +100,9 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
 ///
 /// This is `Fix(F)`, the kernel of the residue map `P ↦ conj(P) · P`, computed as the left null
 /// space of the residue matrix over GF(2). The returned Paulis are independent positive Hermitian
-/// generators; the centralizer they span has dimension `dim Fix(F) = 2n − r`, where `r` is
-/// the number of factors returned by [`clifford_to_transvections`] for a non-hyperbolic action.
+/// generators. The space they span has dimension `dim Fix(F) = 2n − r`, where `r = rank(I + F)` is
+/// the residue rank. That rank is a lower bound on the number of factors returned by
+/// [`clifford_to_transvections`], not the factor count itself.
 ///
 /// # Examples
 ///
