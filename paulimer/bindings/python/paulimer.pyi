@@ -1235,7 +1235,7 @@ class OutcomeSpecificSimulation:
         Args:
             observable: Pauli to check.
             ignore_sign: If True, check if ±observable is a stabilizer.
-            sign_parity: Ignored in outcome-specific mode.
+            sign_parity: Outcome indices affecting the sign.
 
         Returns:
             True if observable stabilizes the state.

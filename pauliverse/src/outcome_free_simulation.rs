@@ -196,6 +196,9 @@ impl Simulation for OutcomeFreeSimulation {
         self.clifford.left_mul(operation, support);
     }
 
+    /// Sign-blind: this simulator tracks the state only modulo Pauli operators, so
+    /// `P` and `-P` are indistinguishable. Equivalent to
+    /// [`Simulation::is_stabilizer_up_to_sign`].
     fn is_stabilizer(&self, observable: &SparsePauli) -> bool {
         self.is_stabilizer_up_to_sign(observable)
     }

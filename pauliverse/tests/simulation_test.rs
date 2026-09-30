@@ -616,3 +616,59 @@ fn allocate_random_bit_returns_public_outcome_id() {
     check::<OutcomeSpecificSimulation>();
     check::<OutcomeFreeSimulation>();
 }
+
+/// Builds `i*P` from a positioned observable list.
+fn imaginary(observable: &[PositionedPauliObservable]) -> SparsePauli {
+    let mut pauli: SparsePauli = observable.into();
+    pauli.add_assign_phase_exp(1u8);
+    pauli
+}
+
+#[test]
+fn minus_z_stabilizes_the_one_state() {
+    fn check<Sim: SimulationForTest>() {
+        let mut sim = Sim::default();
+        sim.unitary_op(UnitaryOp::X, &[0]);
+
+        assert!(sim.is_stabilizer(&negated(&[z(0)])));
+        assert!(!sim.is_stabilizer(&[z(0)].into()));
+    }
+
+    check::<OutcomeCompleteSimulation>();
+    check::<OutcomeSpecificSimulation>();
+}
+
+#[test]
+fn is_stabilizer_rejects_outcome_dependent_sign() {
+    let mut sim = OutcomeCompleteSimulation::default();
+    sim.unitary_op(UnitaryOp::Hadamard, &[0]);
+    sim.measure_o(&[z(0)]);
+
+    assert!(!sim.is_stabilizer(&[z(0)].into()));
+    assert!(!sim.is_stabilizer(&negated(&[z(0)])));
+}
+
+#[test]
+fn is_stabilizer_rejects_imaginary_phase() {
+    fn check<Sim: SimulationForTest>() {
+        let mut sim = Sim::default();
+        sim.measure_o(&[z(0)]);
+
+        assert!(!sim.is_stabilizer(&imaginary(&[z(0)])));
+        assert!(!sim.is_stabilizer_with_conditional_sign(&imaginary(&[z(0)]), &[]));
+    }
+
+    check::<OutcomeCompleteSimulation>();
+    check::<OutcomeSpecificSimulation>();
+
+    let mut specific = OutcomeSpecificSimulation::new_with_bit_source(1, std::iter::repeat(true));
+    specific.measure_o(&[z(0)]);
+    let odd_parity_outcome = specific.allocate_random_bit();
+    assert!(specific.outcome_vector()[odd_parity_outcome]);
+    assert!(!specific.is_stabilizer_with_conditional_sign(&imaginary(&[z(0)]), &[odd_parity_outcome]));
+
+    let mut complete = OutcomeCompleteSimulation::default();
+    complete.measure_o(&[z(0)]);
+    let conditioning_outcome = complete.allocate_random_bit();
+    assert!(!complete.is_stabilizer_with_conditional_sign(&imaginary(&[z(0)]), &[conditioning_outcome]));
+}

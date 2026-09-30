@@ -178,6 +178,7 @@ pub trait Simulation: Default {
     /// Check if a Pauli operator is a stabilizer of the current state.
     ///
     /// Returns true if the operator commutes with all stabilizers and has eigenvalue +1.
+    /// For outcome-complete simulation the eigenvalue must be +1 in every outcome branch.
     fn is_stabilizer(&self, observable: &Pauli) -> bool;
 
     /// Check if a Pauli operator is a stabilizer up to a global phase.
@@ -194,8 +195,8 @@ pub trait Simulation: Default {
 
     /// Measure a Pauli observable and return the outcome ID.
     ///
-    /// For deterministic measurements, returns an existing outcome ID.
-    /// For random measurements, allocates a new outcome ID.
+    /// Returns the public outcome ID of the newly appended outcome, whether the
+    /// measurement is deterministic or random.
     fn measure(&mut self, observable: &Pauli) -> OutcomeId;
 
     /// Measure a Pauli observable with a hint for optimization.
