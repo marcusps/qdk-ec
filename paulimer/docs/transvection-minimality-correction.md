@@ -16,9 +16,9 @@ existence claim -- that a minimal decomposition algorithm exists -- is true.
 However, the construction given in and immediately before **Theorem 3** assumes
 that every non-hyperbolic binary symplectic map has a length-$r$
 decomposition. Callan explicitly classifies non-hyperbolic exceptions, and the
-assumption fails on two qubits. The replacement proof was checked independently
-with an interactive theorem prover. It repairs this step; it does not prove the
-paper's non-hyperbolic criterion.
+assumption fails on two qubits. This note gives the residue-core criterion that
+the implementation uses instead. It records finite exhaustive verification
+through $m\leq 3$. It does not prove the paper's non-hyperbolic criterion.
 
 All matrices below are over $\mathbb{F}_2$.
 
@@ -45,26 +45,26 @@ $$
 r\leq\ell(\mathbf F)\leq r+1,
 $$
 
-and Theorem 5.1 classifies the binary exceptions. They include
+and Theorem 5.1 classifies the binary exceptional classes. They include
 non-hyperbolic maps. Thus the part that fails is the
 hyperbolic/non-hyperbolic classification, not the universal $r$/$r+1$ range.
 The smallest non-hyperbolic example already occurs on two qubits, with
 $r=3$ and $\ell(\mathbf F)=4$.
 
-The **correct criterion**, which we adopt in the implementation, is:
+The criterion we adopt in the implementation, verified exhaustively for $m\leq 3$, is:
 
 > The minimal length is $r$ **iff** the invertible residue core $\mathbf E$ is
 > congruence-lower-triangularizable over $\mathbb{F}_2$; otherwise our construction returns a
-> decomposition of length $r+1$. Hyperbolicity ($\mathbf E$ *alternating*) is a special
-> $r+1$ sub-case, but it is **not** the only one: non-alternating cores can fail to be
-> triangularizable too.
+> decomposition of length $r+1$. Hyperbolicity ($\mathbf E$ *alternating*) of a non-identity
+> element is a special $r+1$ sub-case, but it is **not** the only one: non-alternating cores can
+> fail to be triangularizable too.
 
-That independent check covers the bound, the criterion above, strict
-minimality, and the one-fix theorem used by the implementation.
+The criterion itself is algebraic and carries no dimension limit. Exhaustive enumeration of
+$\mathrm{Sp}(2m;2)$ for $m\leq 3$ confirms it and confirms strict minimality on those finite
+domains. The repository ships no machine-checked proof artifact.
 
-The Rust implementation should therefore retain its complete congruence search
-and $r+1$ fallback. No semantic rollback to the paper's non-hyperbolic branch is
-warranted.
+The Rust implementation therefore keeps its complete congruence search and its
+$r+1$ fallback. A rollback to the paper's non-hyperbolic branch is not warranted.
 
 ## 2. Setup and notation
 
@@ -104,7 +104,9 @@ $$
 The correct matrix test is that $\mathbf F$ is hyperbolic iff
 $\widehat{\mathbf F}$ is *alternating*, meaning symmetric with zero diagonal.
 Zero diagonal alone is necessary but not sufficient: a non-involution can have
-a nonsymmetric residue matrix with zero diagonal. Row-reducing
+a nonsymmetric residue matrix with zero diagonal. The paper states the zero
+diagonal of $\widehat{\mathbf F}$ alone as equivalent to hyperbolicity. That
+statement is a second erratum. Row-reducing
 $\widehat{\mathbf F}$ with a transform $\mathbf R$ yields the invertible
 **core**
 
@@ -283,29 +285,45 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
   the non-hyperbolic analogue of the paper's hyperbolic Lemma 1 patch — the case the paper's
   construction omits.
 
-The test suite additionally checks the result against a brute-force BFS oracle on one and two
-qubits and against the $\{r,r+1\}$ range on up to six qubits. These computations are regression
-checks, not the justification for generality. The proof establishes for every finite $m$ that
-$r\leq\ell(\mathbf F)\leq r+1$, that length $r$ is equivalent to core triangularizability, and that
-otherwise a nonzero $\mathbf w\in\operatorname{Res}(\mathbf F)$ exists for which
-$\mathbf F\mathbf T_{\mathbf w}$ has the same residue rank and a triangularizable core. Thus the
-exhaustive `find_fix_vector` search is total on valid symplectic input.
+The evidence for this criterion has three separate parts.
+
+The algebraic part carries no dimension limit. The paper's own Lemmas 2 and 3 give the length-$r$
+criterion, and Callan supplies the binary $r$/$r+1$ length bound. The implementation applies that
+criterion at every $m$ and falls back to $r+1$ otherwise.
+
+The termination part is the construction in this note. When the core is not triangularizable, the
+residue-fix step produces a vector whose transvection makes the updated core triangularizable at
+the same rank.
+
+The finite part is computational. The test suite compares the result against a brute-force BFS
+oracle on every one- and two-qubit symplectic action. Retained evidence covers all of
+$\mathrm{Sp}(6;2)$. These runs are regression and finite-domain evidence only.
+
+The repository ships no proof artifact, so the result is not machine-checked.
 
 **Why "non-alternating" is not enough.** Alternating cores are
 untriangularizable, but the explicit core in Section 4 is non-alternating and
 still untriangularizable. The exact condition is congruence
-triangularizability of the full core, not merely its diagonal or associated
-quadratic form. Botha (1997), which the paper cites, studies this GF(2)
+triangularizability of the full core, not of its diagonal or its associated
+quadratic form alone. Botha (1997), which the paper cites, studies this GF(2)
 congruence problem directly.
 
 ## 7. Reproducing the verification
 
-The counterexample of Section 4 is fully finite and self-contained. Both checks — the
+The counterexample of Section 4 is fully finite and self-contained. Both checks, the
 $\mathrm{Sp}(4;2)$ Cayley-distance BFS (720 group elements) and the $\mathrm{GL}(3;2)$ congruence
-enumeration (168 candidates) — are small enough to run by hand or in a few lines of code, and the
+enumeration with 168 candidates, are small enough to run by hand or in a few lines of code, and the
 repository's own `clifford_to_transvections_minimal` reproduces $\ell(\mathbf F)=r+1$ on the same
-map. No floating point or randomness is involved. The symbolic proof is reproduced with
-`cd paulimer/formal && lake build`; it contains no admitted theorem or project-defined axiom.
+map. No floating point or randomness is involved.
+
+The exhaustive three-qubit check runs as an ignored integration test:
+
+```bash
+cargo test --profile ci-test -p paulimer --test transvection_test -- --ignored
+```
+
+It visits all 1,451,520 elements of $\mathrm{Sp}(6;2)$ and takes a few minutes. The repository
+provides no formal proof command.
 
 ## 8. References
 
