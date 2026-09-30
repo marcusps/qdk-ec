@@ -585,10 +585,12 @@ class CliffordUnitary:
     def to_transvections(self) -> list[SparsePauli]:
         """Decompose into an ordered product of Clifford transvections (pi/4 Pauli exponents).
 
-        Returns Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4 P_1)``, then
-        ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces this Clifford's symplectic
-        (conjugation) action, using a linear number of factors. Pauli-image signs and the global
-        phase are not reproduced.
+        Returns Hermitian Pauli operators ``[P_1, ..., P_k]``, each with phase ``+1``, such that
+        applying ``exp(i pi/4 P_1)``, then ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)``
+        reproduces this Clifford's symplectic (conjugation) action, using a linear number of
+        factors. Pauli-image signs and the global phase are not reproduced.
+
+        This is a greedy reduction, not a minimal-length algorithm.
         """
         ...
 
@@ -605,7 +607,10 @@ class CliffordUnitary:
         ...
 
     def centralizer(self) -> list[SparsePauli]:
-        """Generators of the centralizer: Paulis fixed up to sign under conjugation."""
+        """Generators of the centralizer: Paulis fixed up to sign under conjugation.
+
+        The generators are independent Hermitian observables with phase ``1``.
+        """
         ...
 
     def qubits(self) -> slice:

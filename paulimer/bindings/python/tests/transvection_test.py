@@ -4,6 +4,7 @@ The decomposition reproduces a Clifford's symplectic (conjugation) action with a
 pi/4 Pauli exponents, ignoring Pauli-image signs and the global phase.
 """
 
+from binar import BitMatrix, rank
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -18,7 +19,9 @@ def _rebuild_from_transvections(transvections, qubit_count):
 
 
 def _residue_rank(clifford):
-    return 2 * clifford.qubit_count - len(clifford.centralizer())
+    """The residue rank ``rank(I + F)``, computed independently of ``centralizer()``."""
+    residue = clifford.symplectic_matrix ^ BitMatrix.identity(2 * clifford.qubit_count)
+    return rank(residue)
 
 
 def _is_conjugation_fixed(clifford, pauli):
@@ -31,13 +34,15 @@ def _assert_valid_decomposition(clifford):
     transvections = clifford.to_transvections()
 
     rebuilt = _rebuild_from_transvections(transvections, qubit_count)
+    assert rebuilt.is_valid
     assert rebuilt.symplectic_matrix == clifford.symplectic_matrix
 
     for pauli in transvections:
         assert pauli.weight > 0
+        assert pauli.phase == 1, f"factors must be positive Hermitian Paulis, got {pauli}"
 
-    minimum = _residue_rank(clifford)
-    assert len(transvections) >= minimum
+    lower_bound = _residue_rank(clifford)
+    assert len(transvections) >= lower_bound
     assert len(transvections) <= 4 * qubit_count + 2
 
 
@@ -103,6 +108,16 @@ def test_centralizer_generators_are_conjugation_fixed():
     centralizer = clifford.centralizer()
     assert all(_is_conjugation_fixed(clifford, pauli) for pauli in centralizer)
     assert all(pauli.weight > 0 for pauli in centralizer)
+    assert all(pauli.phase == 1 for pauli in centralizer)
+    assert len(centralizer) == 2 * clifford.qubit_count - _residue_rank(clifford)
+
+
+def test_centralizer_generators_of_a_y_axis_rotation_are_hermitian():
+    clifford = CliffordUnitary.from_name("SqrtY", [0], 1)
+    centralizer = clifford.centralizer()
+    assert len(centralizer) == 1
+    assert _is_conjugation_fixed(clifford, centralizer[0])
+    assert centralizer[0].phase == 1
 
 
 _SINGLE_QUBIT_GATES = ["Hadamard", "SqrtZ", "SqrtX", "X", "Y", "Z"]

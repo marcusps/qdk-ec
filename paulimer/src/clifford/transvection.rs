@@ -1,4 +1,4 @@
-//! Minimal decomposition of Clifford unitaries into Clifford transvections (`π/4` Pauli exponents).
+//! Decomposition of Clifford unitaries into Clifford transvections (`π/4` Pauli exponents).
 //!
 //! A *Clifford transvection* is the `π/4` Pauli exponent `exp(iπ/4·P_v)`, whose conjugation action
 //! on Pauli operators is the *symplectic transvection*
@@ -9,35 +9,37 @@
 //!
 //! where `⟨·,·⟩` is the symplectic (commutation) form. This module follows the transvection
 //! framework of [arXiv:2102.11380](https://arxiv.org/abs/2102.11380) (Pllaha, Volanto & Tirkkonen,
-//! *Decomposition of Clifford Gates*). The exact minimum is `r` or `r + 1`, where
-//! `r = 2n − dim Fix(F)`; congruence-triangularizability of the residue core, not hyperbolicity
-//! alone, decides which value occurs.
+//! *Decomposition of Clifford Gates*): every Clifford is a product of transvections, and no
+//! decomposition is shorter than the residue rank `r = rank(I + F) = 2n − dim Fix(F)`, where `F` is
+//! the symplectic action and `Fix(F)` is the space of Pauli operators fixed by conjugation. The
+//! exact minimum is `r` or `r + 1`.
 //!
 //! Two decompositions are provided:
 //!
-//! * [`clifford_to_transvections`] uses a greedy O'Meara-style reduction: it always produces a
-//!   **linear number of factors** (`O(n)`), reproducing the symplectic action exactly, but it is
-//!   **not guaranteed to hit the strict `r`/`r + 1` minimum** — intermediate maps can become
-//!   hyperbolic, adding an occasional extra factor.
-//! * [`clifford_to_transvections_minimal`] produces the **strict minimum** number of factors
-//!   (`r` or `r + 1`) via a congruence-triangulation of the residue core.
+//! * [`clifford_to_transvections`] uses a greedy O'Meara-style reduction. It returns a linear
+//!   number of factors and reproduces the symplectic action exactly, but it is not a
+//!   minimal-length algorithm.
+//! * [`clifford_to_transvections_minimal`] returns the strict minimum (`r` or `r + 1`) through a
+//!   congruence triangulation of the residue core.
 //!
-//! Unlike a sign-exact decomposition into Pauli exponents (which reproduces the full signed tableau,
-//! and hence an exact global phase when replayed on a phased operator, at `O(n²)` factors via
-//! Gaussian elimination), these decompositions reproduce only the **symplectic action** — they
-//! ignore Pauli-image signs and the global phase. Their advantage is the linear factor count `O(n)`.
+//! Both decompositions reproduce the symplectic action only. The Pauli-image signs and the global
+//! phase are not reproduced.
 //!
 //! ## The minimum factor count
 //!
-//! [arXiv:2102.11380](https://arxiv.org/abs/2102.11380) states before and within Theorem 3 that the
-//! residue matrix `F̂` of any *non-hyperbolic* symplectic map can be triangularized by congruence,
-//! giving a decomposition into exactly `r = dim Res(F)` transvections. This is **not correct**:
-//! there exist non-hyperbolic maps whose residue core is *not* congruence-triangularizable and
-//! which therefore require `r + 1` transvections. The smallest examples occur on two qubits:
-//! `T_X₀ T_X₁ T_{X₀X₁} T_Z₀` has residue rank `3` and minimal length `4` despite being
-//! non-hyperbolic. The correct criterion, used here, is: the minimum is `r` when the residue core is
-//! congruence-triangularizable and `r + 1` otherwise (hyperbolicity is the special case where the
-//! core is *alternating*).
+//! A symplectic action is *hyperbolic* when `⟨v, vF⟩ = 0` for every `v`. That condition is stronger
+//! than the residue form having zero diagonal, which only tests the basis vectors. The paper states
+//! that every non-hyperbolic action attains `r` factors. That statement is too strong over GF(2).
+//! Of the 720 elements of `Sp(4;2)`, 210 non-hyperbolic elements need `r + 1` factors, and so does
+//! every non-identity hyperbolic element. For the 90 of those elements that have residue rank 3,
+//! every rank-lowering transvection leaves a hyperbolic action of rank 2.
+//!
+//! The criterion used here is: the minimum is `r` when the residue core is
+//! congruence-triangularizable, and `r + 1` otherwise. Hyperbolicity is the special case where the
+//! core is alternating.
+//!
+//! The greedy reduction attains the minimum on every element of `Sp(4;2)`. From three qubits upward
+//! it can exceed the minimum, and the excess can grow with the qubit count.
 
 use std::collections::HashSet;
 
@@ -50,19 +52,23 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 
 /// Decomposes `clifford` into an ordered product of Clifford transvections.
 ///
-/// Returns a list of Pauli operators `[P₁, …, P_k]` such that left-multiplying the identity by the
-/// transvections `exp(iπ/4·P₁)`, then `exp(iπ/4·P₂)`, …, then `exp(iπ/4·P_k)` reproduces the
-/// **symplectic action** of `clifford` (its conjugation map on Pauli operators). The Pauli-image
-/// signs and the global phase are *not* reproduced; a sign-exact decomposition into Pauli
-/// exponents would preserve them, at the cost of `O(n²)` factors (see the module docs).
+/// Returns a list of Hermitian Pauli operators `[P₁, …, P_k]` such that left-multiplying the
+/// identity by the transvections `exp(iπ/4·P₁)`, then `exp(iπ/4·P₂)`, …, then `exp(iπ/4·P_k)`
+/// reproduces the symplectic action of `clifford` (its conjugation map on Pauli operators).
+/// The Pauli-image signs and the global phase are not reproduced.
 ///
-/// The number of factors is **linear** in the qubit count (`O(n)`). The strict minimum is either
-/// `r` or `r + 1`, where `r = 2n − dim Fix(clifford)`; the greedy reduction here can add an
-/// occasional extra factor when an intermediate map becomes hyperbolic. The count is always at
-/// least `r`.
+/// The number of factors is linear in the qubit count and never fewer than the residue rank
+/// `r = rank(I + F) = 2n − dim Fix(clifford)`. This is a greedy reduction, not a minimal-length
+/// algorithm. See the module documentation for when the true minimum exceeds `r`.
 ///
-/// Every factor is returned with phase exponent `0`; the sign of a transvection does not affect its
-/// symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
+/// Every factor is returned with xyz phase exponent `0` (the positive Hermitian representative).
+/// Its xz phase exponent is its number of Y factors modulo 4. The sign of a transvection does not
+/// affect its symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
+///
+/// # Panics
+///
+/// Panics if the reduction exceeds its linear termination bound. A valid Clifford cannot trigger
+/// this, so a panic here reports a defect in the reduction rather than an invalid input.
 ///
 /// The exact congruence search has exponential worst-case running time and memoization space in the
 /// residue rank. Candidates are generated lazily rather than materializing the full residue-space
@@ -85,6 +91,7 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 /// for pauli in &transvections {
 ///     rebuilt.left_mul_pauli_exp(pauli);
 /// }
+/// assert!(rebuilt.is_valid());
 /// // The symplectic actions agree (signs and global phase may differ).
 /// assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
 /// ```
@@ -99,7 +106,7 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
     while let Some(transvection) = next_transvection(&working) {
         working.left_mul_pauli_exp(&transvection);
         recorded.push(transvection);
-        debug_assert!(
+        assert!(
             recorded.len() <= 4 * qubit_count + 2,
             "transvection reduction exceeded its linear termination bound"
         );
@@ -112,9 +119,10 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
 /// conjugation, i.e. the `P` with `clifford · P · clifford† = ±P`.
 ///
 /// This is `Fix(F)`, the kernel of the residue map `P ↦ conj(P) · P`, computed as the left null
-/// space of the residue matrix over GF(2). The returned Paulis are independent generators (with
-/// phase exponent `0`); the centralizer they span has dimension `dim Fix(F) = 2n − r`, where `r` is
-/// the residue rank and a lower bound on every transvection decomposition.
+/// space of the residue matrix over GF(2). The returned Paulis are independent positive Hermitian
+/// generators. The space they span has dimension `dim Fix(F) = 2n − r`, where `r = rank(I + F)` is
+/// the residue rank. That rank is a lower bound on the number of factors returned by
+/// [`clifford_to_transvections`], not the factor count itself.
 ///
 /// # Examples
 ///
@@ -155,7 +163,9 @@ pub fn clifford_centralizer(clifford: &CliffordUnitary) -> Vec<SparsePauli> {
             let z_bits: IndexSet = (0..qubit_count)
                 .filter(|&qubit| kernel[(row, qubit_count + qubit)])
                 .collect();
-            SparsePauli::from_bits(x_bits, z_bits, 0)
+            let mut generator = SparsePauli::from_bits(x_bits, z_bits, 0);
+            assign_positive_hermitian_phase(&mut generator);
+            generator
         })
         .collect()
 }
@@ -208,13 +218,20 @@ fn next_transvection(working: &CliffordUnitary) -> Option<SparsePauli> {
         .map(|(pauli, image)| residue_vector(pauli, image))
 }
 
-/// The residue vector `v = x + conj(x)` as a phaseless Pauli (its symplectic vector is the product
-/// `x · conj(x)`).
+/// The residue vector `v = x + conj(x)` as a positive Hermitian Pauli (its symplectic vector is the
+/// product `x · conj(x)`).
 fn residue_vector(pauli: &SparsePauli, image: &DensePauli) -> SparsePauli {
     let mut vector: SparsePauli = image.clone().into();
     vector.mul_assign_left(pauli);
-    vector.assign_phase_exp(0);
+    assign_positive_hermitian_phase(&mut vector);
     vector
+}
+
+/// Sets the phase so that `pauli` is the positive Hermitian representative of its symplectic
+/// vector. The `xyz` phase exponent equals the `xz` exponent minus the `Y` weight, so assigning
+/// the `Y` weight as the `xz` exponent leaves the `xyz` exponent at zero.
+fn assign_positive_hermitian_phase(pauli: &mut SparsePauli) {
+    pauli.assign_phase_exp(u8::try_from(pauli.y_weight() % 4).expect("phase exponent fits in u8"));
 }
 
 /// Whether `image` equals `pauli` as a symplectic vector (i.e. conjugation fixes `pauli` up to sign).
