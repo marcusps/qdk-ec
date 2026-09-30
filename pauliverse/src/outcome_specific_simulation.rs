@@ -254,7 +254,7 @@ impl Simulation for OutcomeSpecificSimulation {
         self.outcome_vector.push(random_bit);
         self.random_outcome_indicator.push(true);
         self.num_random_bits += 1;
-        self.num_random_bits - 1
+        self.random_outcome_indicator.len() - 1
     }
 
     fn conditional_pauli(&mut self, observable: &crate::Pauli, outcomes: &[OutcomeId], parity: bool) {

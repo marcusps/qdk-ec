@@ -158,7 +158,7 @@ impl Simulation for OutcomeFreeSimulation {
     fn allocate_random_bit(&mut self) -> OutcomeId {
         self.random_bit_count += 1;
         self.random_outcome_indicator.push(true);
-        self.random_bit_count - 1
+        self.random_outcome_indicator.len() - 1
     }
 
     fn reserve_qubits(&mut self, new_capacity: usize) {
