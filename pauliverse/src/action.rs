@@ -61,6 +61,9 @@ pub enum ActionError {
     /// A symbolic angle parameterises more than one rotation, so the recorded action does not
     /// determine the operator. See [`PhasedOutcomeCompleteSimulation::reused_symbolic_angle`].
     SymbolicAngleReused { angle: usize },
+    /// A discarded auxiliary qubit carries a stabilizer sign that depends on a symbolic angle.
+    /// Discarding it would decohere that angle, so the circuit has no phased action.
+    AuxiliaryQubitsCarrySymbolicAngle { angle: usize },
     #[from]
     SimulationFailed(SimulationError),
 }
@@ -494,6 +497,18 @@ pub fn phased_action_from_simulation(
     phased_action(action, simulation)
 }
 
+/// The first symbolic angle that a discarded auxiliary qubit's stabilizer sign depends on.
+fn symbolic_angle_on_auxiliary_signs(
+    action: &CircuitAction,
+    simulation: &PhasedOutcomeCompleteSimulation,
+) -> Option<usize> {
+    let signs = action.auxiliary_stabilizers.sign_from_random.matrix();
+    let angles = simulation.symbolic_angle_indicator();
+    (0..signs.column_count())
+        .filter(|column| angles.get(*column).copied().unwrap_or(false))
+        .find(|column| (0..signs.row_count()).any(|row| signs[(row, *column)]))
+}
+
 /// Assembles a [`PhasedCircuitAction`] from a computed `action` and the `simulation` that recorded
 /// the branch phase function.
 fn phased_action(
@@ -502,6 +517,12 @@ fn phased_action(
 ) -> Result<PhasedCircuitAction, ActionError> {
     if let Some(angle) = simulation.reused_symbolic_angle() {
         return Err(ActionError::SymbolicAngleReused { angle });
+    }
+    // Discarding an auxiliary qubit whose sign follows a symbolic angle traces out that angle's
+    // coherence. arXiv:2309.08676 requires a deallocated qubit to be independent of the branch, so
+    // such a circuit has no phased action rather than one that silently drops the correlation.
+    if let Some(angle) = symbolic_angle_on_auxiliary_signs(&action, simulation) {
+        return Err(ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle });
     }
     let symbolic_angles: BitVec = simulation.symbolic_angle_indicator().iter().copied().collect();
     Ok(PhasedCircuitAction {

@@ -991,3 +991,24 @@ fn simulator_native_rejects_a_reused_symbolic_angle() {
         "a reused symbolic angle must be reported, got {result:?}"
     );
 }
+
+#[test]
+fn symbolic_rotation_may_not_reach_a_discarded_qubit() {
+    // Qubit 2 is discarded. A rotation that spans qubits 0 and 2 correlates the angle with the
+    // discarded qubit, so the retained state loses coherence and the action is not well defined.
+    fn action(observable: &[PositionedPauliObservable]) -> Result<PhasedCircuitAction, ActionError> {
+        let mut simulation = PhasedOutcomeCompleteSimulation::new(3);
+        simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+        let angle = simulation.allocate_symbolic_angle();
+        simulation.symbolic_pauli_exp(&sparse(observable), angle);
+        phased_action_from_simulation(&simulation, &[0], &[0])
+    }
+
+    action(&[x(0)]).expect("a rotation on the retained qubit alone has an action");
+
+    let spanning = action(&[x(0), x(2)]);
+    assert!(
+        matches!(spanning, Err(ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle }) if angle == 0),
+        "a rotation reaching a discarded qubit must be reported, got {spanning:?}"
+    );
+}
