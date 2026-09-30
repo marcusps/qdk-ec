@@ -596,3 +596,18 @@ fn phased_is_stabilizer_distinguishes_eigenvalue_sign() {
     assert!(sim.is_stabilizer(&[z(0)].into()));
     assert!(!sim.is_stabilizer(&negated(&[z(0)])));
 }
+
+#[test]
+fn phased_allocate_random_bit_returns_public_outcome_id() {
+    // A deterministic measurement appends a public outcome without consuming a
+    // random column, so the next allocation's public id outruns the column index.
+    let mut sim = PhasedOutcomeCompleteSimulation::default();
+    let deterministic = sim.measure_o(&[z(0)]);
+    assert_eq!(deterministic, 0);
+
+    let allocated = sim.allocate_random_bit();
+    assert_eq!(allocated, 1, "allocator must return the public outcome id");
+
+    let angle = sim.allocate_symbolic_angle();
+    assert_eq!(angle, 2, "symbolic angles share the public outcome numbering");
+}
