@@ -51,6 +51,11 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 /// Its xz phase exponent is its number of Y factors modulo 4. The sign of a transvection does not
 /// affect its symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
 ///
+/// # Panics
+///
+/// Panics if the reduction exceeds its linear termination bound. A valid Clifford cannot trigger
+/// this, so a panic here reports a defect in the reduction rather than an invalid input.
+///
 /// # Examples
 ///
 /// ```
@@ -82,7 +87,7 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
     while let Some(transvection) = next_transvection(&working) {
         working.left_mul_pauli_exp(&transvection);
         recorded.push(transvection);
-        debug_assert!(
+        assert!(
             recorded.len() <= 4 * qubit_count + 2,
             "transvection reduction exceeded its linear termination bound"
         );
