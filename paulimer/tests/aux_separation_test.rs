@@ -194,3 +194,10 @@ fn non_leading_output_subset_preserves_exact_phase_and_basis_map() {
         check_separation_with_outputs(&physical_encoder, &output);
     }
 }
+
+#[test]
+fn zero_qubit_separation_is_trivial() {
+    let encoder = PhasedCliffordUnitary::identity(0);
+    let separation = separate_auxiliary_qubits(&encoder, &[]).expect("the empty encoder separates");
+    assert_eq!(separation.output_encoder().num_qubits(), 0);
+}
