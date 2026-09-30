@@ -432,6 +432,7 @@ fn assert_valid_minimal_decomposition(clifford: &CliffordUnitary) {
     let transvections = clifford_to_transvections_minimal(clifford);
 
     let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
+    assert!(rebuilt.is_valid());
     assert_eq!(
         rebuilt.symplectic_matrix(),
         clifford.symplectic_matrix(),
@@ -439,7 +440,8 @@ fn assert_valid_minimal_decomposition(clifford: &CliffordUnitary) {
     );
 
     for transvection in &transvections {
-        assert_eq!(transvection.xz_phase_exponent(), 0, "factors carry no phase");
+        assert!(transvection.is_order_two(), "factors must be Hermitian");
+        assert_eq!(transvection.xyz_phase_exponent(), 0, "factors carry no xyz phase");
         assert!(is_non_identity(transvection), "factors are non-identity Paulis");
     }
 

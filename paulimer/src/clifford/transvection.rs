@@ -67,13 +67,9 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 ///
 /// # Panics
 ///
-/// Panics if the reduction exceeds its linear termination bound. A valid Clifford cannot trigger
-/// this, so a panic here reports a defect in the reduction rather than an invalid input.
-///
-/// The exact congruence search has exponential worst-case running time and memoization space in the
-/// residue rank. Candidates are generated lazily rather than materializing the full residue-space
-/// span up front. For large Cliffords where strict minimality is unnecessary, prefer
-/// [`clifford_to_transvections`].
+/// The input must be a valid Clifford, as reported by `is_valid`. An invalid tableau, such as the
+/// one produced by `CliffordUnitary::zero`, can make the reduction exceed its linear termination
+/// bound and panic. For a valid input a panic here reports a defect in the reduction.
 ///
 /// # Examples
 ///
@@ -243,38 +239,59 @@ fn acts_trivially_on(pauli: &SparsePauli, image: &DensePauli) -> bool {
 
 /// Decomposes `clifford` into a **minimal** ordered product of Clifford transvections.
 ///
-/// Returns a list of Pauli operators `[P₁, …, P_k]` such that left-multiplying the identity by the
-/// transvections `exp(iπ/4·P₁)`, then `exp(iπ/4·P₂)`, …, then `exp(iπ/4·P_k)` reproduces the
-/// **symplectic action** of `clifford` (its conjugation map on Pauli operators). The Pauli-image
-/// signs and the global phase are *not* reproduced; a sign-exact decomposition into Pauli
-/// exponents would preserve them, at the cost of `O(n²)` factors (see the module docs).
+/// Returns a list of Hermitian Pauli operators `[P₁, …, P_k]` such that left-multiplying the
+/// identity by the transvections `exp(iπ/4·P₁)`, then `exp(iπ/4·P₂)`, …, then `exp(iπ/4·P_k)`
+/// reproduces the **symplectic action** of `clifford` (its conjugation map on Pauli operators).
+/// The Pauli-image signs are *not* reproduced. No tableau-level decomposition reproduces the
+/// global phase of the input unitary, because a tableau does not record it.
 ///
 /// The number of factors `k` is the strict minimum: `k = r` when the residue core is
 /// congruence-triangularizable and `k = r + 1` otherwise, where `r = 2n − dim Fix(clifford)` is the
 /// dimension of the residue space (see [`clifford_centralizer`] for `Fix`). This corrects the
 /// minimality criterion of [arXiv:2102.11380](https://arxiv.org/abs/2102.11380) (see the module
-/// docs). Contrast with [`clifford_to_transvections`], which is only near-minimal.
+/// docs). Contrast with [`clifford_to_transvections`], which returns an O(n)-factor
+/// decomposition that can exceed the minimum by Θ(n) on structured inputs.
 ///
-/// Every factor is returned with phase exponent `0`; the sign of a transvection does not affect its
-/// symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
+/// Every factor is returned with xyz phase exponent `0` (the positive Hermitian representative).
+/// Its xz phase exponent is its number of Y factors modulo 4. The sign of a transvection does not
+/// affect its symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
+///
+/// # Panics
+///
+/// The input must be a valid Clifford, as reported by `is_valid`. An invalid tableau, such as the
+/// one produced by `CliffordUnitary::zero`, can make the residue-fix step fail and panic. The same
+/// panic reports a residue-fix search that found no vector, which the exhaustive one-, two-, and
+/// three-qubit tests rule out at those sizes.
+///
+/// # Running time and memory
+///
+/// This exact minimal search can be exponential in the residue rank, in both running time and
+/// memoization space. It can be impractical on structured high-rank inputs such as swap layers or
+/// Callan exceptional sums. A 20-qubit swap layer takes about one second, but a 10-qubit sum of
+/// five Callan class-A blocks runs for minutes and uses hundreds of megabytes. The search memoizes
+/// failed subspaces and generates candidates lazily, but the implementation alone gives no
+/// polynomial bound. Use [`clifford_to_transvections`] when a linear factor count is sufficient and
+/// strict minimality is unnecessary.
 ///
 /// # Examples
 ///
 /// ```
 /// use paulimer::CliffordUnitary;
 /// use paulimer::clifford::{clifford_to_transvections_minimal, Clifford, CliffordMutable};
+/// use paulimer::pauli::Pauli;
 ///
 /// let mut clifford = CliffordUnitary::identity(2);
 /// clifford.left_mul_hadamard(0);
-/// clifford.left_mul_cx(0, 1);
+/// clifford.left_mul_root_z(0);
 ///
 /// let transvections = clifford_to_transvections_minimal(&clifford);
+/// assert!(transvections.iter().all(|pauli| pauli.is_order_two()));
 ///
 /// let mut rebuilt = CliffordUnitary::identity(2);
 /// for pauli in &transvections {
 ///     rebuilt.left_mul_pauli_exp(pauli);
 /// }
-/// // The symplectic actions agree (signs and global phase may differ).
+/// assert!(rebuilt.is_valid());
 /// assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
 /// ```
 #[must_use]
@@ -620,12 +637,14 @@ fn minimal_decomposition(action: &AlignedBitMatrix, qubit_count: usize) -> Vec<V
 }
 
 /// Finds a residue vector `v` such that `F·T_v` has a congruence-triangularizable residue core of
-/// the same rank, so that `F` decomposes into `rank + 1` transvections. Such a vector always exists
-/// in `Res(F)` (the map is a product of `rank + 1` transvections, and dropping the last factor
-/// leaves a product of `rank` transvections whose residue core is triangularizable).
+/// the same rank, so that `F` decomposes into `rank + 1` transvections.
+///
+/// Callan gives the `r`/`r + 1` length bound over GF(2), so a decomposition of length `rank + 1`
+/// exists. That such a vector always lies in `Res(F)` is verified exhaustively for one, two, and
+/// three qubits by the integration tests. It is not proved here for larger qubit counts.
 ///
 /// Candidates are the nonzero residue vectors in ascending binary-coordinate order. The search is
-/// exhaustive over `Res(F)` and therefore always succeeds.
+/// exhaustive over `Res(F)`.
 fn find_fix_vector(action: &AlignedBitMatrix, qubit_count: usize, basis: &AlignedBitMatrix, rank: usize) -> Vec<bool> {
     let dimension = 2 * qubit_count;
     let lift = |coordinates: &[bool]| -> Vec<bool> {
@@ -656,15 +675,17 @@ fn find_fix_vector(action: &AlignedBitMatrix, qubit_count: usize, basis: &Aligne
             return vector;
         }
     }
-    unreachable!("a residue fix vector always exists for a non-triangularizable core")
+    panic!("no residue fix vector exists for this non-triangularizable core")
 }
 
-/// Converts a `2n`-bit symplectic vector into a phaseless Pauli (`x`-bits in `[0, n)`, `z`-bits in
-/// `[n, 2n)`).
+/// Converts a `2n`-bit symplectic vector into a positive Hermitian Pauli (`x`-bits in `[0, n)`,
+/// `z`-bits in `[n, 2n)`).
 fn vector_to_pauli(vector: &[bool], qubit_count: usize) -> SparsePauli {
     let x_bits: IndexSet = (0..qubit_count).filter(|&qubit| vector[qubit]).collect();
     let z_bits: IndexSet = (0..qubit_count).filter(|&qubit| vector[qubit_count + qubit]).collect();
-    SparsePauli::from_bits(x_bits, z_bits, 0)
+    let mut pauli = SparsePauli::from_bits(x_bits, z_bits, 0);
+    assign_positive_hermitian_phase(&mut pauli);
+    pauli
 }
 
 #[cfg(test)]

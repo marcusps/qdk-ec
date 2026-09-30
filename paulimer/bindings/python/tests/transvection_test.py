@@ -51,10 +51,12 @@ def _assert_valid_minimal_decomposition(clifford):
     transvections = clifford.to_transvections_minimal()
 
     rebuilt = _rebuild_from_transvections(transvections, qubit_count)
+    assert rebuilt.is_valid
     assert rebuilt.symplectic_matrix == clifford.symplectic_matrix
 
     for pauli in transvections:
         assert pauli.weight > 0
+        assert pauli.phase == 1, f"factors must be positive Hermitian Paulis, got {pauli}"
 
     rank = _residue_rank(clifford)
     assert len(transvections) in (rank, rank + 1)
