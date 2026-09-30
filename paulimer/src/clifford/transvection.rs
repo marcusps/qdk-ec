@@ -47,8 +47,9 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 /// greedy reduction here can add an occasional extra factor when an intermediate map becomes
 /// hyperbolic. The count is always at least `r`.
 ///
-/// Every factor is returned with phase exponent `0`; the sign of a transvection does not affect its
-/// symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
+/// Every factor is returned with xyz phase exponent `0` (the positive Hermitian representative).
+/// Its xz phase exponent is its number of Y factors modulo 4. The sign of a transvection does not
+/// affect its symplectic action, so `exp(iπ/4·P)` and `exp(−iπ/4·P)` are interchangeable here.
 ///
 /// # Examples
 ///
@@ -66,6 +67,7 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 /// for pauli in &transvections {
 ///     rebuilt.left_mul_pauli_exp(pauli);
 /// }
+/// assert!(rebuilt.is_valid());
 /// // The symplectic actions agree (signs and global phase may differ).
 /// assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
 /// ```
@@ -93,8 +95,8 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
 /// conjugation, i.e. the `P` with `clifford · P · clifford† = ±P`.
 ///
 /// This is `Fix(F)`, the kernel of the residue map `P ↦ conj(P) · P`, computed as the left null
-/// space of the residue matrix over GF(2). The returned Paulis are independent generators (with
-/// phase exponent `0`); the centralizer they span has dimension `dim Fix(F) = 2n − r`, where `r` is
+/// space of the residue matrix over GF(2). The returned Paulis are independent positive Hermitian
+/// generators; the centralizer they span has dimension `dim Fix(F) = 2n − r`, where `r` is
 /// the number of factors returned by [`clifford_to_transvections`] for a non-hyperbolic action.
 ///
 /// # Examples
@@ -136,7 +138,9 @@ pub fn clifford_centralizer(clifford: &CliffordUnitary) -> Vec<SparsePauli> {
             let z_bits: IndexSet = (0..qubit_count)
                 .filter(|&qubit| kernel[(row, qubit_count + qubit)])
                 .collect();
-            SparsePauli::from_bits(x_bits, z_bits, 0)
+            let mut generator = SparsePauli::from_bits(x_bits, z_bits, 0);
+            assign_positive_hermitian_phase(&mut generator);
+            generator
         })
         .collect()
 }
@@ -189,13 +193,20 @@ fn next_transvection(working: &CliffordUnitary) -> Option<SparsePauli> {
         .map(|(pauli, image)| residue_vector(pauli, image))
 }
 
-/// The residue vector `v = x + conj(x)` as a phaseless Pauli (its symplectic vector is the product
-/// `x · conj(x)`).
+/// The residue vector `v = x + conj(x)` as a positive Hermitian Pauli (its symplectic vector is the
+/// product `x · conj(x)`).
 fn residue_vector(pauli: &SparsePauli, image: &DensePauli) -> SparsePauli {
     let mut vector: SparsePauli = image.clone().into();
     vector.mul_assign_left(pauli);
-    vector.assign_phase_exp(0);
+    assign_positive_hermitian_phase(&mut vector);
     vector
+}
+
+/// Sets the phase so that `pauli` is the positive Hermitian representative of its symplectic
+/// vector. The `xyz` phase exponent equals the `xz` exponent minus the `Y` weight, so assigning
+/// the `Y` weight as the `xz` exponent leaves the `xyz` exponent at zero.
+fn assign_positive_hermitian_phase(pauli: &mut SparsePauli) {
+    pauli.assign_phase_exp(u8::try_from(pauli.y_weight() % 4).expect("phase exponent fits in u8"));
 }
 
 /// Whether `image` equals `pauli` as a symplectic vector (i.e. conjugation fixes `pauli` up to sign).

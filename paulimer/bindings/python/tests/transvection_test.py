@@ -31,10 +31,12 @@ def _assert_valid_decomposition(clifford):
     transvections = clifford.to_transvections()
 
     rebuilt = _rebuild_from_transvections(transvections, qubit_count)
+    assert rebuilt.is_valid
     assert rebuilt.symplectic_matrix == clifford.symplectic_matrix
 
     for pauli in transvections:
         assert pauli.weight > 0
+        assert pauli.phase == 1
 
     minimum = _residue_rank(clifford)
     assert len(transvections) >= minimum
@@ -80,6 +82,16 @@ def test_centralizer_generators_are_conjugation_fixed():
     centralizer = clifford.centralizer()
     assert all(_is_conjugation_fixed(clifford, pauli) for pauli in centralizer)
     assert all(pauli.weight > 0 for pauli in centralizer)
+    assert all(pauli.phase == 1 for pauli in centralizer)
+
+
+
+def test_centralizer_generators_of_a_y_axis_rotation_are_hermitian():
+    clifford = CliffordUnitary.from_name("SqrtY", [0], 1)
+    centralizer = clifford.centralizer()
+    assert len(centralizer) == 1
+    assert _is_conjugation_fixed(clifford, centralizer[0])
+    assert centralizer[0].phase == 1
 
 
 _SINGLE_QUBIT_GATES = ["Hadamard", "SqrtZ", "SqrtX", "X", "Y", "Z"]

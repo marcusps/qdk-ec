@@ -44,6 +44,7 @@ fn assert_valid_decomposition(clifford: &CliffordUnitary) {
     let transvections = clifford_to_transvections(clifford);
 
     let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
+    assert!(rebuilt.is_valid());
     assert_eq!(
         rebuilt.symplectic_matrix(),
         clifford.symplectic_matrix(),
@@ -51,7 +52,8 @@ fn assert_valid_decomposition(clifford: &CliffordUnitary) {
     );
 
     for transvection in &transvections {
-        assert_eq!(transvection.xz_phase_exponent(), 0, "factors carry no phase");
+        assert!(transvection.is_order_two(), "factors must be Hermitian");
+        assert_eq!(transvection.xyz_phase_exponent(), 0, "factors carry no xyz phase");
         assert!(is_non_identity(transvection), "factors are non-identity Paulis");
     }
 
@@ -171,10 +173,30 @@ fn centralizer_generators_are_conjugation_fixed_and_independent() {
     let centralizer = clifford_centralizer(&clifford);
     assert!(centralizer.iter().all(|pauli| is_conjugation_fixed(&clifford, pauli)));
     assert!(centralizer.iter().all(is_non_identity));
+    assert!(
+        centralizer.iter().all(|pauli| pauli.xyz_phase_exponent() == 0),
+        "centralizer generators must be positive Hermitian observables"
+    );
     assert_eq!(
         centralizer.len(),
         2 * clifford.num_qubits() - residue_rank(&clifford),
         "the centralizer dimension is 2n - r"
+    );
+}
+
+#[test]
+fn centralizer_generators_of_a_y_axis_rotation_are_hermitian() {
+    let mut clifford = CliffordUnitary::identity(1);
+    clifford.left_mul(UnitaryOp::SqrtY, &[0]);
+
+    let centralizer = clifford_centralizer(&clifford);
+    assert_eq!(centralizer.len(), 1, "a sqrt(Y) rotation fixes exactly the Y axis");
+    assert!(is_conjugation_fixed(&clifford, &centralizer[0]));
+    assert!(centralizer[0].is_order_two(), "the generator must be Hermitian");
+    assert_eq!(
+        centralizer[0].xyz_phase_exponent(),
+        0,
+        "the generator must be the positive Hermitian representative"
     );
 }
 
