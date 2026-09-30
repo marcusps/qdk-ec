@@ -3,6 +3,7 @@ use std::borrow::Borrow;
 use binar::{BitMatrix, BitView, Bitwise, BitwisePairMut, IndexSet};
 use paulimer::core::{PositionedPauliObservable, x, z};
 use paulimer::{
+    PauliMutable,
     clifford::{Clifford, CliffordMutable, CliffordUnitary},
     operations::UnitaryOp,
     pauli::{Pauli, SparsePauli},
@@ -10,6 +11,7 @@ use paulimer::{
 use pauliverse::{
     Simulation, outcome_complete_simulation::OutcomeCompleteSimulation, outcome_free_simulation::OutcomeFreeSimulation,
     outcome_specific_simulation::OutcomeSpecificSimulation,
+    phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation,
 };
 
 trait SimulationForTest: Simulation + Default {
@@ -46,6 +48,7 @@ trait SimulationForTest: Simulation + Default {
 impl SimulationForTest for OutcomeCompleteSimulation {}
 impl SimulationForTest for OutcomeSpecificSimulation {}
 impl SimulationForTest for OutcomeFreeSimulation {}
+impl SimulationForTest for PhasedOutcomeCompleteSimulation {}
 
 fn measure_and_fix(
     sim: &mut impl SimulationForTest,
@@ -571,4 +574,25 @@ fn test_compare_simulations() {
     test_sims!(choi_state_of_cx_via_measure);
     test_sims!(choi_state_of_cz_via_measure);
     test_sims!(random_and_deterministic_outcome_sequence);
+}
+
+fn negated(observable: &[PositionedPauliObservable]) -> SparsePauli {
+    let mut pauli: SparsePauli = observable.into();
+    pauli.add_assign_phase_exp(2u8);
+    pauli
+}
+
+#[test]
+fn phased_is_stabilizer_distinguishes_eigenvalue_sign() {
+    let mut sim = PhasedOutcomeCompleteSimulation::default();
+    sim.unitary_op(UnitaryOp::X, &[0]);
+
+    assert!(sim.is_stabilizer(&negated(&[z(0)])));
+    assert!(!sim.is_stabilizer(&[z(0)].into()));
+    assert!(sim.is_stabilizer_up_to_sign(&[z(0)].into()));
+
+    sim.unitary_op(UnitaryOp::X, &[0]);
+
+    assert!(sim.is_stabilizer(&[z(0)].into()));
+    assert!(!sim.is_stabilizer(&negated(&[z(0)])));
 }

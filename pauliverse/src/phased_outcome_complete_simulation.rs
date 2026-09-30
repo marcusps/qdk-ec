@@ -524,7 +524,7 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
         let preimage = self.phased_clifford.clifford().preimage(observable);
         if preimage.x_bits().is_zero() {
             let sign_parity_indicator = row_sum(&self.sign_matrix, preimage.z_bits().support());
-            sign_parity_indicator.is_zero()
+            sign_parity_indicator.is_zero() && preimage.xz_phase_exponent().value() == 0
         } else {
             false
         }
@@ -532,9 +532,8 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
 
     fn is_stabilizer_with_conditional_sign(&self, observable: &SparsePauli, outcomes: &[crate::OutcomeId]) -> bool {
         let preimage = self.phased_clifford.clifford().preimage(observable);
-        if preimage.x_bits().is_zero() {
+        if preimage.x_bits().is_zero() && preimage.xz_phase_exponent().is_even() {
             let sign_parity_indicator = row_sum(&self.sign_matrix, preimage.z_bits().support());
-            debug_assert!(preimage.xz_phase_exponent().is_even());
             let shift = preimage.xz_phase_exponent().value() / 2 == 1;
             let expected_parity_indicator = row_sum(&self.outcome_matrix, outcomes.iter().copied());
             let expected_shift = outcomes
