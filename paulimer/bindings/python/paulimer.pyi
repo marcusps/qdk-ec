@@ -1345,17 +1345,29 @@ class PhasedCircuitAction:
         ...
 
     def is_equivalent_with_global_phase(self, other: PhasedCircuitAction) -> bool:
-        """Whether two circuits are equivalent including the absolute global phase.
+        """Whether two circuits are equivalent including the recorded global phase.
 
-        Like :meth:`is_equivalent`, but additionally requires the absolute global ``zeta8``
-        phases (see :attr:`global_phase`) to match, distinguishing operators that differ by
-        an overall phase such as ``Co`` and ``-Co``.
+        Like :meth:`is_equivalent`, but additionally requires the ``zeta8`` phases
+        (see :attr:`global_phase`) to match, distinguishing operators that differ by an
+        overall phase such as ``Co`` and ``-Co``.
+
+        Read this against the convention described on :attr:`global_phase`. Two circuits
+        that apply the same operator to the outputs are reported as different when they
+        leave a discarded auxiliary qubit in different states. Use this only when both
+        actions are built the same way.
         """
         ...
 
     @property
     def global_phase(self) -> int:
-        """Absolute global ``zeta8`` phase of the Choi-state encoder, as an exponent in ``0..8``."""
+        """Global ``zeta8`` phase of the Choi-state encoder, as an exponent in ``0..8``.
+
+        The value is fixed by the canonical marginal-encoder convention, not by the operator
+        alone, so it is a reference point rather than an absolute quantity. The identity
+        circuit gives ``2``, not ``0``, and the value also depends on the state a discarded
+        auxiliary qubit is left in. Differences are meaningful when both actions are built
+        the same way: ``XZ`` and ``Y`` differ by ``6``, the factor ``-i`` relating them.
+        """
         ...
 
 @final
