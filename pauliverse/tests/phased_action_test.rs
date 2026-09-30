@@ -957,3 +957,19 @@ proptest! {
         prop_assert!(a.is_equivalent(&b).is_ok(), "a channel must be exactly equivalent to itself");
     }
 }
+
+#[test]
+fn simulator_native_rejects_entangled_auxiliary_qubits() {
+    // Qubit 2 is a system qubit that no argument names. Leaving it entangled with an output must
+    // be an error, not a silently truncated action.
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(4);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 3]);
+    simulation.unitary_op(UnitaryOp::ControlledX, &[0, 2]);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        result.is_err(),
+        "an entangled auxiliary qubit must be reported, got {result:?}"
+    );
+}

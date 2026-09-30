@@ -201,11 +201,15 @@ fn action_from_simulation<S: ActionSimulation>(
     let sign_matrix = simulation.signs();
     let state_encoder = simulation.encoder();
 
+    // Auxiliary qubits are every qubit the simulation holds that is neither an output nor a
+    // reference. Taking the total from the simulation, rather than from `qubit_count`, covers
+    // qubits the caller allocated beyond the named system block.
     let auxiliary_qubits: Vec<QubitId> = output_qubits
         .iter()
+        .chain(reference_qubits.iter())
         .copied()
         .collect::<IndexSet>()
-        .complement(qubit_count)
+        .complement(qubit_count.max(simulation.qubit_count()))
         .into_iter()
         .collect();
     let auxiliary_stabilizers =
@@ -458,7 +462,8 @@ pub fn phased_action_of(
 /// applying the circuit, have entangled each `input_qubits[k]` with a reference qubit via
 /// `UnitaryOp::PrepareBell`, following the same layout as [`phased_action_of`]: the reference qubit
 /// for `input_qubits[k]` is `system_qubit_count + k`, where `system_qubit_count` is one past the
-/// largest index appearing in `input_qubits` or `output_qubits`.
+/// largest index appearing in `input_qubits` or `output_qubits`. Any further qubit of the
+/// simulation is an auxiliary qubit and must be disentangled from the rest of the state.
 ///
 /// # Errors
 ///
