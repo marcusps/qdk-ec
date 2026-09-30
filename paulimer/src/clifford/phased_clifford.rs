@@ -16,7 +16,11 @@
 //! that amplitude. Every amplitude of the stabilizer state `C|0…0⟩` has the same magnitude, so the
 //! magnitude is recovered from the rank of the stabilizer tableau and only the phase needs to be
 //! propagated. Each elementary left-multiplication updates the underlying [`CliffordUnitary`] with
-//! the existing tableau code and updates the reference amplitude in `O(n²)` time.
+//! the existing tableau code and updates the reference amplitude in `O(n³)` bit operations. The
+//! cubic term is one echelon reduction, which decides which basis strings have a nonzero
+//! amplitude. A gate builds that reduction once and reuses it. Bit rows are held in machine words,
+//! so the measured cost per gate stays near linear until a few hundred qubits and only then
+//! approaches the cubic rate.
 
 use super::{Clifford, CliffordMutable, CliffordUnitary};
 use crate::UnitaryOp;
@@ -148,12 +152,22 @@ impl PhasedCliffordUnitary {
         BitMatrix::from_aligned(matrix)
     }
 
+    /// The echelon form of [`Self::x_parts_matrix`], which decides which basis strings have a
+    /// nonzero amplitude. Building it costs `O(n^3)`, so a gate builds it once and passes it to
+    /// every [`Self::relative_phase_with`] call it makes.
+    fn x_parts_echelon(&self) -> EchelonForm {
+        EchelonForm::new(self.x_parts_matrix())
+    }
+
     fn relative_phase(&self, target: &AlignedBitVec) -> Option<i64> {
+        self.relative_phase_with(&self.x_parts_echelon(), target)
+    }
+
+    fn relative_phase_with(&self, echelon: &EchelonForm, target: &AlignedBitVec) -> Option<i64> {
         let num_qubits = self.num_qubits();
         let difference: BitVec = (0..num_qubits)
             .map(|qubit| target.index(qubit) ^ self.reference_string.index(qubit))
             .collect();
-        let echelon = EchelonForm::new(self.x_parts_matrix());
         let combination = echelon.transpose_solve(&difference.as_view())?;
         let mut product: Option<<CliffordUnitary as Clifford>::DensePauli> = None;
         for generator in combination.support() {
@@ -184,6 +198,7 @@ impl PhasedCliffordUnitary {
         amplitudes: [[Option<i64>; 2]; 2],
         symplectic: impl FnOnce(&mut CliffordUnitary),
     ) {
+        let echelon = self.x_parts_echelon();
         for output_bit in [self.reference_string.index(qubit), !self.reference_string.index(qubit)] {
             let mut candidate = self.reference_string.clone();
             candidate.assign_index(qubit, output_bit);
@@ -195,7 +210,7 @@ impl PhasedCliffordUnitary {
                 };
                 let mut source = candidate.clone();
                 source.assign_index(qubit, input_bit);
-                if let Some(relative) = self.relative_phase(&source) {
+                if let Some(relative) = self.relative_phase_with(&echelon, &source) {
                     terms[count] = entry + relative;
                     count += 1;
                 }
@@ -218,6 +233,7 @@ impl PhasedCliffordUnitary {
         inverse: impl Fn(bool, bool) -> (bool, bool, i64),
         symplectic: impl FnOnce(&mut CliffordUnitary),
     ) {
+        let echelon = self.x_parts_echelon();
         for output_a in [
             self.reference_string.index(qubit_a),
             !self.reference_string.index(qubit_a),
@@ -233,7 +249,7 @@ impl PhasedCliffordUnitary {
                 let mut source = candidate.clone();
                 source.assign_index(qubit_a, input_a);
                 source.assign_index(qubit_b, input_b);
-                if let Some(relative) = self.relative_phase(&source) {
+                if let Some(relative) = self.relative_phase_with(&echelon, &source) {
                     self.reference_phase_exponent =
                         normalize_exponent(i64::from(self.reference_phase_exponent) + entry + relative);
                     self.reference_string = candidate;
@@ -427,10 +443,11 @@ impl PhasedCliffordUnitary {
         }
         let candidates = [self.reference_string.clone(), shifted];
 
+        let echelon = self.x_parts_echelon();
         for candidate in candidates {
             let mut terms = [0i64; 2];
             let mut count = 0usize;
-            if let Some(relative) = self.relative_phase(&candidate) {
+            if let Some(relative) = self.relative_phase_with(&echelon, &candidate) {
                 terms[count] = relative;
                 count += 1;
             }
@@ -445,7 +462,7 @@ impl PhasedCliffordUnitary {
             for qubit in pauli.x_bits().support() {
                 source.assign_index(qubit, !source.index(qubit));
             }
-            if let Some(relative) = self.relative_phase(&source) {
+            if let Some(relative) = self.relative_phase_with(&echelon, &source) {
                 let coefficient = 2 + 2 * pauli_phase + if sign_parity { 4 } else { 0 };
                 terms[count] = relative + coefficient;
                 count += 1;
