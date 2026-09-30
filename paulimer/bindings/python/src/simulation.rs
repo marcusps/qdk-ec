@@ -408,7 +408,10 @@ impl_simulation!(
         ///
         /// `angle` must be a [`SymbolicAngle`] obtained from [`allocate_symbolic_angle`] or
         /// [`allocate_symbolic_angles`]. This is the high-level way to add a free-angle exponent
-        /// `e^{iα P}` for an arbitrary Pauli `P`.
+        /// `e^{iα P}` for an arbitrary Pauli `P`. Each angle must parameterise exactly one exponent;
+        /// reusing one makes `phased_action` raise a `ValueError`. Angles with matching `index` in
+        /// two circuits are what make those circuits' exponents correspond when their phased actions
+        /// are compared.
         #[allow(clippy::needless_pass_by_value)]
         pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: &PySymbolicAngle) {
             self.inner.symbolic_pauli_exp(&observable.inner, angle.outcome);

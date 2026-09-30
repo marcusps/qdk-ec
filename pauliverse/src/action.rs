@@ -62,6 +62,20 @@ pub enum ActionError {
         state_encoder: CliffordUnitary,
         auxiliary_qubits: Vec<QubitId>,
     },
+    /// A symbolic angle parameterises more than one rotation, so the recorded action does not
+    /// determine the operator. `angle` is the outcome id returned by
+    /// [`Simulation::allocate_symbolic_angle`].
+    /// See [`PhasedOutcomeCompleteSimulation::reused_symbolic_angle`].
+    SymbolicAngleReused { angle: usize },
+    /// A discarded auxiliary qubit carries a stabilizer sign that changes with a symbolic angle
+    /// that no physical outcome reveals. Discarding it would decohere that angle, so this
+    /// representation cannot record the circuit. `angle` is the outcome id returned by
+    /// [`Simulation::allocate_symbolic_angle`].
+    ///
+    /// The check is conservative. A rotation confined to discarded qubits is harmless, yet it
+    /// carries the same recorded data as a rotation that spans a retained qubit, so both are
+    /// refused.
+    AuxiliaryQubitsCarrySymbolicAngle { angle: usize },
     #[from]
     AuxiliarySeparationFailed(AuxiliarySeparationError),
     #[from]
@@ -211,11 +225,15 @@ fn action_from_simulation<S: ActionSimulation>(
     let sign_matrix = simulation.signs();
     let state_encoder = simulation.encoder();
 
+    // Auxiliary qubits are every qubit the simulation holds that is neither an output nor a
+    // reference. Taking the total from the simulation, rather than from `qubit_count`, covers
+    // qubits the caller allocated beyond the named system block.
     let auxiliary_qubits: Vec<QubitId> = output_qubits
         .iter()
+        .chain(reference_qubits.iter())
         .copied()
         .collect::<IndexSet>()
-        .complement(qubit_count)
+        .complement(qubit_count.max(simulation.qubit_count()))
         .into_iter()
         .collect();
     let auxiliary_stabilizers =
@@ -492,7 +510,8 @@ pub fn phased_action_of(
 /// applying the circuit, have entangled each `input_qubits[k]` with a reference qubit via
 /// `UnitaryOp::PrepareBell`, following the same layout as [`phased_action_of`]: the reference qubit
 /// for `input_qubits[k]` is `system_qubit_count + k`, where `system_qubit_count` is one past the
-/// largest index appearing in `input_qubits` or `output_qubits`.
+/// largest index appearing in `input_qubits` or `output_qubits`. Any further qubit of the
+/// simulation is an auxiliary qubit and must be disentangled from the rest of the state.
 ///
 /// # Errors
 ///
@@ -521,6 +540,55 @@ pub fn phased_action_from_simulation(
     phased_action(action, simulation, &reference_qubits, output_qubits)
 }
 
+/// The outcome id of a symbolic angle whose branch a discarded auxiliary qubit records but no
+/// physical outcome reveals.
+///
+/// Two branches that share a physical-outcome record differ by a vector in the kernel of
+/// `physical_outcomes_from_random`. Discarding the auxiliary qubits keeps their coherence exactly
+/// when every auxiliary stabiliser sign is constant along that kernel. Every ordinary random bit is
+/// itself a physical outcome, so such a direction is supported on symbolic-angle bits alone.
+///
+/// Revealing an angle indirectly is enough: two rotations measured together expose only their
+/// parity, and that parity fixes the auxiliary state, so the pair is accepted.
+fn symbolic_angle_on_auxiliary_signs(
+    action: &CircuitAction,
+    simulation: &PhasedOutcomeCompleteSimulation,
+    physical_outcomes_from_random: &BitMatrix,
+) -> Option<usize> {
+    let signs = action.auxiliary_stabilizers.sign_from_random.matrix();
+    let kernel = physical_outcomes_from_random.kernel();
+    let unrevealed = (0..kernel.row_count())
+        .map(|row| BitVec::from(&kernel.row(row)))
+        .find(|direction| (0..signs.row_count()).any(|generator| sign_changes_along(signs, generator, direction)))?;
+    let angles = simulation.symbolic_angle_indicator();
+    let random_bit = unrevealed
+        .support()
+        .find(|bit| angles.get(*bit).copied().unwrap_or(false))?;
+    random_bit_outcome_id(simulation, random_bit)
+}
+
+/// Whether the sign of auxiliary generator `generator` differs between two branches separated by
+/// `direction`.
+fn sign_changes_along(signs: &BitMatrix, generator: usize, direction: &BitVec) -> bool {
+    direction
+        .support()
+        .filter(|bit| *bit < signs.column_count() && signs[(generator, *bit)])
+        .count()
+        % 2
+        == 1
+}
+
+/// The public outcome id that reports inner random bit `random_bit`.
+fn random_bit_outcome_id(simulation: &PhasedOutcomeCompleteSimulation, random_bit: usize) -> Option<usize> {
+    simulation
+        .random_outcome_indicator()
+        .iter()
+        .enumerate()
+        .filter(|(_, is_random)| **is_random)
+        .nth(random_bit)
+        .map(|(outcome, _)| outcome)
+}
+
 /// Assembles a [`PhasedCircuitAction`] from a computed `action` and the `simulation` that recorded
 /// the branch phase function, recovering the absolute global phase from the reference and output
 /// qubits.
@@ -530,13 +598,23 @@ fn phased_action(
     reference_qubits: &[QubitId],
     output_qubits: &[QubitId],
 ) -> Result<PhasedCircuitAction, ActionError> {
+    if let Some(angle) = simulation.reused_symbolic_angle() {
+        return Err(ActionError::SymbolicAngleReused { angle });
+    }
+    // arXiv:2309.08676 deallocates a qubit only when its state is the same on every branch. An
+    // auxiliary state that the physical outcomes fix meets this; one that also follows an
+    // unrevealed symbolic angle would decohere that angle when discarded.
+    let physical_outcomes_from_random = physical_outcome_matrix(simulation);
+    if let Some(angle) = symbolic_angle_on_auxiliary_signs(&action, simulation, &physical_outcomes_from_random) {
+        return Err(ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle });
+    }
     let symbolic_angles: BitVec = simulation.symbolic_angle_indicator().iter().copied().collect();
     let phase = separated_phase(simulation, reference_qubits, output_qubits)?;
     let global_phase = phase.phase_exponent(&BitVec::zeros(simulation.random_outcome_count()));
     Ok(PhasedCircuitAction {
         action,
         phase,
-        physical_outcomes_from_random: physical_outcome_matrix(simulation),
+        physical_outcomes_from_random,
         symbolic_angles,
         global_phase,
     })
@@ -586,9 +664,17 @@ impl PhasedCircuitAction {
         &self.action
     }
 
-    /// The absolute global `ζ₈` phase of the Choi-state encoder recovered via the §4.3 auxiliary
-    /// separation, as a `ζ₈` exponent in `0..8`. Compared only by
-    /// [`Self::is_equivalent_with_global_phase`].
+    /// The global `ζ₈` phase of the Choi-state encoder recovered by the §4.3 auxiliary separation,
+    /// as an exponent in `0..8`. Compared only by [`Self::is_equivalent_with_global_phase`].
+    ///
+    /// The value is fixed by the canonical marginal-encoder convention, not by the operator alone,
+    /// so it is a reference point rather than an absolute quantity. The identity circuit gives `2`,
+    /// not `0`. Two circuits that apply the same operator to the outputs can still differ here when
+    /// they leave a discarded auxiliary qubit in different states: `S` on qubit `0` gives `0` with
+    /// the auxiliary qubit untouched, `2` after an `X` on it, and `4` after an `H` or a `Y`.
+    ///
+    /// Differences are meaningful when both actions are built the same way. `XZ` and `Y`, for
+    /// instance, differ by `6`, which is the factor `-i` that relates them.
     #[must_use]
     pub fn global_phase(&self) -> u8 {
         self.global_phase
@@ -643,15 +729,22 @@ impl PhasedCircuitAction {
         )
     }
 
-    /// Like [`Self::is_equivalent`], but additionally requires the two actions' *absolute* global
-    /// `ζ₈` phases to agree.
+    /// Like [`Self::is_equivalent`], but additionally requires the two actions' global `ζ₈` phases
+    /// to agree.
     ///
     /// [`Self::is_equivalent`] compares operators up to a common global phase, which is the
-    /// physically meaningful notion (an overall phase is unobservable). This stronger check also
-    /// pins the absolute global phase recovered from the §4.3 auxiliary separation, distinguishing
-    /// e.g. `Co` from `-Co`. It is useful only when exact operator equality including the global
-    /// phase is required. When the operators agree only up to a non-trivial global phase,
+    /// physically meaningful notion, because an overall phase is unobservable. This stronger check
+    /// also pins [`Self::global_phase`], which distinguishes `Co` from `-Co`. When the operators
+    /// agree only up to a non-trivial global phase,
     /// [`ActionsInequivalenceReason::GlobalPhase`] is added to the reasons.
+    ///
+    /// Read the check against the convention described on [`Self::global_phase`]. Two circuits that
+    /// apply the same operator to the outputs are reported as different here when they leave a
+    /// discarded auxiliary qubit in different states. Use this only when both actions are built the
+    /// same way and exact equality of that recorded phase is what you want.
+    ///
+    /// The comparison quotients by the physical outcome record first, so a phase difference that
+    /// every outcome sector reveals is treated as global within its sector.
     ///
     /// # Errors
     ///

@@ -3,13 +3,15 @@ use std::borrow::Borrow;
 use binar::{BitMatrix, BitView, Bitwise, BitwisePairMut, IndexSet};
 use paulimer::core::{PositionedPauliObservable, x, z};
 use paulimer::{
+    PauliMutable,
     clifford::{Clifford, CliffordMutable, CliffordUnitary},
     operations::UnitaryOp,
     pauli::{Pauli, SparsePauli},
 };
 use pauliverse::{
-    PhasedOutcomeCompleteSimulation, Simulation, outcome_complete_simulation::OutcomeCompleteSimulation,
-    outcome_free_simulation::OutcomeFreeSimulation, outcome_specific_simulation::OutcomeSpecificSimulation,
+    Simulation, outcome_complete_simulation::OutcomeCompleteSimulation, outcome_free_simulation::OutcomeFreeSimulation,
+    outcome_specific_simulation::OutcomeSpecificSimulation,
+    phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation,
 };
 
 trait SimulationForTest: Simulation + Default {
@@ -46,6 +48,7 @@ trait SimulationForTest: Simulation + Default {
 impl SimulationForTest for OutcomeCompleteSimulation {}
 impl SimulationForTest for OutcomeSpecificSimulation {}
 impl SimulationForTest for OutcomeFreeSimulation {}
+impl SimulationForTest for PhasedOutcomeCompleteSimulation {}
 
 fn measure_and_fix(
     sim: &mut impl SimulationForTest,
@@ -573,10 +576,38 @@ fn test_compare_simulations() {
     test_sims!(random_and_deterministic_outcome_sequence);
 }
 
+fn negated(observable: &[PositionedPauliObservable]) -> SparsePauli {
+    let mut pauli: SparsePauli = observable.into();
+    pauli.add_assign_phase_exp(2u8);
+    pauli
+}
+
 #[test]
-fn phased_allocator_returns_public_outcome_ids() {
-    let mut simulation = PhasedOutcomeCompleteSimulation::default();
-    assert_eq!(simulation.measure(&SparsePauli::from([z(0)])), 0);
-    assert_eq!(simulation.allocate_random_bit(), 1);
-    assert_eq!(simulation.allocate_symbolic_angle(), 2);
+fn phased_is_stabilizer_distinguishes_eigenvalue_sign() {
+    let mut sim = PhasedOutcomeCompleteSimulation::default();
+    sim.unitary_op(UnitaryOp::X, &[0]);
+
+    assert!(sim.is_stabilizer(&negated(&[z(0)])));
+    assert!(!sim.is_stabilizer(&[z(0)].into()));
+    assert!(sim.is_stabilizer_up_to_sign(&[z(0)].into()));
+
+    sim.unitary_op(UnitaryOp::X, &[0]);
+
+    assert!(sim.is_stabilizer(&[z(0)].into()));
+    assert!(!sim.is_stabilizer(&negated(&[z(0)])));
+}
+
+#[test]
+fn phased_allocate_random_bit_returns_public_outcome_id() {
+    // A deterministic measurement appends a public outcome without consuming a
+    // random column, so the next allocation's public id outruns the column index.
+    let mut sim = PhasedOutcomeCompleteSimulation::default();
+    let deterministic = sim.measure_o(&[z(0)]);
+    assert_eq!(deterministic, 0);
+
+    let allocated = sim.allocate_random_bit();
+    assert_eq!(allocated, 1, "allocator must return the public outcome id");
+
+    let angle = sim.allocate_symbolic_angle();
+    assert_eq!(angle, 2, "symbolic angles share the public outcome numbering");
 }

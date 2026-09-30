@@ -3,7 +3,7 @@ use paulimer::core::{x, y, z};
 use paulimer::pauli::SparsePauli;
 use paulimer::{PositionedPauliObservable, UnitaryOp};
 use pauliverse::action::{
-    ActionsInequivalenceReason, PhasedCircuitAction, phased_action_from_simulation, phased_action_of,
+    ActionError, ActionsInequivalenceReason, PhasedCircuitAction, phased_action_from_simulation, phased_action_of,
 };
 use pauliverse::phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 use pauliverse::{Circuit, CircuitBuilder, QubitId, Simulation};
@@ -1164,4 +1164,114 @@ fn global_phase_check_preserves_unrelated_inequivalence_reasons() {
 
     assert_eq!(exact_reasons, base_reasons);
     assert!(!exact_reasons.contains(&ActionsInequivalenceReason::GlobalPhase));
+}
+
+#[test]
+fn simulator_native_rejects_entangled_auxiliary_qubits() {
+    // Qubit 2 is a system qubit that no argument names. Leaving it entangled with an output must
+    // be an error, not a silently truncated action.
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(4);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 3]);
+    simulation.unitary_op(UnitaryOp::ControlledX, &[0, 2]);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        result.is_err(),
+        "an entangled auxiliary qubit must be reported, got {result:?}"
+    );
+}
+
+#[test]
+fn simulator_native_rejects_a_reused_symbolic_angle() {
+    // One angle drives two rotations, so both collapse onto the same branch bit. The recorded
+    // action then cannot tell exp(2 i alpha X) from exp(2 i alpha Z), and must be rejected.
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let angle = simulation.allocate_symbolic_angle();
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleReused { angle: reused }) if reused == angle),
+        "a reused symbolic angle must be reported, got {result:?}"
+    );
+}
+
+#[test]
+fn symbolic_rotation_may_not_reach_a_discarded_qubit() {
+    // Qubit 2 is discarded. A rotation that spans qubits 0 and 2 correlates the angle with the
+    // discarded qubit, so the retained state loses coherence and the action is not well defined.
+    fn action(observable: &[PositionedPauliObservable]) -> Result<PhasedCircuitAction, ActionError> {
+        let mut simulation = PhasedOutcomeCompleteSimulation::new(3);
+        simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+        let angle = simulation.allocate_symbolic_angle();
+        simulation.symbolic_pauli_exp(&sparse(observable), angle);
+        phased_action_from_simulation(&simulation, &[0], &[0])
+    }
+
+    action(&[x(0)]).expect("a rotation on the retained qubit alone has an action");
+
+    let spanning = action(&[x(0), x(2)]);
+    assert!(
+        matches!(spanning, Err(ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle }) if angle == 0),
+        "a rotation reaching a discarded qubit must be reported, got {spanning:?}"
+    );
+}
+
+/// Two rotations on one discarded qubit, measured together, reveal only their combined parity.
+/// That parity still fixes the auxiliary state, so the action exists. A rule demanding that each
+/// angle be revealed on its own would refuse this.
+#[test]
+fn a_revealed_parity_of_two_angles_keeps_the_action() {
+    let circuit = build_circuit(|builder| {
+        let first = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[x(0)]), first);
+        let second = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[x(0)]), second);
+        let _ = builder.measure(&sparse(&[z(0)]));
+    });
+
+    phased_action_of(&circuit, &[], &[]).expect("the measured parity fixes the discarded qubit");
+}
+
+/// The angle counter is indexed by outcome id. A deterministic measurement takes an outcome id
+/// without taking a random bit, so a counter indexed by random bit would miss the reuse.
+#[test]
+fn angle_reuse_is_caught_after_a_deterministic_measurement() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let deterministic = simulation.measure(&sparse(&[z(0), z(1)]));
+    assert_eq!(deterministic, 0, "the Bell parity is deterministic");
+
+    let angle = simulation.allocate_symbolic_angle();
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleReused { angle: reused }) if reused == angle),
+        "a reused angle must be reported whatever its outcome id, got {result:?}"
+    );
+}
+
+/// Conditioning a Pauli on an angle directly is another way to drive a rotation, so it counts
+/// against the same angle.
+#[test]
+fn angle_reuse_through_a_conditional_pauli_is_caught() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let angle = simulation.allocate_symbolic_angle();
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+    simulation.conditional_pauli(&sparse(&[z(0)]), &[angle], true);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleReused { angle: reused }) if reused == angle),
+        "conditioning on an angle counts as a use, got {result:?}"
+    );
 }
