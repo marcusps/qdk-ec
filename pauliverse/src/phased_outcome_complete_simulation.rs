@@ -84,6 +84,7 @@ pub struct PhasedOutcomeCompleteSimulation {
     linear_sign_phase: AlignedBitVec,         // s
     random_outcome_indicator: Vec<bool>,      // vec(q), [j] is true iff vec(q)_j = 1/2
     symbolic_angle_indicator: Vec<bool>,      // [k] is true iff random bit k is a symbolic rotation angle
+    symbolic_angle_use_count: Vec<usize>,     // [k] counts the rotations parameterised by outcome k
     random_bit_count: usize,
     qubit_count: usize,
 }
@@ -103,6 +104,7 @@ impl std::fmt::Debug for PhasedOutcomeCompleteSimulation {
             )
             .field("random_outcome_indicator", &self.random_outcome_indicator)
             .field("symbolic_angle_indicator", &self.symbolic_angle_indicator)
+            .field("symbolic_angle_use_count", &self.symbolic_angle_use_count)
             .field("random_bit_count", &self.random_bit_count)
             .field("qubit_count", &self.qubit_count)
             .finish()
@@ -345,6 +347,7 @@ impl PhasedOutcomeCompleteSimulation {
             linear_sign_phase: AlignedBitVec::zeros(random_capacity),
             random_outcome_indicator: Vec::with_capacity(outcome_count),
             symbolic_angle_indicator: Vec::with_capacity(random_outcome_count),
+            symbolic_angle_use_count: Vec::with_capacity(random_outcome_count),
             random_bit_count: 0,
             qubit_count,
         }
@@ -443,6 +446,17 @@ impl PhasedOutcomeCompleteSimulation {
         &self.symbolic_angle_indicator
     }
 
+    /// The first symbolic angle that parameterises more than one rotation, if any.
+    ///
+    /// A symbolic angle stands for a rotation `exp(i alpha P)` through a single branch bit. Two
+    /// rotations that share an angle therefore collapse onto the same bit, and the recorded action
+    /// no longer determines the operator. Callers that build an action must reject such a
+    /// simulation.
+    #[must_use]
+    pub fn reused_symbolic_angle(&self) -> Option<crate::OutcomeId> {
+        self.symbolic_angle_use_count.iter().position(|count| *count > 1)
+    }
+
     fn allocate_random_bit_with_provenance(&mut self, is_symbolic_angle: bool) -> usize {
         self.ensure_outcome_capacity(true);
         let outcome_pos = self.random_outcome_indicator.len();
@@ -451,6 +465,7 @@ impl PhasedOutcomeCompleteSimulation {
             .assign_index(self.random_bit_count, true);
         self.random_outcome_indicator.push(true);
         self.symbolic_angle_indicator.push(is_symbolic_angle);
+        self.symbolic_angle_use_count.push(0);
         self.random_bit_count += 1;
         outcome_pos
     }
@@ -463,6 +478,13 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
 
     fn allocate_symbolic_angle(&mut self) -> usize {
         self.allocate_random_bit_with_provenance(true)
+    }
+
+    fn symbolic_pauli_exp(&mut self, observable: &SparsePauli, angle: crate::OutcomeId) {
+        if let Some(count) = self.symbolic_angle_use_count.get_mut(angle) {
+            *count += 1;
+        }
+        self.conditional_pauli(observable, &[angle], true);
     }
 
     fn clifford(&mut self, _clifford: &crate::Unitary, _support: &[crate::QubitId]) {

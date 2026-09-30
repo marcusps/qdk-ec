@@ -1269,9 +1269,10 @@ class PhasedOutcomeCompleteSimulation:
 
         ``angle`` must be a :class:`SymbolicAngle` obtained from :meth:`allocate_symbolic_angle`
         or :meth:`allocate_symbolic_angles`. This is the high-level way to add a free-angle
-        exponent ``e^{i alpha P}`` for an arbitrary Pauli ``P``. The same ``angle`` may parameterise
-        several exponents (a shared ``alpha``), and angles with matching index in two circuits are
-        what make those circuits' exponents correspond when their phased actions are compared.
+        exponent ``e^{i alpha P}`` for an arbitrary Pauli ``P``. Each angle must parameterise
+        exactly one exponent; reusing one makes :meth:`phased_action` raise a ``ValueError``.
+        Angles with matching index in two circuits are what make those circuits' exponents
+        correspond when their phased actions are compared.
         """
         ...
 

@@ -58,6 +58,9 @@ pub enum ActionError {
         state_encoder: CliffordUnitary,
         auxiliary_qubits: Vec<QubitId>,
     },
+    /// A symbolic angle parameterises more than one rotation, so the recorded action does not
+    /// determine the operator. See [`PhasedOutcomeCompleteSimulation::reused_symbolic_angle`].
+    SymbolicAngleReused { angle: usize },
     #[from]
     SimulationFailed(SimulationError),
 }
@@ -451,7 +454,7 @@ pub fn phased_action_of(
     output_qubits: &[QubitId],
 ) -> Result<PhasedCircuitAction, ActionError> {
     let (action, simulation) = build_action::<PhasedOutcomeCompleteSimulation>(circuit, input_qubits, output_qubits)?;
-    Ok(phased_action(action, &simulation))
+    phased_action(action, &simulation)
 }
 
 /// Computes a [`PhasedCircuitAction`] directly from a [`PhasedOutcomeCompleteSimulation`] whose Choi
@@ -488,18 +491,24 @@ pub fn phased_action_from_simulation(
         &reference_qubits,
         system_qubit_count,
     )?;
-    Ok(phased_action(action, simulation))
+    phased_action(action, simulation)
 }
 
 /// Assembles a [`PhasedCircuitAction`] from a computed `action` and the `simulation` that recorded
 /// the branch phase function.
-fn phased_action(action: CircuitAction, simulation: &PhasedOutcomeCompleteSimulation) -> PhasedCircuitAction {
+fn phased_action(
+    action: CircuitAction,
+    simulation: &PhasedOutcomeCompleteSimulation,
+) -> Result<PhasedCircuitAction, ActionError> {
+    if let Some(angle) = simulation.reused_symbolic_angle() {
+        return Err(ActionError::SymbolicAngleReused { angle });
+    }
     let symbolic_angles: BitVec = simulation.symbolic_angle_indicator().iter().copied().collect();
-    PhasedCircuitAction {
+    Ok(PhasedCircuitAction {
         action,
         phase: PhaseData::from_simulation(simulation),
         symbolic_angles,
-    }
+    })
 }
 
 impl PhasedCircuitAction {

@@ -2,7 +2,7 @@ use paulimer::core::{x, z};
 use paulimer::pauli::SparsePauli;
 use paulimer::{PositionedPauliObservable, UnitaryOp};
 use pauliverse::action::{
-    ActionsInequivalenceReason, PhasedCircuitAction, phased_action_from_simulation, phased_action_of,
+    ActionError, ActionsInequivalenceReason, PhasedCircuitAction, phased_action_from_simulation, phased_action_of,
 };
 use pauliverse::phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 use pauliverse::{Circuit, CircuitBuilder, QubitId, Simulation};
@@ -971,5 +971,23 @@ fn simulator_native_rejects_entangled_auxiliary_qubits() {
     assert!(
         result.is_err(),
         "an entangled auxiliary qubit must be reported, got {result:?}"
+    );
+}
+
+#[test]
+fn simulator_native_rejects_a_reused_symbolic_angle() {
+    // One angle drives two rotations, so both collapse onto the same branch bit. The recorded
+    // action then cannot tell exp(2 i alpha X) from exp(2 i alpha Z), and must be rejected.
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let angle = simulation.allocate_symbolic_angle();
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleReused { angle: reused }) if reused == angle),
+        "a reused symbolic angle must be reported, got {result:?}"
     );
 }
