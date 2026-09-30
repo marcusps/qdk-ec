@@ -100,3 +100,14 @@ proptest! {
         prop_assert!(close(&statevector(&phased), &dense.amp), "diverged on {gates:?}");
     }
 }
+
+#[test]
+fn zero_qubit_amplitude_phase_is_zero() {
+    // The empty system has the single amplitude 1, so its zeta_8 exponent is 0. Reading it must
+    // not index a generator that does not exist.
+    let unitary = PhasedCliffordUnitary::identity(0);
+    let basis = binar::vec::AlignedBitVec::zeros(0);
+
+    assert_eq!(unitary.state_amplitude_phase_exponent(&basis), Some(0));
+    assert_eq!(unitary.state_amplitude_phase_exponent_usize(0), Some(0));
+}

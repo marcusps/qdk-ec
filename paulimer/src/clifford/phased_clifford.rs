@@ -155,20 +155,18 @@ impl PhasedCliffordUnitary {
             .collect();
         let echelon = EchelonForm::new(self.x_parts_matrix());
         let combination = echelon.transpose_solve(&difference.as_view())?;
-        let mut product = self.clifford.image_z(0);
-        let mut started = false;
+        let mut product: Option<<CliffordUnitary as Clifford>::DensePauli> = None;
         for generator in combination.support() {
             let image = self.clifford.image_z(generator);
-            if started {
+            if let Some(product) = product.as_mut() {
                 product.mul_assign_right(&image);
             } else {
-                product = image;
-                started = true;
+                product = Some(image);
             }
         }
-        if !started {
+        let Some(product) = product else {
             return Some(0);
-        }
+        };
         let phase_exponent = i64::from(product.xz_phase_exponent());
         let mut sign_parity = false;
         for qubit in product.z_bits().support() {
