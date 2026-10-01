@@ -93,4 +93,14 @@ message Readouts {
   // Sum of log((1 - p) / p) over those edges, using their effective shot priors.
   // This is a correction weight, not a normalized error probability.
   double correction_weight = 6;
+  // Optional forced-gap uncertainty at this gadget's output boundary, separate
+  // from logical readout probabilities. Flattened by output port, then by that
+  // port type's observable order. Includes propagated causal history under the
+  // window coordinator's existing maximum-component score composition; these
+  // are not calibrated posterior probabilities. Reporting does not add scoring
+  // targets beyond the existing commit-region boundary. Empty when disabled,
+  // when there are no output observables, or when any output is internal to a
+  // multi-gadget commit region. An empty vector means unavailable, not zero
+  // uncertainty. Does not add or change logical bits.
+  repeated double frame_probabilities = 7;
 }
