@@ -417,6 +417,10 @@ impl PhasedCliffordUnitary {
     }
 
     /// Left-multiplies by the Pauli operator `pauli` (including its sign).
+    ///
+    /// This applies one elementary factor per qubit in the support, and each factor rebuilds the
+    /// echelon reduction described in the module documentation. A Pauli of weight `k` therefore
+    /// costs `O(k·n³)`, not the `O(n³)` of a single elementary multiplication.
     pub fn left_mul_pauli<PauliLike: Pauli<PhaseExponentValue = u8>>(&mut self, pauli: &PauliLike) {
         let phase = pauli.xz_phase_exponent();
         for qubit in pauli.z_bits().support() {

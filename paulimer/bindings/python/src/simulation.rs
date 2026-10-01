@@ -53,6 +53,9 @@ pub struct PyPhasedOutcomeCompleteSimulation {
 /// with the same `index` are required to correspond, so describing both circuits in terms of the
 /// `k`-th angle is what makes the comparison meaningful -- regardless of how the rest of each
 /// circuit is written.
+///
+/// Two handles are equal when their `index` values are equal. They do not have to come from the
+/// same simulator, which is what lets you pair the angles of two circuits you want to compare.
 #[derive(Clone)]
 #[pyclass(name = "SymbolicAngle", module = "paulimer", frozen)]
 pub struct PySymbolicAngle {
@@ -76,12 +79,12 @@ impl PySymbolicAngle {
 
     #[must_use]
     pub fn __eq__(&self, other: &Self) -> bool {
-        self.outcome == other.outcome
+        self.index == other.index
     }
 
     #[must_use]
     pub fn __hash__(&self) -> u64 {
-        self.outcome as u64
+        self.index as u64
     }
 }
 

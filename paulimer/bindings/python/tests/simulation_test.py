@@ -335,6 +335,45 @@ def _choi_action(build_gadget, n=1):
     return sim.phased_action(list(range(n)), list(range(n)))
 
 
+class TestSymbolicAngleIdentity:
+    """A handle's identity is its index, so equal indices must compare equal."""
+
+    @staticmethod
+    def _angles_after_measurements(measurement_count, angle_count):
+        """Allocate `angle_count` angles after `measurement_count` random measurements.
+
+        The measurements consume outcome ids, so the hidden outcome id of the k-th angle
+        depends on how many measurements came first. The index does not.
+        """
+        sim = PhasedOutcomeCompleteSimulation(measurement_count + 1)
+        for qubit in range(measurement_count):
+            sim.apply_unitary(UnitaryOpcode.Hadamard, [qubit])
+            sim.measure(SparsePauli(f"Z_{qubit}"))
+        return [sim.allocate_symbolic_angle() for _ in range(angle_count)]
+
+    def test_index_is_allocation_order(self):
+        angles = self._angles_after_measurements(2, 3)
+        assert [angle.index for angle in angles] == [0, 1, 2]
+
+    def test_equal_indices_compare_equal_across_simulators(self):
+        few = self._angles_after_measurements(0, 2)
+        many = self._angles_after_measurements(3, 2)
+        assert few[0] == many[0]
+        assert few[1] == many[1]
+        assert hash(few[0]) == hash(many[0])
+
+    def test_different_indices_compare_unequal_across_simulators(self):
+        few = self._angles_after_measurements(0, 2)
+        many = self._angles_after_measurements(3, 2)
+        assert few[0] != many[1]
+        assert few[1] != many[0]
+
+    def test_angles_are_usable_as_dictionary_keys(self):
+        few = self._angles_after_measurements(0, 2)
+        many = self._angles_after_measurements(3, 2)
+        assert len({few[0], few[1], many[0], many[1]}) == 2
+
+
 class TestPhasedCircuitAction:
 
     def test_phased_action_returns_action(self):

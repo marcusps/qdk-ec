@@ -1056,6 +1056,10 @@ class SymbolicAngle:
     :meth:`PhasedOutcomeCompleteSimulation.phased_action`, angles with the same index are required to
     correspond, so describing both circuits in terms of the ``k``-th angle is what makes the
     comparison meaningful -- regardless of how the rest of each circuit is written.
+
+    Two handles are equal when their :attr:`index` values are equal. They do not have to come
+    from the same simulator, which is what lets you pair the angles of two circuits you want to
+    compare.
     """
 
     @property
