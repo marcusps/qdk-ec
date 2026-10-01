@@ -171,6 +171,35 @@ theorem rank_one_add {m : ℕ} (action : ActionMatrix m) :
   rw [Matrix.rank_eq_finrank_span_row]
   rfl
 
+theorem residueRank_add_finrank_fixedSpace {m : ℕ}
+    (action : ActionMatrix m) :
+    residueRank action + Module.finrank F2 (fixedSpace action) = 2 * m := by
+  rw [residueRank, residueSpace, fixedSpace, ← range_vecMulLinear,
+    LinearMap.finrank_range_add_finrank_ker, Module.finrank_pi]
+  simp [PhaseIndex, two_mul]
+
+theorem residueRank_inv {m : ℕ} (action : SymplecticAction m) :
+    residueRank ((action⁻¹ : SymplecticAction m) : ActionMatrix m) =
+      residueRank (action : ActionMatrix m) := by
+  have inverse_left :
+      (↑action⁻¹ : ActionMatrix m) * (action : ActionMatrix m) = 1 :=
+    congrArg Subtype.val (Group.inv_mul_cancel action)
+  have inverse_right :
+      (action : ActionMatrix m) * (↑action⁻¹ : ActionMatrix m) = 1 :=
+    congrArg Subtype.val (mul_inv_cancel action)
+  have inverse_residue :
+      1 + (↑action⁻¹ : ActionMatrix m) =
+        (↑action⁻¹ : ActionMatrix m) * (1 + (action : ActionMatrix m)) := by
+    rw [Matrix.mul_add, Matrix.mul_one, inverse_left, add_comm]
+  have action_residue :
+      1 + (action : ActionMatrix m) =
+        (action : ActionMatrix m) * (1 + (↑action⁻¹ : ActionMatrix m)) := by
+    rw [Matrix.mul_add, Matrix.mul_one, inverse_right, add_comm]
+  rw [← rank_one_add, ← rank_one_add]
+  exact le_antisymm
+    (inverse_residue ▸ Matrix.rank_mul_le_right _ _)
+    (action_residue ▸ Matrix.rank_mul_le_right _ _)
+
 theorem rank_mul_eq_right_of_mulVec_injective
     {l m n : Type*} [Fintype l] [Fintype m] [Fintype n]
     (left : Matrix l m F2) (right : Matrix m n F2)

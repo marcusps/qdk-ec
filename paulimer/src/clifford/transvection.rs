@@ -115,7 +115,7 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
 /// conjugation, i.e. the `P` with `clifford · P · clifford† = ±P`.
 ///
 /// This is `Fix(F)`, the kernel of the residue map `P ↦ conj(P) · P`, computed as the left null
-/// space of the residue matrix over GF(2). The returned Paulis are independent positive Hermitian
+/// space of `I + F` over GF(2). The returned Paulis are independent positive Hermitian
 /// generators. The space they span has dimension `dim Fix(F) = 2n − r`, where `r = rank(I + F)` is
 /// the residue rank. That rank is a lower bound on the number of factors returned by
 /// [`clifford_to_transvections`], not the factor count itself.
@@ -259,9 +259,10 @@ fn acts_trivially_on(pauli: &SparsePauli, image: &DensePauli) -> bool {
 /// # Panics
 ///
 /// The input must be a valid Clifford, as reported by `is_valid`. An invalid tableau, such as the
-/// one produced by `CliffordUnitary::zero`, can make the residue-fix step fail and panic. The same
-/// panic reports a residue-fix search that found no vector, which the exhaustive one-, two-, and
-/// three-qubit tests rule out at those sizes.
+/// one produced by `CliffordUnitary::zero`, can make the residue-fix step fail and panic. For a
+/// valid symplectic action, the formal one-fix theorem guarantees a mathematical witness; a panic
+/// therefore reports an implementation defect in row reduction, triangularization, or fix-vector
+/// enumeration rather than nonexistence of a fix.
 ///
 /// # Running time and memory
 ///
@@ -675,7 +676,7 @@ fn find_fix_vector(action: &AlignedBitMatrix, qubit_count: usize, basis: &Aligne
             return vector;
         }
     }
-    panic!("no residue fix vector exists for this non-triangularizable core")
+    panic!("residue-fix search found no candidate (invalid input or implementation defect)")
 }
 
 /// Converts a `2n`-bit symplectic vector into a positive Hermitian Pauli (`x`-bits in `[0, n)`,

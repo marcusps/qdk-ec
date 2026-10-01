@@ -120,6 +120,35 @@ theorem CorePresentation.core_transpose_mul_coefficient {m : ℕ}
     ((Matrix.isUnit_iff_isUnit_det presentation.coefficient).mp
       presentation.coefficient_unit)
 
+/-- The core computed from row reduction, `V Rᵀ` with `V = R F̂`, is `D⁻ᵀ`. -/
+theorem CorePresentation.core_eq_of_row_reduction {m n : ℕ}
+    {target : SymplecticAction m}
+    (presentation : CorePresentation target n)
+    (transform : Matrix (Fin n) (PhaseIndex m) F2)
+    (reduced :
+      transform * residueMatrix (target : ActionMatrix m) =
+        presentation.basis) :
+    presentation.core = presentation.basis * Matrix.transpose transform := by
+  have left_inverse :
+      transform * Matrix.transpose presentation.basis *
+        presentation.coefficient = 1 := by
+    apply mul_right_cancel_of_vecMul_injective presentation.basis _ _
+      (Matrix.vecMul_injective_iff.mpr presentation.basis_independent)
+    simpa only [presentation.residue_eq, Matrix.mul_assoc,
+      Matrix.one_mul] using reduced
+  have transform_eq :
+      transform * Matrix.transpose presentation.basis =
+        Matrix.transpose presentation.core := by
+    calc
+      transform * Matrix.transpose presentation.basis =
+          (transform * Matrix.transpose presentation.basis) *
+            (presentation.coefficient * Matrix.transpose presentation.core) := by
+              rw [presentation.coefficient_mul_core_transpose, Matrix.mul_one]
+      _ = Matrix.transpose presentation.core := by
+        rw [← Matrix.mul_assoc, left_inverse, Matrix.one_mul]
+  simpa only [Matrix.transpose_mul, Matrix.transpose_transpose] using
+    (congrArg Matrix.transpose transform_eq).symm
+
 theorem inverseSandwichIff {n : ℕ}
     (factor inverseCore basisChange path pairing :
       Matrix (Fin n) (Fin n) F2)
@@ -292,23 +321,19 @@ theorem residueBasisMatrix_span {m : ℕ}
   rw [Set.range_comp, Submodule.span_image, basis.span_eq,
     Submodule.map_subtype_top]
 
-theorem exists_residue_coefficient {m : ℕ}
-    (target : SymplecticAction m) :
-    ∃ coefficient :
-        Matrix (Fin (residueRank (target : ActionMatrix m)))
-          (Fin (residueRank (target : ActionMatrix m))) F2,
+theorem exists_residue_coefficient_of_basis {m n : ℕ}
+    (target : SymplecticAction m)
+    (rank_eq : n = residueRank (target : ActionMatrix m))
+    (basis : Matrix (Fin n) (PhaseIndex m) F2)
+    (basis_independent : LinearIndependent F2 basis)
+    (basis_span :
+      Submodule.span F2 (Set.range basis) =
+        residueSpace (target : ActionMatrix m)) :
+    ∃ coefficient : Matrix (Fin n) (Fin n) F2,
       IsUnit coefficient ∧
         residueMatrix (target : ActionMatrix m) =
-          Matrix.transpose (residueBasisMatrix target) * coefficient *
-            residueBasisMatrix target := by
-  let basis := residueBasisMatrix target
+          Matrix.transpose basis * coefficient * basis := by
   let residue := residueMatrix (target : ActionMatrix m)
-  have basis_independent : LinearIndependent F2 basis := by
-    exact residueBasisMatrix_independent target
-  have basis_span :
-      Submodule.span F2 (Set.range basis) =
-        residueSpace (target : ActionMatrix m) := by
-    exact residueBasisMatrix_span target
   have basis_span_rows :
       Submodule.span F2 (Set.range basis.row) =
         residueSpace (target : ActionMatrix m) := by
@@ -391,13 +416,12 @@ theorem exists_residue_coefficient {m : ℕ}
     exact (Matrix.rank_mul_le_left _ _).trans
       (Matrix.rank_mul_le_right _ _)
   have coefficient_rank :
-      coefficient.rank =
-        Fintype.card
-          (Fin (residueRank (target : ActionMatrix m))) := by
+      coefficient.rank = Fintype.card (Fin n) := by
     apply le_antisymm (Matrix.rank_le_card_width coefficient)
     rw [Fintype.card_fin]
     calc
-      residueRank (target : ActionMatrix m) = residue.rank := by
+      n = residueRank (target : ActionMatrix m) := rank_eq
+      _ = residue.rank := by
         exact (rank_residueMatrix (target : ActionMatrix m)).symm
       _ ≤ coefficient.rank := residue_rank_le_coefficient
   have coefficient_independent :
@@ -408,6 +432,19 @@ theorem exists_residue_coefficient {m : ℕ}
   refine ⟨coefficient,
     Matrix.linearIndependent_rows_iff_isUnit.mp coefficient_independent, ?_⟩
   exact residue_factor
+
+theorem exists_residue_coefficient {m : ℕ}
+    (target : SymplecticAction m) :
+    ∃ coefficient :
+        Matrix (Fin (residueRank (target : ActionMatrix m)))
+          (Fin (residueRank (target : ActionMatrix m))) F2,
+      IsUnit coefficient ∧
+        residueMatrix (target : ActionMatrix m) =
+          Matrix.transpose (residueBasisMatrix target) * coefficient *
+            residueBasisMatrix target :=
+  exists_residue_coefficient_of_basis target rfl
+    (residueBasisMatrix target) (residueBasisMatrix_independent target)
+    (residueBasisMatrix_span target)
 
 noncomputable def canonicalCorePresentation {m : ℕ}
     (target : SymplecticAction m) :
@@ -726,6 +763,31 @@ theorem CorePresentation.coefficient_eq_path_of_factorization
       presentation.basis_independent)
     cancel_left
 
+/-- A valid congruence triangularizer supplies the concrete ordered centers `Q V`. -/
+theorem CorePresentation.factorization_of_triangularizer
+    {m n : ℕ} {target : SymplecticAction m}
+    (presentation : CorePresentation target n)
+    (basisChange : Matrix (Fin n) (Fin n) F2)
+    (basisChange_unit : IsUnit basisChange)
+    (lower :
+      IsUnitLowerTriangular
+        (basisChange * presentation.core * Matrix.transpose basisChange)) :
+    IsFactorization target (List.ofFn (basisChange * presentation.basis)) := by
+  let centers : Fin n → PhaseVector m := basisChange * presentation.basis
+  have core_eq :
+      basisChange * presentation.core * Matrix.transpose basisChange =
+        Matrix.transpose (pairingUpperFin centers) := by
+    simpa [centers] using
+      presentation.coreCongruence_eq_pairing_of_lower basisChange lower
+  have coefficient_eq :=
+    (presentation.coefficient_eq_path_iff_core_eq_pairing
+      centers basisChange basisChange_unit).mpr core_eq
+  apply target_eq_of_residueMatrix_eq target
+    (productTransvections (List.ofFn centers))
+  rw [residueMatrix_product_ofFn_eq, presentation.residue_eq,
+    coefficient_eq, centerMatrixFin_eq]
+  simp [centers, Matrix.transpose_mul, Matrix.mul_assoc]
+
 theorem CorePresentation.exists_factorization_iff_isTriangularizable
     {m n : ℕ} {target : SymplecticAction m}
     (presentation : CorePresentation target n) :
@@ -747,23 +809,17 @@ theorem CorePresentation.exists_factorization_iff_isTriangularizable
     rw [core_eq]
     exact pairingUpperFin_transpose_isUnitLowerTriangular centers
   · rintro ⟨basisChange, basisChange_unit, lower⟩
-    let centers : Fin n → PhaseVector m :=
-      basisChange * presentation.basis
-    refine ⟨centers, ?_⟩
-    have core_eq :
-        basisChange * presentation.core *
-            Matrix.transpose basisChange =
-          Matrix.transpose (pairingUpperFin centers) := by
-      simpa [centers] using
-        presentation.coreCongruence_eq_pairing_of_lower
-          basisChange lower
-    have coefficient_eq :=
-      (presentation.coefficient_eq_path_iff_core_eq_pairing
-        centers basisChange basisChange_unit).mpr core_eq
-    apply target_eq_of_residueMatrix_eq target
-      (productTransvections (List.ofFn centers))
-    rw [residueMatrix_product_ofFn_eq, presentation.residue_eq,
-      coefficient_eq, centerMatrixFin_eq]
-    simp [centers, Matrix.transpose_mul, Matrix.mul_assoc]
+    exact ⟨basisChange * presentation.basis,
+      presentation.factorization_of_triangularizer
+        basisChange basisChange_unit lower⟩
+
+theorem CorePresentation.isTriangularizable_iff_canonical
+    {m n : ℕ} {target : SymplecticAction m}
+    (presentation : CorePresentation target n) :
+    presentation.IsTriangularizable ↔
+      (canonicalCorePresentation target).IsTriangularizable := by
+  rw [← presentation.exists_factorization_iff_isTriangularizable,
+    ← (canonicalCorePresentation target).exists_factorization_iff_isTriangularizable,
+    presentation.rank_eq]
 
 end PaulimerFormal
