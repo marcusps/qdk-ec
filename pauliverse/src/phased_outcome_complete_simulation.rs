@@ -136,6 +136,7 @@ impl PhasedOutcomeCompleteSimulation {
     /// Get the sign matrix `A` tracking how computational-basis registers depend on random bits.
     ///
     /// Returns a cache-aligned reference for efficiency.
+    #[must_use]
     pub fn aligned_sign_matrix(&self) -> &AlignedBitMatrix {
         &self.sign_matrix
     }
@@ -151,6 +152,7 @@ impl PhasedOutcomeCompleteSimulation {
     /// Get the quadratic phase matrix `B` (cache-aligned).
     ///
     /// The `±1` phase contributed by `B` is `(-1)^⟨B r, r⟩`.
+    #[must_use]
     pub fn aligned_quadratic_phase_matrix(&self) -> &AlignedBitMatrix {
         &self.quadratic_phase_matrix
     }
@@ -164,6 +166,7 @@ impl PhasedOutcomeCompleteSimulation {
     }
 
     /// Get the outcome matrix `M` encoding all `2^{n_r}` measurement branches (cache-aligned).
+    #[must_use]
     pub fn aligned_outcome_matrix(&self) -> &AlignedBitMatrix {
         &self.outcome_matrix
     }
@@ -177,6 +180,7 @@ impl PhasedOutcomeCompleteSimulation {
     }
 
     /// Get the outcome shift vector `v₀` (cache-aligned).
+    #[must_use]
     pub fn aligned_outcome_shift(&self) -> &AlignedBitVec {
         &self.outcome_shift
     }
@@ -189,6 +193,7 @@ impl PhasedOutcomeCompleteSimulation {
     /// Get the linear `i`-phase vector `p` (cache-aligned).
     ///
     /// The `i` phase contributed by `p` is `i^⟨p, r⟩`.
+    #[must_use]
     pub fn aligned_linear_i_phase(&self) -> &AlignedBitVec {
         &self.linear_i_phase
     }
@@ -201,6 +206,7 @@ impl PhasedOutcomeCompleteSimulation {
     /// Get the linear `-1`-phase vector `s` (cache-aligned).
     ///
     /// The `±1` phase contributed by `s` is `(-1)^⟨s, r⟩`.
+    #[must_use]
     pub fn aligned_linear_sign_phase(&self) -> &AlignedBitVec {
         &self.linear_sign_phase
     }

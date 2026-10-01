@@ -544,6 +544,7 @@ impl PhasedCircuitAction {
     }
 
     /// Canonical choi state stabilizers; see [`CircuitAction::choi_state_stabilizers`].
+    #[must_use]
     pub fn choi_state_stabilizers(&self) -> &[SparsePauli] {
         self.action.choi_state_stabilizers()
     }

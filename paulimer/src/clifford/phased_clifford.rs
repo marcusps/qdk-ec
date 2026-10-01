@@ -102,6 +102,7 @@ impl PhasedCliffordUnitary {
     }
 
     /// Returns the underlying phaseless [`CliffordUnitary`].
+    #[must_use]
     pub fn clifford(&self) -> &CliffordUnitary {
         &self.clifford
     }
