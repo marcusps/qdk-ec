@@ -387,7 +387,12 @@ fn assert_valid_minimal_decomposition(clifford: &CliffordUnitary) {
 #[test]
 fn minimal_identity_decomposes_to_no_transvections() {
     for qubit_count in 0..5 {
-        assert!(clifford_to_transvections_minimal(&CliffordUnitary::identity(qubit_count)).is_empty());
+        let no_factors: Vec<SparsePauli> = Vec::new();
+        assert_eq!(
+            clifford_to_transvections_minimal(&CliffordUnitary::identity(qubit_count)),
+            no_factors,
+            "the identity needs no transvections"
+        );
     }
 }
 
