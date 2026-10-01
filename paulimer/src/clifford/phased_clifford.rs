@@ -454,6 +454,11 @@ impl PhasedCliffordUnitary {
     /// Left-multiplies by `exp(iπ/4 · pauli)`, the square root of `pauli` up to phase.
     pub fn left_mul_pauli_exp<PauliLike: Pauli<PhaseExponentValue = u8>>(&mut self, pauli: &PauliLike) {
         if self.num_qubits() == 0 {
+            // The only Hermitian Paulis here are the scalars I and -I, giving exp(iπ/4) and
+            // exp(-iπ/4), which are the eighth roots of unity 1 and 7.
+            let phase = pauli.xz_phase_exponent();
+            debug_assert!(phase.is_multiple_of(2), "exp(iπ/4 · P) needs a Hermitian P");
+            self.left_mul_global_phase(if phase == 0 { 1 } else { 7 });
             return;
         }
         let pauli_phase = i64::from(pauli.xz_phase_exponent());
