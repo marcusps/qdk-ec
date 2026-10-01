@@ -111,24 +111,28 @@ pub struct AuxiliarySeparation {
 impl AuxiliarySeparation {
     /// The output-qubit encoder `Co₁`, acting on the output qubits (in the order supplied to
     /// [`separate_auxiliary_qubits`]).
+    #[must_use]
     pub fn output_encoder(&self) -> &CliffordUnitary {
         &self.output_encoder
     }
 
     /// The auxiliary-qubit encoder `Co₂`, acting on the auxiliary qubits (the complement of the
     /// output qubits, in increasing order).
+    #[must_use]
     pub fn auxiliary_encoder(&self) -> &CliffordUnitary {
         &self.auxiliary_encoder
     }
 
     /// The basis-relabelling map `A₁` (with `Co₁`'s qubit count rows and `n` columns): for input
     /// label `r`, the output encoder reproduces `Co₁|A₁r⟩`.
+    #[must_use]
     pub fn output_basis_map(&self) -> &AlignedBitMatrix {
         &self.output_basis_map
     }
 
     /// The basis-relabelling map `A₂` (with `Co₂`'s qubit count rows and `n` columns): for input
     /// label `r`, the auxiliary encoder reproduces `Co₂|A₂r⟩`.
+    #[must_use]
     pub fn auxiliary_basis_map(&self) -> &AlignedBitMatrix {
         &self.auxiliary_basis_map
     }
