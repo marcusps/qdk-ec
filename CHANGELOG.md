@@ -7,8 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `clifford_to_transvections` in paulimer, with `CliffordUnitary.to_transvections()` in the Python bindings, decomposing a Clifford's symplectic action into a linear number of Hermitian Pauli generators of `π/4` exponents.
+- `clifford_centralizer` in paulimer, with `CliffordUnitary.centralizer()` in the Python bindings, returning Hermitian generators of the Pauli operators that conjugation fixes up to sign.
+- `clifford_to_transvections_minimal` in paulimer, with `CliffordUnitary.to_transvections_minimal()` in the Python bindings, returning the fewest Hermitian Pauli generators that reproduce a Clifford's symplectic action.
+
+## binar [0.1.6], paulimer [0.2.6], pauliverse [0.1.4] - 2026-09-29
+
 ### Changed
-- Linux native Python wheels are now built with a `manylinux_2_35` baseline for `binar`, `paulimer`, and `deq-runtime`, improving compatibility with glibc 2.35 systems. The x86_64 wheels build natively on Ubuntu 22.04, while ARM64 wheels use Zig's glibc 2.35 sysroot on Azure Linux 3 agents.
+- Faster `measure` in pauliverse simulators when the outcome is random, and faster `support()` in binar for bit vectors and unsigned integers.
+
+## binar [0.1.5], paulimer [0.2.5], pauliverse [0.1.3] - 2026-09-24
+
+### Added
+- Python 3.14t and Python 3.15+ `abi3t` wheels for binar and paulimer alongside existing `abi3` wheels.
+
+## binar [0.1.4] and paulimer [0.2.4] - 2026-09-17
+
+### Changed
+- Updated the Rust and Python bindings to PyO3 0.29. `paulimer` now requires `binar` 0.1.4 or later so packaged crates resolve a single PyO3 version.
+
+## binar [0.1.3] and paulimer [0.2.3] - 2026-08-03
+
+### Changed
+- Linux native Python wheels for `binar`, `paulimer`, and `deq-runtime` are now built with a `manylinux_2_28` baseline (glibc 2.28: RHEL 8+, Debian 10+, Ubuntu 18.10+). Both x86_64 and ARM64 wheels link against Zig's glibc sysroot so the declared tag matches the actual glibc floor rather than the build agent's glibc.
 
 ## [0.1.0] - 2026-01-23
 

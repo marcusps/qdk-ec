@@ -1,14 +1,17 @@
 //! Tests for the Clifford -> transvection decomposition (arXiv:2102.11380).
 //!
 //! The greedy decomposition reproduces the *symplectic action* (ignoring Pauli-image signs and the
-//! global phase) with a linear number of factors. It is not guaranteed to hit the strict minimum,
-//! so its tests validate the symplectic-action round trip, the linear factor bound, and the
-//! centralizer contract. Separate tests cover the minimal decomposition.
+//! global phase) with a linear number of factors. It is a greedy reduction rather than a
+//! minimal-length algorithm, so its tests validate the symplectic-action round trip, the validity
+//! of the replayed tableau, the residue-rank lower bound, the linear upper bound, and the
+//! fixed-space contract, rather than exact minimality. Separate tests cover the minimal
+//! decomposition.
 
+use binar::matrix::AlignedBitMatrix;
 use binar::{Bitwise, IndexSet};
 use paulimer::UnitaryOp;
 use paulimer::clifford::{Clifford, CliffordMutable, CliffordUnitary, clifford_centralizer, clifford_to_transvections};
-use paulimer::pauli::{Pauli, SparsePauli};
+use paulimer::pauli::{Pauli, PauliMutable, SparsePauli};
 use proptest::collection::vec;
 use proptest::prelude::*;
 use rand::SeedableRng;
@@ -33,9 +36,27 @@ fn is_non_identity(pauli: &SparsePauli) -> bool {
     !(pauli.x_bits().is_zero() && pauli.z_bits().is_zero())
 }
 
-/// The residue rank `r = 2n - dim Fix(F)`, a lower bound on every decomposition.
+/// The residue rank `r = rank(I + F)` of the symplectic action.
+///
+/// This is computed from the symplectic matrix alone so that it stays independent of
+/// [`clifford_centralizer`]; deriving it from the centralizer length would make the fixed-space
+/// dimension assertions tautological.
 fn residue_rank(clifford: &CliffordUnitary) -> usize {
-    2 * clifford.num_qubits() - clifford_centralizer(clifford).len()
+    let mut residue = clifford.symplectic_matrix();
+    residue ^= &AlignedBitMatrix::identity(2 * clifford.num_qubits());
+    residue.rank()
+}
+
+/// The rank over GF(2) of the symplectic vectors of `paulis`.
+fn binary_rank(paulis: &[SparsePauli], qubit_count: usize) -> usize {
+    let mut matrix = AlignedBitMatrix::zeros(paulis.len(), 2 * qubit_count);
+    for (row, pauli) in paulis.iter().enumerate() {
+        for qubit in 0..qubit_count {
+            matrix.set((row, qubit), pauli.x_bits().index(qubit));
+            matrix.set((row, qubit_count + qubit), pauli.z_bits().index(qubit));
+        }
+    }
+    matrix.rank()
 }
 
 fn assert_valid_decomposition(clifford: &CliffordUnitary) {
@@ -43,6 +64,7 @@ fn assert_valid_decomposition(clifford: &CliffordUnitary) {
     let transvections = clifford_to_transvections(clifford);
 
     let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
+    assert!(rebuilt.is_valid());
     assert_eq!(
         rebuilt.symplectic_matrix(),
         clifford.symplectic_matrix(),
@@ -50,7 +72,8 @@ fn assert_valid_decomposition(clifford: &CliffordUnitary) {
     );
 
     for transvection in &transvections {
-        assert_eq!(transvection.xz_phase_exponent(), 0, "factors carry no phase");
+        assert!(transvection.is_order_two(), "factors must be Hermitian");
+        assert_eq!(transvection.xyz_phase_exponent(), 0, "factors carry no xyz phase");
         assert!(is_non_identity(transvection), "factors are non-identity Paulis");
     }
 
@@ -173,7 +196,32 @@ fn centralizer_generators_are_conjugation_fixed_and_independent() {
     assert_eq!(
         centralizer.len(),
         2 * clifford.num_qubits() - residue_rank(&clifford),
-        "the centralizer dimension is 2n - r"
+        "the fixed space has dimension 2n - rank(I + F)"
+    );
+    assert_eq!(
+        binary_rank(&centralizer, clifford.num_qubits()),
+        centralizer.len(),
+        "the generators must be independent"
+    );
+    assert!(
+        centralizer.iter().all(|pauli| pauli.xyz_phase_exponent() == 0),
+        "centralizer generators must be positive Hermitian observables"
+    );
+}
+
+#[test]
+fn centralizer_generators_of_a_y_axis_rotation_are_hermitian() {
+    let mut clifford = CliffordUnitary::identity(1);
+    clifford.left_mul(UnitaryOp::SqrtY, &[0]);
+
+    let centralizer = clifford_centralizer(&clifford);
+    assert_eq!(centralizer.len(), 1, "a sqrt(Y) rotation fixes exactly the Y axis");
+    assert!(is_conjugation_fixed(&clifford, &centralizer[0]));
+    assert!(centralizer[0].is_order_two(), "the generator must be Hermitian");
+    assert_eq!(
+        centralizer[0].xyz_phase_exponent(),
+        0,
+        "the generator must be the positive Hermitian representative"
     );
 }
 
@@ -246,39 +294,26 @@ proptest! {
 
     #[test]
     fn reproduces_symplectic_action((qubit_count, gates) in scenario()) {
-        let clifford = clifford_from_gates(qubit_count, &gates);
-        let transvections = clifford_to_transvections(&clifford);
-        let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
-        prop_assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
-    }
-
-    #[test]
-    fn decomposition_is_linear_and_no_shorter_than_minimum((qubit_count, gates) in scenario()) {
-        let clifford = clifford_from_gates(qubit_count, &gates);
-        let transvection_count = clifford_to_transvections(&clifford).len();
-        let lower_bound = residue_rank(&clifford);
-        prop_assert!(
-            transvection_count >= lower_bound,
-            "got {transvection_count} factors, below the residue rank {lower_bound}"
-        );
-        prop_assert!(
-            transvection_count <= 4 * qubit_count + 2,
-            "got {transvection_count} factors, above the linear bound"
-        );
+        assert_valid_decomposition(&clifford_from_gates(qubit_count, &gates));
     }
 
     #[test]
     fn centralizer_is_conjugation_fixed((qubit_count, gates) in scenario()) {
         let clifford = clifford_from_gates(qubit_count, &gates);
-        for generator in clifford_centralizer(&clifford) {
+        let centralizer = clifford_centralizer(&clifford);
+        prop_assert_eq!(centralizer.len(), 2 * qubit_count - residue_rank(&clifford));
+        prop_assert_eq!(binary_rank(&centralizer, qubit_count), centralizer.len());
+        for generator in centralizer {
             prop_assert!(is_conjugation_fixed(&clifford, &generator));
             prop_assert!(is_non_identity(&generator), "centralizer generators must be non-identity");
+            prop_assert_eq!(generator.xyz_phase_exponent(), 0);
         }
     }
 }
 
 use paulimer::clifford::clifford_to_transvections_minimal;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 /// A symplectic action matrix over GF(2) as a row-major boolean grid (test-local, used only by the
 /// brute-force minimality oracle).
@@ -305,40 +340,6 @@ fn action_of(clifford: &CliffordUnitary) -> ActionMatrix {
     matrix
 }
 
-fn multiply(left: &ActionMatrix, right: &ActionMatrix) -> ActionMatrix {
-    let dimension = left.len();
-    let mut product = vec![vec![false; dimension]; dimension];
-    for i in 0..dimension {
-        for k in 0..dimension {
-            if left[i][k] {
-                for j in 0..dimension {
-                    product[i][j] ^= right[k][j];
-                }
-            }
-        }
-    }
-    product
-}
-
-fn transvection(vector: &[bool], qubit_count: usize) -> ActionMatrix {
-    let dimension = 2 * qubit_count;
-    let mut matrix = vec![vec![false; dimension]; dimension];
-    for (row, output) in matrix.iter_mut().enumerate() {
-        output[row] = true;
-        let coupling = if row < qubit_count {
-            vector[qubit_count + row]
-        } else {
-            vector[row - qubit_count]
-        };
-        if coupling {
-            for (column, slot) in output.iter_mut().enumerate() {
-                *slot ^= vector[column];
-            }
-        }
-    }
-    matrix
-}
-
 fn encode(matrix: &ActionMatrix) -> u32 {
     let mut key = 0u32;
     let mut bit = 0;
@@ -353,51 +354,12 @@ fn encode(matrix: &ActionMatrix) -> u32 {
     key
 }
 
-/// The exact minimal transvection length of `clifford`'s symplectic action, by breadth-first search
-/// over the symplectic group. Only tractable for small qubit counts (`n <= 2`).
-fn minimal_length_oracle(clifford: &CliffordUnitary) -> usize {
-    let qubit_count = clifford.num_qubits();
-    let dimension = 2 * qubit_count;
-    let identity: ActionMatrix = (0..dimension)
-        .map(|i| (0..dimension).map(|j| i == j).collect())
-        .collect();
-    let target = encode(&action_of(clifford));
-    let generators: Vec<ActionMatrix> = (1..(1u32 << dimension))
-        .map(|mask| {
-            let vector: Vec<bool> = (0..dimension).map(|bit| mask & (1 << bit) != 0).collect();
-            transvection(&vector, qubit_count)
-        })
-        .collect();
-    let mut distances: HashMap<u32, usize> = HashMap::new();
-    distances.insert(encode(&identity), 0);
-    let mut frontier = vec![identity];
-    let mut distance = 0;
-    while !frontier.is_empty() {
-        if distances.contains_key(&target) {
-            break;
-        }
-        let mut next = Vec::new();
-        for current in &frontier {
-            for generator in &generators {
-                let product = multiply(current, generator);
-                let key = encode(&product);
-                if let std::collections::hash_map::Entry::Vacant(entry) = distances.entry(key) {
-                    entry.insert(distance + 1);
-                    next.push(product);
-                }
-            }
-        }
-        frontier = next;
-        distance += 1;
-    }
-    distances[&target]
-}
-
 fn assert_valid_minimal_decomposition(clifford: &CliffordUnitary) {
     let qubit_count = clifford.num_qubits();
     let transvections = clifford_to_transvections_minimal(clifford);
 
     let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
+    assert!(rebuilt.is_valid());
     assert_eq!(
         rebuilt.symplectic_matrix(),
         clifford.symplectic_matrix(),
@@ -405,7 +367,8 @@ fn assert_valid_minimal_decomposition(clifford: &CliffordUnitary) {
     );
 
     for transvection in &transvections {
-        assert_eq!(transvection.xz_phase_exponent(), 0, "factors carry no phase");
+        assert!(transvection.is_order_two(), "factors must be Hermitian");
+        assert_eq!(transvection.xyz_phase_exponent(), 0, "factors carry no xyz phase");
         assert!(is_non_identity(transvection), "factors are non-identity Paulis");
     }
 
@@ -472,7 +435,7 @@ fn minimal_callan_class_a_needs_r_plus_one() {
     );
     assert!(action[0][2], "⟨X₀, X₀F⟩ = 1, so F is non-hyperbolic");
     assert_eq!(residue_rank(&clifford), 3);
-    assert_eq!(minimal_length_oracle(&clifford), 4);
+    assert_eq!(enumerate_symplectic_group(2)[&encode(&action)].0, 4);
     assert_eq!(clifford_to_transvections_minimal(&clifford).len(), 4);
 }
 
@@ -499,22 +462,223 @@ fn minimal_composite_circuit() {
     assert_valid_minimal_decomposition(&clifford);
 }
 
+/// The Hermitian Pauli whose symplectic vector is `vector` (`x`-bits first, then `z`-bits).
+fn pauli_of_vector(vector: &[bool], qubit_count: usize) -> SparsePauli {
+    let x_bits: IndexSet = (0..qubit_count).filter(|&qubit| vector[qubit]).collect();
+    let z_bits: IndexSet = (0..qubit_count).filter(|&qubit| vector[qubit_count + qubit]).collect();
+    let mut pauli = SparsePauli::from_bits(x_bits, z_bits, 0);
+    let phase = u8::try_from(pauli.y_weight() % 4).expect("phase exponent fits in u8");
+    pauli.assign_phase_exp(phase);
+    pauli
+}
+
+/// Every element of `Sp(2n;2)`, reached by breadth-first search over the transvection generators.
+///
+/// Maps the encoded symplectic action to its exact minimal transvection length and one Clifford
+/// realizing it. The search is independent of [`clifford_to_transvections_minimal`].
+fn enumerate_symplectic_group(qubit_count: usize) -> HashMap<u32, (usize, CliffordUnitary)> {
+    let dimension = 2 * qubit_count;
+    let generators: Vec<SparsePauli> = (1..(1u32 << dimension))
+        .map(|mask| {
+            let vector: Vec<bool> = (0..dimension).map(|bit| mask & (1 << bit) != 0).collect();
+            pauli_of_vector(&vector, qubit_count)
+        })
+        .collect();
+
+    let identity = CliffordUnitary::identity(qubit_count);
+    let mut reached = HashMap::new();
+    reached.insert(encode(&action_of(&identity)), (0, identity.clone()));
+    let mut frontier = vec![identity];
+    let mut distance = 0;
+    while !frontier.is_empty() {
+        distance += 1;
+        let mut next = Vec::new();
+        for clifford in &frontier {
+            for generator in &generators {
+                let mut candidate = clifford.clone();
+                candidate.left_mul_pauli_exp(generator);
+                let key = encode(&action_of(&candidate));
+                if let Entry::Vacant(slot) = reached.entry(key) {
+                    slot.insert((distance, candidate.clone()));
+                    next.push(candidate);
+                }
+            }
+        }
+        frontier = next;
+    }
+    reached
+}
+
 #[test]
-fn minimal_matches_brute_force_oracle_on_one_and_two_qubits() {
-    // Exact minimality against an independent breadth-first search over the symplectic group.
-    for qubit_count in 0..=2 {
-        for seed in 0..400 {
-            let clifford = random_clifford(qubit_count, seed);
-            let decomposed = clifford_to_transvections_minimal(&clifford);
+fn minimal_matches_brute_force_oracle_on_every_one_and_two_qubit_action() {
+    for (qubit_count, group_order) in [(1usize, 6usize), (2, 720)] {
+        let group = enumerate_symplectic_group(qubit_count);
+        assert_eq!(
+            group.len(),
+            group_order,
+            "the search must visit all of Sp({dimension};2)",
+            dimension = 2 * qubit_count
+        );
+
+        for (minimum, clifford) in group.values() {
+            let decomposed = clifford_to_transvections_minimal(clifford);
             let rebuilt = symplectic_action_from_transvections(&decomposed, qubit_count);
+            assert!(rebuilt.is_valid());
             assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
+            for transvection in &decomposed {
+                assert!(transvection.is_order_two(), "factors must be Hermitian");
+                assert_eq!(
+                    transvection.xyz_phase_exponent(),
+                    0,
+                    "factors must be positive Hermitian representatives"
+                );
+            }
             assert_eq!(
                 decomposed.len(),
-                minimal_length_oracle(&clifford),
-                "decomposition length must equal the brute-force minimum (n={qubit_count}, seed={seed})"
+                *minimum,
+                "decomposition length must equal the brute-force minimum (n={qubit_count})"
             );
         }
     }
+}
+
+/// A three-qubit symplectic action packed as six six-bit rows, used only by the exhaustive
+/// three-qubit oracle.
+type PackedAction = u64;
+
+const THREE_QUBIT_DIMENSION: usize = 6;
+const THREE_QUBIT_ROW_MASK: u64 = (1 << THREE_QUBIT_DIMENSION) - 1;
+
+fn symplectic_form(left: u64, right: u64) -> bool {
+    let left_x = left & 0b111;
+    let left_z = left >> 3;
+    let right_x = right & 0b111;
+    let right_z = right >> 3;
+    ((left_x & right_z) ^ (left_z & right_x)).count_ones() % 2 == 1
+}
+
+fn apply_packed_transvection(action: PackedAction, vector: u64) -> PackedAction {
+    let mut updated = 0;
+    for row in 0..THREE_QUBIT_DIMENSION {
+        let mut image = (action >> (THREE_QUBIT_DIMENSION * row)) & THREE_QUBIT_ROW_MASK;
+        if symplectic_form(image, vector) {
+            image ^= vector;
+        }
+        updated |= image << (THREE_QUBIT_DIMENSION * row);
+    }
+    updated
+}
+
+fn three_qubit_pauli_of_vector(vector: u64) -> SparsePauli {
+    let x_bits: IndexSet = (0..3).filter(|&qubit| vector >> qubit & 1 == 1).collect();
+    let z_bits: IndexSet = (0..3).filter(|&qubit| vector >> (3 + qubit) & 1 == 1).collect();
+    let mut pauli = SparsePauli::from_bits(x_bits, z_bits, 0);
+    let phase = u8::try_from(pauli.y_weight() % 4).expect("a Y weight modulo four fits in a byte");
+    pauli.assign_phase_exp(phase);
+    pauli
+}
+
+fn pack_action(clifford: &CliffordUnitary) -> PackedAction {
+    let basis: Vec<SparsePauli> = (0..3)
+        .map(|qubit| SparsePauli::x(qubit, 3))
+        .chain((0..3).map(|qubit| SparsePauli::z(qubit, 3)))
+        .collect();
+    let mut packed = 0;
+    for (row, generator) in basis.iter().enumerate() {
+        let image = clifford.image(generator);
+        let mut value = 0u64;
+        for qubit in 0..3 {
+            if image.x_bits().index(qubit) {
+                value |= 1 << qubit;
+            }
+            if image.z_bits().index(qubit) {
+                value |= 1 << (3 + qubit);
+            }
+        }
+        packed |= value << (THREE_QUBIT_DIMENSION * row);
+    }
+    packed
+}
+
+/// Exhaustive three-qubit minimality check. It visits all 1,451,520 elements of Sp(6;2) and takes
+/// a few minutes, so it is excluded from the default run. Invoke it with
+/// `cargo test --profile ci-test -p paulimer --test transvection_test -- --ignored`.
+#[test]
+#[ignore = "visits all of Sp(6;2) and takes minutes"]
+fn minimal_matches_brute_force_oracle_on_every_three_qubit_action() {
+    let identity = pack_action(&CliffordUnitary::identity(3));
+    let mut reached: HashMap<PackedAction, (usize, u64, PackedAction)> = HashMap::new();
+    reached.insert(identity, (0, 0, identity));
+    let mut frontier = vec![identity];
+    let mut distance = 0usize;
+
+    while !frontier.is_empty() {
+        distance += 1;
+        let mut next = Vec::new();
+        for &action in &frontier {
+            for vector in 1..(1u64 << THREE_QUBIT_DIMENSION) {
+                let candidate = apply_packed_transvection(action, vector);
+                if let Entry::Vacant(slot) = reached.entry(candidate) {
+                    slot.insert((distance, vector, action));
+                    next.push(candidate);
+                }
+            }
+        }
+        frontier = next;
+    }
+    assert_eq!(reached.len(), 1_451_520, "the search must visit all of Sp(6;2)");
+
+    let mut census: HashMap<(usize, usize), usize> = HashMap::new();
+    let mut greedy_excess = 0usize;
+    for (&packed, &(minimum, _, _)) in &reached {
+        let mut path = Vec::new();
+        let mut current = packed;
+        while current != identity {
+            let (_, vector, parent) = reached[&current];
+            path.push(vector);
+            current = parent;
+        }
+        let mut clifford = CliffordUnitary::identity(3);
+        for &vector in path.iter().rev() {
+            clifford.left_mul_pauli_exp(&three_qubit_pauli_of_vector(vector));
+        }
+        assert_eq!(pack_action(&clifford), packed);
+
+        let decomposed = clifford_to_transvections_minimal(&clifford);
+        assert_eq!(decomposed.len(), minimum, "length must equal the brute-force minimum");
+        for transvection in &decomposed {
+            assert!(transvection.is_order_two(), "factors must be Hermitian");
+        }
+        let residue_rank = 6 - clifford_centralizer(&clifford).len();
+        *census.entry((residue_rank, minimum)).or_default() += 1;
+        if clifford_to_transvections(&clifford).len() > minimum {
+            greedy_excess += 1;
+        }
+    }
+
+    let expected = [
+        ((0, 0), 1),
+        ((1, 1), 63),
+        ((2, 2), 1617),
+        ((2, 3), 315),
+        ((3, 3), 21420),
+        ((3, 4), 7560),
+        ((4, 4), 151_284),
+        ((4, 5), 51660),
+        ((5, 5), 518_112),
+        ((5, 6), 90720),
+        ((6, 6), 608_768),
+    ];
+    let mut observed: Vec<((usize, usize), usize)> = census.into_iter().collect();
+    observed.sort_unstable();
+    assert_eq!(
+        observed, expected,
+        "the residue-rank and minimum-length census must match"
+    );
+    assert_eq!(
+        greedy_excess, 428_447,
+        "the greedy reduction must exceed the minimum on exactly this many elements"
+    );
 }
 
 proptest! {

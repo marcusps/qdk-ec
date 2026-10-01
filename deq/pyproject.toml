@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=64", "grpcio-tools>=1.76,<1.82"]
+requires = ["setuptools>=64", "grpcio-tools==1.83.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "deq"
 dynamic = []
-version = "0.4.1"
+version = "0.5.7"
 description = "deq: quantum error correction decoding system."
 readme = "README.md"
 license = { text = "MIT" }
@@ -26,22 +26,20 @@ dependencies = [
     "arguably>=1.0,<2.0",
     "tqdm",
     # protobuf runtime must be >= the gencode version produced by grpcio-tools
-    # at build time. grpcio-tools 1.76-1.81 emits gencode 6.33.x; pin the
-    # runtime accordingly so editable installs don't end up with an older
-    # protobuf alongside newer gencode. grpcio-tools 1.82 bundles a protoc that
-    # emits gencode 7.x, which is incompatible with the protobuf<7 runtime, so
-    # cap grpcio-tools below 1.82 until the runtime is bumped to protobuf 7.x.
+    # at build time. grpcio-tools 1.83.1 emits gencode 7.35.1.
     # See https://protobuf.dev/support/cross-version-runtime-guarantee.
-    "protobuf>=6.33.5,<7",
-    "grpcio",
-    "grpcio-tools>=1.76,<1.82",
+    "protobuf>=7.35.1,<8",
+    "grpcio>=1.83.1",
+    "grpcio-tools>=1.83.1,<1.84",
     "anywidget",
-    "lark",
+    "deqagram~=0.5.6",
+    "deq-runtime~=0.5.6",
     "mako",
     "stim",
     "networkx",
     "binar>=0.1.2,<0.2",
     "paulimer>=0.2.2,<0.3",
+    "qdk>=1.32,<1.33",
 ]
 
 [project.urls]
@@ -51,13 +49,13 @@ Repository = "https://github.com/microsoft/qdk-ec"
 
 [project.optional-dependencies]
 document = [
-    "jinja2<3.1",
+    "jinja2<3.2",
     "sphinx-rtd-theme",
     "sphinx-jsonschema",
     "nbsphinx",
     "nbconvert",
-    "ipykernel<6.18",
-    "ipython<8.7.0",
+    "ipykernel<7.4",
+    "ipython<8.40.0",
     "jupyter",
     "sympy",
     "holoviews",
@@ -86,5 +84,4 @@ exclude = ["deq_runtime*", "deq_visualizer*"]
 [tool.setuptools.package-data]
 deq = ["py.typed"]
 "deq.proto" = ["*.pyi", "proto_src/*.proto"]
-"deq.circuit" = ["*.lark"]
 "deq.visual" = ["static/*"]

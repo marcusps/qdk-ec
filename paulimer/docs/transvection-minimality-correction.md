@@ -8,16 +8,17 @@ This note reassesses the minimal-transvection construction in
 > DOI [10.1109/GLOBECOM46510.2021.9685501](https://doi.org/10.1109/GLOBECOM46510.2021.9685501),
 > arXiv:[2102.11380](https://arxiv.org/abs/2102.11380).
 
-against its cited primary source, Callan (1976), an exhaustive two-qubit
-calculation, and the Lean development in [`formal/`](../formal/).
+against its cited primary source, Callan (1976), exhaustive calculations
+through three qubits, and the Lean development in [`../formal/`](../formal/).
 
 The paper's structural matrix identities are correct, and its top-level
 existence claim -- that a minimal decomposition algorithm exists -- is true.
 However, the construction given in and immediately before **Theorem 3** assumes
 that every non-hyperbolic binary symplectic map has a length-$r$
 decomposition. Callan explicitly classifies non-hyperbolic exceptions, and the
-assumption fails on two qubits. The Lean proof repairs this step; it does not
-prove the paper's non-hyperbolic criterion.
+assumption fails on two qubits. This note gives the residue-core criterion that
+the implementation uses instead and links its dimension-general formal proof.
+It does not prove the paper's non-hyperbolic criterion.
 
 All matrices below are over $\mathbb{F}_2$.
 
@@ -44,28 +45,28 @@ $$
 r\leq\ell(\mathbf F)\leq r+1,
 $$
 
-and Theorem 5.1 classifies the binary exceptions. They include
+and Theorem 5.1 classifies the binary exceptional classes. They include
 non-hyperbolic maps. Thus the part that fails is the
 hyperbolic/non-hyperbolic classification, not the universal $r$/$r+1$ range.
 The smallest non-hyperbolic example already occurs on two qubits, with
 $r=3$ and $\ell(\mathbf F)=4$.
 
-The **correct criterion**, which we adopt in the implementation, is:
+The criterion we adopt in the implementation, verified exhaustively for $m\leq 3$, is:
 
 > The minimal length is $r$ **iff** the invertible residue core $\mathbf E$ is
 > congruence-lower-triangularizable over $\mathbb{F}_2$; otherwise our construction returns a
-> decomposition of length $r+1$. Hyperbolicity ($\mathbf E$ *alternating*) is a special
-> $r+1$ sub-case, but it is **not** the only one: non-alternating cores can fail to be
-> triangularizable too.
+> decomposition of length $r+1$. Hyperbolicity ($\mathbf E$ *alternating*) of a non-identity
+> element is a special $r+1$ sub-case, but it is **not** the only one: non-alternating cores can
+> fail to be triangularizable too.
 
-The mathlib-only Lean development supplies a checked proof of that bound, the
-criterion above, strict minimality, and the one-fix theorem used by the
-implementation. Its [proof guide](lean-transvection-minimality-proof.md)
-describes the replacement bordered construction.
+The criterion itself is algebraic and carries no dimension limit. The
+mathlib-only Lean development proves the universal $r$/$r+1$ range, the exact
+criterion, strict minimality, and the residue-fix theorem for every finite
+dimension. Exhaustive enumeration of $\mathrm{Sp}(2m;2)$ for $m\leq 3$
+independently confirms the Rust implementation on those finite domains.
 
-The Rust implementation should therefore retain its complete congruence search
-and $r+1$ fallback. No semantic rollback to the paper's non-hyperbolic branch is
-warranted.
+The Rust implementation therefore keeps its complete congruence search and its
+$r+1$ fallback. A rollback to the paper's non-hyperbolic branch is not warranted.
 
 ## 2. Setup and notation
 
@@ -105,7 +106,9 @@ $$
 The correct matrix test is that $\mathbf F$ is hyperbolic iff
 $\widehat{\mathbf F}$ is *alternating*, meaning symmetric with zero diagonal.
 Zero diagonal alone is necessary but not sufficient: a non-involution can have
-a nonsymmetric residue matrix with zero diagonal. Row-reducing
+a nonsymmetric residue matrix with zero diagonal. The paper states the zero
+diagonal of $\widehat{\mathbf F}$ alone as equivalent to hyperbolicity. That
+statement is a second erratum. Row-reducing
 $\widehat{\mathbf F}$ with a transform $\mathbf R$ yields the invertible
 **core**
 
@@ -134,10 +137,10 @@ Together these give the correct reduction: **a length-$r$ transvection decomposi
 exists iff there is $\mathbf Q\in\mathrm{GL}(r;2)$ making $\mathbf Q\mathbf E\mathbf Q^{\mathsf T}$
 lower-triangular** — i.e. iff $\mathbf E$ is congruence-triangularizable. So far, so good.
 
-The Lean presentation writes
+An equivalent faithful residue presentation writes
 $\widehat{\mathbf F}=\mathbf V^{\mathsf T}\mathbf D\mathbf V$ and defines
 its core as $\mathbf D^{-\mathsf T}$. From the paper's row-reduction
-identity, $\mathbf D=\mathbf E^{-\mathsf T}$, so the Lean core is exactly
+identity, $\mathbf D=\mathbf E^{-\mathsf T}$, so this core is exactly
 the paper's $\mathbf E$. The difference is notation, not a transpose or
 action convention.
 
@@ -261,8 +264,8 @@ not needed for the paper counterexample or the correctness argument here.
 
 ## 6. Corrected result and implementation
 
-Combining the correct Lemmas 2–3, Callan's $r+1$ bound, and the Lean
-bordered construction gives:
+Combining the correct Lemmas 2–3, Callan's $r+1$ bound, and the bordered
+construction gives:
 
 $$
 \ell(\mathbf F)=
@@ -284,29 +287,57 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
   the non-hyperbolic analogue of the paper's hyperbolic Lemma 1 patch — the case the paper's
   construction omits.
 
-The test suite additionally checks the result against a brute-force BFS oracle on one and two
-qubits and against the $\{r,r+1\}$ range on up to six qubits. These computations are regression
-checks, not the justification for generality. The Lean proof establishes for every finite $m$ that
-$r\leq\ell(\mathbf F)\leq r+1$, that length $r$ is equivalent to core triangularizability, and that
-otherwise a nonzero $\mathbf w\in\operatorname{Res}(\mathbf F)$ exists for which
-$\mathbf F\mathbf T_{\mathbf w}$ has the same residue rank and a triangularizable core. Thus the
-exhaustive `find_fix_vector` search is total on valid symplectic input.
+The justification for this criterion has three separate parts.
+
+The algebraic part carries no dimension limit. The paper's own Lemmas 2 and 3 give the length-$r$
+criterion, and Callan supplies the binary $r$/$r+1$ length bound. The implementation applies that
+criterion at every $m$ and falls back to $r+1$ otherwise.
+
+The formal part is the Lean development described in
+[`lean-transvection-minimality-proof.md`](lean-transvection-minimality-proof.md).
+It proves that when the core is not triangularizable, a nonzero residue vector
+exists whose transvection preserves the residue rank and makes the updated core
+triangularizable. It also proves replay correctness and strict minimality for
+an executable reference search. This checks the action-level mathematics and
+the totality theorem used by `find_fix_vector`; it does not prove compiled Rust
+semantics.
+
+The finite implementation part is computational. The test suite compares the
+result against a brute-force BFS oracle on every one- and two-qubit symplectic
+action. The ignored exhaustive test covers all of $\mathrm{Sp}(6;2)$. These
+runs check the Rust implementation on finite domains; they are not the proof
+of the dimension-general result.
 
 **Why "non-alternating" is not enough.** Alternating cores are
 untriangularizable, but the explicit core in Section 4 is non-alternating and
 still untriangularizable. The exact condition is congruence
-triangularizability of the full core, not merely its diagonal or associated
-quadratic form. Botha (1997), which the paper cites, studies this GF(2)
+triangularizability of the full core, not of its diagonal or its associated
+quadratic form alone. Botha (1997), which the paper cites, studies this GF(2)
 congruence problem directly.
 
 ## 7. Reproducing the verification
 
-The counterexample of Section 4 is fully finite and self-contained. Both checks — the
+The counterexample of Section 4 is fully finite and self-contained. Both checks, the
 $\mathrm{Sp}(4;2)$ Cayley-distance BFS (720 group elements) and the $\mathrm{GL}(3;2)$ congruence
-enumeration (168 candidates) — are small enough to run by hand or in a few lines of code, and the
+enumeration with 168 candidates, are small enough to run by hand or in a few lines of code, and the
 repository's own `clifford_to_transvections_minimal` reproduces $\ell(\mathbf F)=r+1$ on the same
-map. No floating point or randomness is involved. The symbolic proof is reproduced with
-`cd paulimer/formal && lake build`; it contains no admitted theorem or project-defined axiom.
+map. No floating point or randomness is involved.
+
+The symbolic proof builds with the pinned Lean and mathlib versions:
+
+```bash
+cd paulimer/formal
+lake exe cache get
+lake build
+```
+
+The exhaustive three-qubit check runs as an ignored integration test:
+
+```bash
+cargo test --profile ci-test -p paulimer --test transvection_test -- --ignored
+```
+
+It visits all 1,451,520 elements of $\mathrm{Sp}(6;2)$ and takes a few minutes.
 
 ## 8. References
 

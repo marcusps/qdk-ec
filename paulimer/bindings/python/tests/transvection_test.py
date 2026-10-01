@@ -4,6 +4,12 @@ The decomposition reproduces a Clifford's symplectic (conjugation) action with a
 pi/4 Pauli exponents, ignoring Pauli-image signs and the global phase.
 """
 
+import sys
+import threading
+import time
+
+import pytest
+from binar import BitMatrix, rank
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -18,7 +24,9 @@ def _rebuild_from_transvections(transvections, qubit_count):
 
 
 def _residue_rank(clifford):
-    return 2 * clifford.qubit_count - len(clifford.centralizer())
+    """The residue rank ``rank(I + F)``, computed independently of ``centralizer()``."""
+    residue = clifford.symplectic_matrix ^ BitMatrix.identity(2 * clifford.qubit_count)
+    return rank(residue)
 
 
 def _is_conjugation_fixed(clifford, pauli):
@@ -31,13 +39,15 @@ def _assert_valid_decomposition(clifford):
     transvections = clifford.to_transvections()
 
     rebuilt = _rebuild_from_transvections(transvections, qubit_count)
+    assert rebuilt.is_valid
     assert rebuilt.symplectic_matrix == clifford.symplectic_matrix
 
     for pauli in transvections:
         assert pauli.weight > 0
+        assert pauli.phase == 1, f"factors must be positive Hermitian Paulis, got {pauli}"
 
-    minimum = _residue_rank(clifford)
-    assert len(transvections) >= minimum
+    lower_bound = _residue_rank(clifford)
+    assert len(transvections) >= lower_bound
     assert len(transvections) <= 4 * qubit_count + 2
 
 
@@ -46,10 +56,12 @@ def _assert_valid_minimal_decomposition(clifford):
     transvections = clifford.to_transvections_minimal()
 
     rebuilt = _rebuild_from_transvections(transvections, qubit_count)
+    assert rebuilt.is_valid
     assert rebuilt.symplectic_matrix == clifford.symplectic_matrix
 
     for pauli in transvections:
         assert pauli.weight > 0
+        assert pauli.phase == 1, f"factors must be positive Hermitian Paulis, got {pauli}"
 
     rank = _residue_rank(clifford)
     assert len(transvections) in (rank, rank + 1)
@@ -103,6 +115,16 @@ def test_centralizer_generators_are_conjugation_fixed():
     centralizer = clifford.centralizer()
     assert all(_is_conjugation_fixed(clifford, pauli) for pauli in centralizer)
     assert all(pauli.weight > 0 for pauli in centralizer)
+    assert all(pauli.phase == 1 for pauli in centralizer)
+    assert len(centralizer) == 2 * clifford.qubit_count - _residue_rank(clifford)
+
+
+def test_centralizer_generators_of_a_y_axis_rotation_are_hermitian():
+    clifford = CliffordUnitary.from_name("SqrtY", [0], 1)
+    centralizer = clifford.centralizer()
+    assert len(centralizer) == 1
+    assert _is_conjugation_fixed(clifford, centralizer[0])
+    assert centralizer[0].phase == 1
 
 
 _SINGLE_QUBIT_GATES = ["Hadamard", "SqrtZ", "SqrtX", "X", "Y", "Z"]
@@ -147,3 +169,27 @@ def test_random_centralizers_are_conjugation_fixed(clifford):
     for generator in clifford.centralizer():
         assert _is_conjugation_fixed(clifford, generator)
         assert generator.weight > 0
+
+
+@pytest.mark.skipif(
+    sys.platform == "emscripten",
+    reason="threading is unavailable under Emscripten/Pyodide",
+)
+def test_minimal_decomposition_releases_the_gil():
+    """A long minimal search must let other Python threads run."""
+    qubit_count = 20
+    permutation = []
+    for qubit in range(0, qubit_count, 2):
+        permutation += [qubit + 1, qubit]
+    swap_layer = CliffordUnitary.identity(qubit_count)
+    swap_layer.left_mul_permutation(permutation, list(range(qubit_count)))
+
+    worker = threading.Thread(target=swap_layer.to_transvections_minimal)
+    worker.start()
+    ticks = 0
+    while worker.is_alive():
+        time.sleep(0.001)
+        ticks += 1
+    worker.join()
+
+    assert ticks > 5, f"the search held the GIL. The main thread only ran {ticks} times"

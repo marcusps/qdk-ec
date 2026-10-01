@@ -6,6 +6,10 @@ Clifford operation. The result holds in every finite dimension; finite
 enumeration is used only for the reference search, not for the mathematical
 proof.
 
+The formalization concerns binary symplectic actions. The Rust API's choice of
+Hermitian Pauli representatives, Python binding behavior, and performance
+optimizations are outside its scope.
+
 ## Relationship to the published proof
 
 The reassessment of
@@ -27,8 +31,9 @@ $$
 
 It has residue rank three and minimum length four. The accompanying Rust
 regression checks that minimum against the complete two-qubit breadth-first
-search. Callan identifies these residue-three exceptions in dimension four in
-Section 2.4 and classifies the binary exceptions in Theorem 5.1.
+search; a separate ignored test exhausts all three-qubit symplectic actions.
+Callan identifies these residue-three exceptions in dimension four in Section
+2.4 and classifies the binary exceptions in Theorem 5.1.
 
 The notation does not hide a convention mismatch. The paper writes its
 faithful residue reduction as

@@ -161,6 +161,16 @@ class PauliTarget:
 
 
 @dataclass(frozen=True)
+class LossTarget:
+    """A physical loss target such as ``L0`` in a correlated-error branch."""
+
+    index: int
+
+    def __str__(self) -> str:
+        return f"L{self.index}"
+
+
+@dataclass(frozen=True)
 class CombinerTarget:
     """The combiner target ``*``."""
 
@@ -246,10 +256,11 @@ Target = (
     | OutputVirtualTarget
     | SweepBitTarget
     | PauliTarget
+    | LossTarget
     | CombinerTarget
 )
 
-ErrorTarget = CheckTarget | ReadoutTarget | LogicalPauliTarget | PauliTarget
+ErrorTarget = CheckTarget | ReadoutTarget | LogicalPauliTarget
 
 ReadoutTargetItem = Target | LogicalPauliTarget | DestabilizerTarget
 
@@ -266,6 +277,7 @@ class Instruction:
     arguments: list[float] = field(default_factory=list)
     targets: list[Target] = field(default_factory=list)
     decorators: list[Decorator] = field(default_factory=list)
+    source_line: int | None = None
 
     def __str__(self) -> str:
         parts = [self.name]
@@ -308,6 +320,7 @@ class RepeatBlock:
     count: int
     body: list[Any] = field(default_factory=list)
     decorators: list[Decorator] = field(default_factory=list)
+    source_line: int | None = None
 
     def __str__(self) -> str:
         inner = "\n".join(str(s) for s in self.body)
@@ -389,6 +402,7 @@ class InputPort:
     code_name: str
     qubit_indices: list[int] = field(default_factory=list)
     decorators: list[Decorator] = field(default_factory=list)
+    source_line: int | None = None
 
     def __str__(self) -> str:
         decos = "".join(f"{d}\n" for d in self.decorators)
@@ -403,6 +417,7 @@ class OutputPort:
     code_name: str
     qubit_indices: list[int] = field(default_factory=list)
     decorators: list[Decorator] = field(default_factory=list)
+    source_line: int | None = None
 
     def __str__(self) -> str:
         decos = "".join(f"{d}\n" for d in self.decorators)
@@ -444,13 +459,59 @@ class ErrorStatement:
     """An ``ERROR(p) targets...`` declaration.
 
     Specifies an error mechanism with probability ``p`` that flips the
-    listed targets (checks ``C<i>``, residual Paulis ``X<i>`` etc.,
-    readouts ``R<i>``, and/or logical Paulis ``LX<i>``).
+    listed targets (checks ``C<i>``, readouts ``R<i>``, and/or logical
+    Paulis ``LX<i>``).
     """
 
     probability: float
     targets: list[ErrorTarget] = field(default_factory=list)
     decorators: list[Decorator] = field(default_factory=list)
+
+
+@dataclass
+class LossStatement:
+    """A ``LOSS(...)`` declaration mirroring one JIT loss-model entry.
+
+    A *source* loss carries the declared ``LOSS_ERROR`` probability. An
+    *input* loss (``input_port``/``input_qubit`` set) is the continuation of
+    a loss entering on that input physical qubit; it carries no probability
+    and no source-error generators, and its position is identified by the
+    ``IN<i>.L<j>`` head rather than by list order.
+
+    ``source_errors`` / ``continuation_errors`` index the
+    gadget's ``ERROR`` mechanisms; ``child_losses`` index the source
+    losses (within-gadget children); ``output_qubits`` are ``(port, qubit)``
+    physical exits; ``measurement_indices`` are herald measurements. These
+    collections are set-valued, so explicit duplicate references are rejected.
+    """
+
+    probability: float | None = None
+    input_port: int | None = None
+    input_qubit: int | None = None
+    source_errors: list[int] = field(default_factory=list)
+    continuation_errors: list[int] = field(default_factory=list)
+    child_losses: list[int] = field(default_factory=list)
+    output_qubits: list[tuple[int, int]] = field(default_factory=list)
+    measurement_indices: list[int] = field(default_factory=list)
+    decorators: list[Decorator] = field(default_factory=list)
+
+    @property
+    def is_input(self) -> bool:
+        """Whether this is an input-continuation loss (vs a source loss)."""
+        return self.input_port is not None
+
+    def __str__(self) -> str:
+        if self.is_input:
+            head = f"LOSS(IN{self.input_port}.L{self.input_qubit})"
+        else:
+            head = f"LOSS({self.probability})"
+        parts = [head]
+        parts += [f"SE{i}" for i in self.source_errors]
+        parts += [f"CE{i}" for i in self.continuation_errors]
+        parts += [f"L{i}" for i in self.child_losses]
+        parts += [f"OUT{port}.L{qubit}" for port, qubit in self.output_qubits]
+        parts += [f"M{i}" for i in self.measurement_indices]
+        return " ".join(parts)
 
 
 @dataclass
@@ -469,6 +530,7 @@ class ConditionalStatement:
     condition: ReadoutTarget | MeasurementRefTarget
     targets: list[LogicalPauliTarget] = field(default_factory=list)
     decorators: list[Decorator] = field(default_factory=list)
+    source_line: int | None = None
 
 
 @dataclass
@@ -534,6 +596,7 @@ class PropagateStatement:
     terms: list[PropagateTerm] = field(default_factory=list)
     flip: bool = False
     decorators: list[Decorator] = field(default_factory=list)
+    source_line: int | None = None
 
 
 @dataclass
@@ -567,6 +630,7 @@ class PreselectStatement:
     conditions: list[MeasurementRecordTarget | PhysicalMeasurementTarget]
     expected_value: int = 0
     decorators: list[Decorator] = field(default_factory=list)
+    source_line: int | None = None
 
 
 GadgetStatement = (
@@ -577,6 +641,7 @@ GadgetStatement = (
     | ReadoutStatement
     | CheckStatement
     | ErrorStatement
+    | LossStatement
     | ConditionalStatement
     | VirtualLogicalStatement
     | PropagateStatement
