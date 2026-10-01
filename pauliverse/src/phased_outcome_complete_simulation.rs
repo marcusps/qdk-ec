@@ -528,7 +528,16 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
     }
 
     fn conditional_pauli(&mut self, observable: &SparsePauli, outcomes: &[usize], parity: bool) {
-        for &outcome in outcomes {
+        // The control is the parity of the listed outcomes, so an outcome named an even number of
+        // times drives no rotation and must not count as a use of its angle.
+        for (position, &outcome) in outcomes.iter().enumerate() {
+            if outcomes[..position].contains(&outcome) {
+                continue;
+            }
+            let mentions = outcomes[position..].iter().filter(|&&other| other == outcome).count();
+            if mentions % 2 == 0 {
+                continue;
+            }
             if let Some(Some(count)) = self.symbolic_angle_use_count.get_mut(outcome) {
                 *count += 1;
             }
