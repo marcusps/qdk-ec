@@ -415,9 +415,34 @@ impl_simulation!(
         /// reusing one makes `phased_action` raise a `ValueError`. Angles with matching `index` in
         /// two circuits are what make those circuits' exponents correspond when their phased actions
         /// are compared.
+        ///
+        /// # Errors
+        ///
+        /// Returns a `ValueError` if `angle` was not allocated by this simulation. Without that
+        /// check a handle from another simulation would address an unrelated outcome here, and the
+        /// wrong conditional operation would be applied without any error.
         #[allow(clippy::needless_pass_by_value)]
-        pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: &PySymbolicAngle) {
+        pub fn apply_symbolic_pauli_exp(
+            &mut self,
+            observable: &PySparsePauli,
+            angle: &PySymbolicAngle,
+        ) -> PyResult<()> {
+            let allocated = self.symbolic_angles();
+            let outcome = allocated.get(angle.index).map(|local| local.outcome).ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "symbolic angle {} was not allocated by this simulation, which has {} angles",
+                    angle.index,
+                    allocated.len()
+                ))
+            })?;
+            if outcome != angle.outcome {
+                return Err(PyValueError::new_err(format!(
+                    "symbolic angle {} belongs to another simulation",
+                    angle.index
+                )));
+            }
             self.inner.symbolic_pauli_exp(&observable.inner, angle.outcome);
+            Ok(())
         }
 
         #[allow(clippy::needless_pass_by_value)]

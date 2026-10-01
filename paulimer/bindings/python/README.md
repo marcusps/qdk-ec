@@ -61,11 +61,14 @@ def conjugated(sim):  # CNOT . e^{i alpha Z1} . CNOT |++>
 assert prepared_action(direct).is_equivalent(prepared_action(conjugated))
 ```
 
-`is_equivalent` compares two circuits up to a common global phase. To additionally pin the **absolute**
-global phase — distinguishing operators such as `Co` and `-Co` — use
-`PhasedCircuitAction.is_equivalent_with_global_phase(other)`, or read the absolute `zeta8` exponent
-directly from the `global_phase` property. This uses the §4.3 auxiliary-qubit separation of
-arXiv:2603.24717 to recover the encoder's exact global phase.
+`is_equivalent` compares two circuits up to a common global phase. To also compare the global phase,
+and so tell operators such as `Co` and `-Co` apart, use
+`PhasedCircuitAction.is_equivalent_with_global_phase(other)`. You can also read the `zeta8` exponent
+from the `global_phase` property. That exponent is a reference point, not an absolute property of the
+operator. It is fixed by the canonical marginal-encoder convention and by the state a discarded
+auxiliary qubit is left in, so the identity circuit gives `2` and not `0`. Differences between two
+values are meaningful when both actions are built the same way. The property uses the §4.3
+auxiliary-qubit separation of arXiv:2603.24717 to recover the encoder's phase.
 
 ### Decomposing a Clifford into pi/4 Pauli exponents
 
