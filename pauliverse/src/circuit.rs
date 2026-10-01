@@ -346,6 +346,7 @@ impl CircuitBuilder {
     }
 
     /// Get the recorded circuit.
+    #[must_use]
     pub fn circuit(&self) -> &Circuit {
         &self.circuit
     }
