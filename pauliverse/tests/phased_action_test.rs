@@ -90,7 +90,7 @@ fn zz_rotation_differs_from_z_rotation() {
     let reasons = zz_action
         .is_equivalent(&single_action)
         .expect_err("rotations with different supports must differ");
-    assert!(!reasons.is_empty());
+    assert_ne!(reasons, [], "the failure must name a reason");
 }
 
 #[test]

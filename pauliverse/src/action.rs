@@ -279,6 +279,7 @@ impl CircuitAction {
     /// Canonical choice of circuit observables, that is Paulis measured by the circuit.
     /// Qubits are reindexed to the range `[0, input_qubits.len())` where the k-th qubit corresponds
     /// to the k-th entry of [`CircuitAction::input_qubits`].
+    #[must_use]
     pub fn observables(&self) -> &[SparsePauli] {
         self.observables.abs()
     }
@@ -287,6 +288,7 @@ impl CircuitAction {
     /// for all circuit inputs.
     /// Qubits are reindexed to the range `[0, output_qubits.len())` where the k-th qubit corresponds
     /// to the k-th entry of [`CircuitAction::output_qubits`].
+    #[must_use]
     pub fn stabilizers(&self) -> &[SparsePauli] {
         self.stabilizers.abs()
     }
@@ -295,6 +297,7 @@ impl CircuitAction {
     /// Qubits are reindexed to the range `[0, input_qubits.len() + output_qubits.len())` where the first
     /// `input_qubits.len()` qubits correspond positionally to [`CircuitAction::input_qubits`]
     /// and the remaining qubits correspond positionally to [`CircuitAction::output_qubits`].
+    #[must_use]
     pub fn choi_state_stabilizers(&self) -> &[SparsePauli] {
         self.choi_state_stabilizers.abs()
     }
@@ -367,6 +370,7 @@ impl CircuitAction {
     }
 
     /// Canonical stabilizers of auxiliary qubits used by the circuit
+    #[must_use]
     pub fn auxiliary_stabilizers(&self) -> &[SparsePauli] {
         self.auxiliary_stabilizers.abs()
     }
@@ -695,6 +699,7 @@ impl PhasedCircuitAction {
     }
 
     /// Canonical choi state stabilizers; see [`CircuitAction::choi_state_stabilizers`].
+    #[must_use]
     pub fn choi_state_stabilizers(&self) -> &[SparsePauli] {
         self.action.choi_state_stabilizers()
     }
