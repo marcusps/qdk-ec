@@ -556,6 +556,10 @@ fn symbolic_angle_on_auxiliary_signs(
     physical_outcomes_from_random: &BitMatrix,
 ) -> Option<usize> {
     let signs = action.auxiliary_stabilizers.sign_from_random.matrix();
+    debug_assert!(
+        signs.column_count() <= physical_outcomes_from_random.column_count(),
+        "both matrices are indexed by inner random bit, so the signs cannot name more of them"
+    );
     let kernel = physical_outcomes_from_random.kernel();
     let unrevealed = (0..kernel.row_count())
         .map(|row| BitVec::from(&kernel.row(row)))
@@ -563,8 +567,18 @@ fn symbolic_angle_on_auxiliary_signs(
     let angles = simulation.symbolic_angle_indicator();
     let random_bit = unrevealed
         .support()
-        .find(|bit| angles.get(*bit).copied().unwrap_or(false))?;
-    random_bit_outcome_id(simulation, random_bit)
+        .find(|bit| angles.get(*bit).copied().unwrap_or(false));
+    debug_assert!(
+        random_bit.is_some(),
+        "every ordinary random bit holds its own physical outcome row, so a direction the outcomes \
+         leave free can only run along symbolic angles"
+    );
+    let outcome = random_bit_outcome_id(simulation, random_bit?);
+    debug_assert!(
+        outcome.is_some(),
+        "every inner random bit is reported by one public outcome"
+    );
+    outcome
 }
 
 /// Whether the sign of auxiliary generator `generator` differs between two branches separated by

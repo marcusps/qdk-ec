@@ -200,4 +200,7 @@ fn zero_qubit_separation_is_trivial() {
     let encoder = PhasedCliffordUnitary::identity(0);
     let separation = separate_auxiliary_qubits(&encoder, &[]).expect("the empty encoder separates");
     assert_eq!(separation.output_encoder().num_qubits(), 0);
+    assert_eq!(separation.auxiliary_encoder().num_qubits(), 0);
+    assert_eq!(separation.phase().num_bits(), 0);
+    assert_eq!(separation.phase().constant(), 0, "the identity carries no phase");
 }
