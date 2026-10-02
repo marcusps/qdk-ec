@@ -111,3 +111,30 @@ fn zero_qubit_amplitude_phase_is_zero() {
     assert_eq!(unitary.state_amplitude_phase_exponent(&basis), Some(0));
     assert_eq!(unitary.state_amplitude_phase_exponent_usize(0), Some(0));
 }
+
+/// A Clifford with no qubits has only the scalar Paulis, so `exp(iπ/4 · P)` is a number: `exp(iπ/4)`
+/// for `I` and `exp(-iπ/4)` for `-I`. The zero qubit path used to return without recording it.
+#[test]
+fn zero_qubit_pauli_exponential_keeps_its_phase() {
+    use binar::vec::AlignedBitVec;
+    let scalar = |phase: u8| DensePauli::from_bits(AlignedBitVec::zeros(0), AlignedBitVec::zeros(0), phase);
+
+    for (phase, expected) in [(0_u8, 1_u8), (2, 7)] {
+        let mut unitary = PhasedCliffordUnitary::identity(0);
+        unitary.left_mul_pauli_exp(&scalar(phase));
+        assert_eq!(
+            unitary.state_amplitude_phase_exponent(&AlignedBitVec::zeros(0)),
+            Some(expected),
+            "a scalar Pauli with phase {phase} contributes the eighth root {expected}"
+        );
+    }
+
+    let mut unitary = PhasedCliffordUnitary::identity(0);
+    unitary.left_mul_pauli_exp(&scalar(0));
+    unitary.left_mul_pauli_exp(&scalar(2));
+    assert_eq!(
+        unitary.state_amplitude_phase_exponent(&AlignedBitVec::zeros(0)),
+        Some(0),
+        "opposite rotations cancel"
+    );
+}
