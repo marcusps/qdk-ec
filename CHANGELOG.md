@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## binar [0.1.7], paulimer [0.2.8], pauliverse [0.1.6] - 2026-10-01
+
 ### Added
 - `clifford_to_transvections` in paulimer, with `CliffordUnitary.to_transvections()` in the Python bindings, decomposing a Clifford's symplectic action into a linear number of Hermitian Pauli generators of `π/4` exponents.
 - `clifford_centralizer` in paulimer, with `CliffordUnitary.centralizer()` in the Python bindings, returning Hermitian generators of the Pauli operators that conjugation fixes up to sign.
@@ -15,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Faster `measure` in pauliverse simulators when the outcome is random, faster `support()` for matrix columns and `dot()` for bit vectors in binar, and faster multiplication of Paulis stored in aligned bit vectors in paulimer.
+- Rename `FramePropagator.inject_measurement_flip` to `inject_outcome_flip`
+
+## paulimer [0.2.7], pauliverse [0.1.5] - 2026-09-30
+
+### Added
+- `FramePropagator.inject_measurement_flip(shot, outcome)` toggles a recorded
+	outcome delta without changing qubit frames. Available in Rust and Python;
+	supports padded records and propagates through subsequent classical feedback.
 
 ## binar [0.1.6], paulimer [0.2.6], pauliverse [0.1.4] - 2026-09-29
 
