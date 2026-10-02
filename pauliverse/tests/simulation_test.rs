@@ -611,3 +611,40 @@ fn phased_allocate_random_bit_returns_public_outcome_id() {
     let angle = sim.allocate_symbolic_angle();
     assert_eq!(angle, 2, "symbolic angles share the public outcome numbering");
 }
+
+/// The control of a conditional Pauli is the parity of the outcomes it names, so naming one
+/// outcome twice is the same as naming none. The shift term used to treat the list as a set, so a
+/// repeated outcome whose reported value is 1 applied the Pauli when it should not.
+#[test]
+fn a_repeated_outcome_is_the_parity_of_its_mentions() {
+    fn run(simulation: &mut impl Simulation, mentions: usize, parity: bool) -> bool {
+        let x0: SparsePauli = [x(0)].as_slice().into();
+        let z0: SparsePauli = [z(0)].as_slice().into();
+        simulation.unitary_op(UnitaryOp::X, &[0]);
+        let outcome = simulation.measure(&z0);
+        simulation.conditional_pauli(&x0, &vec![outcome; mentions], parity);
+        simulation.is_stabilizer_with_conditional_sign(&z0, &[])
+    }
+
+    for (mentions, parity, expect_applied) in [
+        (0_usize, false, true),
+        (1, false, false),
+        (2, false, true),
+        (3, false, false),
+        (0, true, false),
+        (1, true, true),
+        (2, true, false),
+        (3, true, true),
+    ] {
+        let phased = run(&mut PhasedOutcomeCompleteSimulation::new(1), mentions, parity);
+        assert_eq!(
+            phased, expect_applied,
+            "{mentions} mentions with parity {parity}: the control is the parity of the mentions"
+        );
+        assert_eq!(
+            phased,
+            run(&mut OutcomeSpecificSimulation::new(1), mentions, parity),
+            "{mentions} mentions with parity {parity}: the simulators must agree"
+        );
+    }
+}

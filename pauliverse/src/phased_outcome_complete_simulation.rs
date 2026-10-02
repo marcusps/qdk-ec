@@ -3,7 +3,7 @@ use crate::action::phase_form_exponent;
 use crate::outcome_complete_simulation::row_sum;
 use crate::outcome_free_simulation::{max_pair_support, max_support};
 use binar::{BitMatrix, BitVec};
-use binar::{Bitwise, BitwiseMut, BitwisePair, BitwisePairMut, IndexSet, matrix::AlignedBitMatrix, vec::AlignedBitVec};
+use binar::{Bitwise, BitwiseMut, BitwisePairMut, matrix::AlignedBitMatrix, vec::AlignedBitVec};
 use paulimer::clifford::{Clifford, CliffordUnitary, PhasedCliffordUnitary};
 use paulimer::pauli::{Pauli, PauliBits, PauliUnitary, anti_commutes_with, generic::PhaseExponent};
 use paulimer::pauli::{PauliBinaryOps, PauliMutable};
@@ -75,16 +75,16 @@ type SparsePauli = paulimer::pauli::SparsePauli;
 /// ```
 #[must_use]
 pub struct PhasedOutcomeCompleteSimulation {
-    phased_clifford: PhasedCliffordUnitary,   // R (phased encoder)
-    sign_matrix: AlignedBitMatrix,            // A
-    quadratic_phase_matrix: AlignedBitMatrix, // B
-    outcome_matrix: AlignedBitMatrix,         // M
-    outcome_shift: AlignedBitVec,             // v_0
-    linear_i_phase: AlignedBitVec,            // p
-    linear_sign_phase: AlignedBitVec,         // s
-    random_outcome_indicator: Vec<bool>,      // vec(q), [j] is true iff vec(q)_j = 1/2
-    symbolic_angle_indicator: Vec<bool>,      // [k] is true iff random bit k is a symbolic rotation angle
-    symbolic_angle_use_count: Vec<usize>,     // [k] counts the rotations parameterised by outcome k
+    phased_clifford: PhasedCliffordUnitary,       // R (phased encoder)
+    sign_matrix: AlignedBitMatrix,                // A
+    quadratic_phase_matrix: AlignedBitMatrix,     // B
+    outcome_matrix: AlignedBitMatrix,             // M
+    outcome_shift: AlignedBitVec,                 // v_0
+    linear_i_phase: AlignedBitVec,                // p
+    linear_sign_phase: AlignedBitVec,             // s
+    random_outcome_indicator: Vec<bool>,          // vec(q), [j] is true iff vec(q)_j = 1/2
+    symbolic_angle_indicator: Vec<bool>,          // [k] is true iff random bit k is a symbolic rotation angle
+    symbolic_angle_use_count: Vec<Option<usize>>, // [j] counts the rotations an angle outcome j drives
     random_bit_count: usize,
     qubit_count: usize,
 }
@@ -428,6 +428,7 @@ impl PhasedOutcomeCompleteSimulation {
             self.outcome_shift.assign_index(outcome_position, true);
         }
         self.random_outcome_indicator.push(false);
+        self.symbolic_angle_use_count.push(None);
     }
 
     /// Get the number of random (non-deterministic) measurement outcomes.
@@ -458,9 +459,14 @@ impl PhasedOutcomeCompleteSimulation {
     /// rotations that share an angle therefore collapse onto the same bit, and the recorded action
     /// no longer determines the operator. Callers that build an action must reject such a
     /// simulation.
+    ///
+    /// Every use of an angle is counted, including one made through
+    /// [`Simulation::conditional_pauli`] rather than [`Simulation::symbolic_pauli_exp`].
     #[must_use]
     pub fn reused_symbolic_angle(&self) -> Option<crate::OutcomeId> {
-        self.symbolic_angle_use_count.iter().position(|count| *count > 1)
+        self.symbolic_angle_use_count
+            .iter()
+            .position(|count| count.is_some_and(|uses| uses > 1))
     }
 
     fn allocate_random_bit_with_provenance(&mut self, is_symbolic_angle: bool) -> usize {
@@ -471,7 +477,7 @@ impl PhasedOutcomeCompleteSimulation {
             .assign_index(self.random_bit_count, true);
         self.random_outcome_indicator.push(true);
         self.symbolic_angle_indicator.push(is_symbolic_angle);
-        self.symbolic_angle_use_count.push(0);
+        self.symbolic_angle_use_count.push(is_symbolic_angle.then_some(0));
         self.random_bit_count += 1;
         outcome_pos
     }
@@ -484,13 +490,6 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
 
     fn allocate_symbolic_angle(&mut self) -> usize {
         self.allocate_random_bit_with_provenance(true)
-    }
-
-    fn symbolic_pauli_exp(&mut self, observable: &SparsePauli, angle: crate::OutcomeId) {
-        if let Some(count) = self.symbolic_angle_use_count.get_mut(angle) {
-            *count += 1;
-        }
-        self.conditional_pauli(observable, &[angle], true);
     }
 
     fn clifford(&mut self, _clifford: &crate::Unitary, _support: &[crate::QubitId]) {
@@ -535,10 +534,25 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
     }
 
     fn conditional_pauli(&mut self, observable: &SparsePauli, outcomes: &[usize], parity: bool) {
+        // The control is the parity of the listed outcomes, so an outcome named an even number of
+        // times drives no rotation and must not count as a use of its angle.
+        for (position, &outcome) in outcomes.iter().enumerate() {
+            if outcomes[..position].contains(&outcome) {
+                continue;
+            }
+            let mentions = outcomes[position..].iter().filter(|&&other| other == outcome).count();
+            if mentions % 2 == 0 {
+                continue;
+            }
+            if let Some(Some(count)) = self.symbolic_angle_use_count.get_mut(outcome) {
+                *count += 1;
+            }
+        }
         self.ensure_qubit_capacity(observable.max_support());
-        let bit_indicator = outcomes.iter().copied().collect::<IndexSet>();
-        let is_p_applied: bool = !parity ^ bit_indicator.dot(&self.outcome_shift);
-        if is_p_applied {
+        let shift_parity = outcomes.iter().fold(false, |accumulated, &outcome| {
+            accumulated ^ self.outcome_shift.index(outcome)
+        });
+        if shift_parity == parity {
             self.pauli(observable);
         }
         let inner_bits_indicator = row_sum(&self.outcome_matrix, outcomes);

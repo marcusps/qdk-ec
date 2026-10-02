@@ -378,14 +378,33 @@ impl_simulation!(
         #[getter]
         #[must_use]
         pub fn symbolic_angles(&self) -> Vec<PySymbolicAngle> {
-            self.inner
-                .symbolic_angle_indicator()
+            let symbolic_angle_indicator = self.inner.symbolic_angle_indicator();
+            let mut random_bit = 0;
+            let mut angle_index = 0;
+            let angles = self
+                .inner
+                .random_outcome_indicator()
                 .iter()
                 .enumerate()
-                .filter(|(_, &is_angle)| is_angle)
-                .enumerate()
-                .map(|(index, (outcome, _))| PySymbolicAngle { outcome, index })
-                .collect()
+                .filter_map(|(outcome, &is_random)| {
+                    if !is_random {
+                        return None;
+                    }
+                    let is_angle = symbolic_angle_indicator[random_bit];
+                    random_bit += 1;
+                    if !is_angle {
+                        return None;
+                    }
+                    let angle = PySymbolicAngle {
+                        outcome,
+                        index: angle_index,
+                    };
+                    angle_index += 1;
+                    Some(angle)
+                })
+                .collect();
+            debug_assert_eq!(random_bit, symbolic_angle_indicator.len());
+            angles
         }
 
         /// Apply a symbolic Pauli exponent `e^{iα P}` parameterised by `angle`.
@@ -396,9 +415,34 @@ impl_simulation!(
         /// reusing one makes `phased_action` raise a `ValueError`. Angles with matching `index` in
         /// two circuits are what make those circuits' exponents correspond when their phased actions
         /// are compared.
+        ///
+        /// # Errors
+        ///
+        /// Returns a `ValueError` if `angle` was not allocated by this simulation. Without that
+        /// check a handle from another simulation would address an unrelated outcome here, and the
+        /// wrong conditional operation would be applied without any error.
         #[allow(clippy::needless_pass_by_value)]
-        pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: &PySymbolicAngle) {
+        pub fn apply_symbolic_pauli_exp(
+            &mut self,
+            observable: &PySparsePauli,
+            angle: &PySymbolicAngle,
+        ) -> PyResult<()> {
+            let allocated = self.symbolic_angles();
+            let outcome = allocated.get(angle.index).map(|local| local.outcome).ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "symbolic angle {} was not allocated by this simulation, which has {} angles",
+                    angle.index,
+                    allocated.len()
+                ))
+            })?;
+            if outcome != angle.outcome {
+                return Err(PyValueError::new_err(format!(
+                    "symbolic angle {} belongs to another simulation",
+                    angle.index
+                )));
+            }
             self.inner.symbolic_pauli_exp(&observable.inner, angle.outcome);
+            Ok(())
         }
 
         #[allow(clippy::needless_pass_by_value)]

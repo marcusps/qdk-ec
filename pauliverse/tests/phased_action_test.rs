@@ -1012,3 +1012,76 @@ fn symbolic_rotation_may_not_reach_a_discarded_qubit() {
         "a rotation reaching a discarded qubit must be reported, got {spanning:?}"
     );
 }
+
+/// The angle counter is indexed by outcome id. A deterministic measurement takes an outcome id
+/// without taking a random bit, so a counter indexed by random bit would miss the reuse.
+#[test]
+fn angle_reuse_is_caught_after_a_deterministic_measurement() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let deterministic = simulation.measure(&sparse(&[z(0), z(1)]));
+    assert_eq!(deterministic, 0, "the Bell parity is deterministic");
+
+    let angle = simulation.allocate_symbolic_angle();
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleReused { angle: reused }) if reused == angle),
+        "a reused angle must be reported whatever its outcome id, got {result:?}"
+    );
+}
+
+/// Conditioning a Pauli on an angle directly is another way to drive a rotation, so it counts
+/// against the same angle.
+#[test]
+fn angle_reuse_through_a_conditional_pauli_is_caught() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let angle = simulation.allocate_symbolic_angle();
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+    simulation.conditional_pauli(&sparse(&[z(0)]), &[angle], true);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleReused { angle: reused }) if reused == angle),
+        "conditioning on an angle counts as a use, got {result:?}"
+    );
+}
+
+/// The control of a conditional Pauli is the parity of the outcomes it names, so an angle named
+/// twice drives nothing. Counting each mention would refuse a valid circuit.
+#[test]
+fn an_angle_named_twice_in_one_control_is_not_a_reuse() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let angle = simulation.allocate_symbolic_angle();
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+    simulation.conditional_pauli(&sparse(&[z(0)]), &[angle, angle], true);
+
+    phased_action_from_simulation(&simulation, &[0], &[0])
+        .expect("a control that names an angle twice applies nothing");
+}
+
+/// An angle named three times leaves the same control as naming it once, so it is one use and the
+/// rotation before it makes two.
+#[test]
+fn an_angle_named_three_times_in_one_control_is_one_use() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let angle = simulation.allocate_symbolic_angle();
+    simulation.conditional_pauli(&sparse(&[z(0)]), &[angle, angle, angle], true);
+
+    phased_action_from_simulation(&simulation, &[0], &[0]).expect("one control is one use");
+
+    simulation.symbolic_pauli_exp(&sparse(&[x(0)]), angle);
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleReused { angle: reused }) if reused == angle),
+        "a second use of the angle must be reported, got {result:?}"
+    );
+}

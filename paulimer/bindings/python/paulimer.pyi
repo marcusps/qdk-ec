@@ -1277,6 +1277,11 @@ class PhasedOutcomeCompleteSimulation:
         exactly one exponent; reusing one makes :meth:`phased_action` raise a ``ValueError``.
         Angles with matching index in two circuits are what make those circuits' exponents
         correspond when their phased actions are compared.
+
+        Raises:
+            ValueError: If ``angle`` was not allocated by this simulation. Without that check a
+                handle from another simulation would address an unrelated outcome here, and the
+                wrong conditional operation would be applied without any error.
         """
         ...
 
