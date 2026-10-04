@@ -264,8 +264,8 @@ fn acts_trivially_on(pauli: &SparsePauli, image: &DensePauli) -> bool {
 ///
 /// The input must be a valid Clifford, as reported by `is_valid`. An invalid tableau, such as the
 /// one produced by `CliffordUnitary::zero`, can make the residue-fix step fail and panic. The same
-/// panic reports a residue-fix search that found no vector, which the exhaustive one-, two-, and
-/// three-qubit tests rule out at those sizes.
+/// panic reports a defect in the residue-fix search for a valid input.
+/// The same-rank existence proof is in `docs/transvection-minimality-correction.md`.
 ///
 /// # Running time and memory
 ///
@@ -657,8 +657,10 @@ fn minimal_decomposition(action: &AlignedBitMatrix, qubit_count: usize) -> Vec<V
 /// the same rank, so that `F` decomposes into `rank + 1` transvections.
 ///
 /// Callan gives the `r`/`r + 1` length bound over GF(2), so a decomposition of length `rank + 1`
-/// exists. That such a vector always lies in `Res(F)` is verified exhaustively for one, two, and
-/// three qubits by the integration tests. It is not proved here for larger qubit counts.
+/// exists. The same-rank proof in `docs/transvection-minimality-correction.md` shows that its
+/// defining vectors span `Res(F)`. Delete a factor so that the remaining defining vectors form a
+/// basis, then conjugate the deleted vector through the suffix. This gives a vector in `Res(F)`
+/// whose transvection leaves a rank-`r` product of `r` independent factors.
 ///
 /// Candidates are the nonzero residue vectors in ascending binary-coordinate order. The search is
 /// exhaustive over `Res(F)`.

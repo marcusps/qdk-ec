@@ -262,8 +262,7 @@ not needed for the paper counterexample or the correctness argument here.
 
 ## 6. Corrected result and implementation
 
-Combining the correct Lemmas 2–3, Callan's $r+1$ bound, and the bordered
-construction gives:
+The correct Lemmas 2 and 3, together with Callan's $r+1$ bound, give:
 
 $$
 \ell(\mathbf F)=
@@ -272,6 +271,61 @@ r & \text{if } \mathbf E \text{ is congruence-lower-triangularizable over } \mat
 r+1 & \text{otherwise (this includes, but is strictly larger than, the hyperbolic case).}
 \end{cases}
 $$
+
+### Existence of a same-rank residue fix
+
+Suppose that the residue core is not triangularizable.
+The length-$r$ criterion then rules out every product of $r$ transvections.
+Callan's bound supplies a product of exactly $r+1$ transvections.
+This existence step is the only part of the argument below that uses Callan's bound.
+We do not assume that the defining vectors already lie in the residue space.
+
+For any ordered product $\mathbf F=\mathbf T_{\mathbf v_1}\cdots\mathbf T_{\mathbf v_k}$,
+stack the defining vectors as the rows of $\mathbf V$.
+Direct multiplication of the transvections gives
+
+$$
+\mathbf I+\mathbf F=\boldsymbol\Omega\mathbf V^{\mathsf T}\mathbf U\mathbf V,
+\qquad
+\mathbf U=(\mathbf I+\mathbf N)^{-1}
+=\mathbf I+\mathbf N+\cdots+\mathbf N^{k-1},
+$$
+
+where $N_{ij}=\langle\mathbf v_i,\mathbf v_j\rangle$ for $i<j$ and is zero otherwise.
+Thus $\mathbf U$ is upper triangular with unit diagonal and is invertible.
+This identity does not require independent defining vectors.
+It gives $\operatorname{Res}(\mathbf F)\subseteq S$, where $S$ is their span.
+If the $k$ vectors are independent, $\mathbf V^{\mathsf T}$ is injective and $\mathbf V$ is surjective.
+The identity then gives $\operatorname{rank}(\mathbf I+\mathbf F)=k$.
+
+Apply this argument to the length-$(r+1)$ product.
+Its defining vectors cannot all be independent, since the residue rank is $r$.
+Their span therefore has dimension at most $r$.
+The inclusion $\operatorname{Res}(\mathbf F)\subseteq S$ gives the opposite bound.
+Consequently $S=\operatorname{Res}(\mathbf F)$ and $\dim S=r$.
+
+Delete one factor so that the remaining $r$ defining vectors form a basis of $S$.
+Write the original product as $\mathbf F=\mathbf A\mathbf T_{\mathbf v}\mathbf C$, with $\mathbf C$ the suffix after that factor.
+Set $\mathbf w=\mathbf v\mathbf C$.
+In the row-vector convention, conjugation gives
+
+$$
+\mathbf T_{\mathbf w}=\mathbf C^{-1}\mathbf T_{\mathbf v}\mathbf C,
+\qquad
+\mathbf F\mathbf T_{\mathbf w}=\mathbf A\mathbf C.
+$$
+
+Every suffix factor has its defining vector in $S$, so it preserves $S$.
+Hence $\mathbf w$ lies in $S=\operatorname{Res}(\mathbf F)$ and is nonzero.
+The product $\mathbf A\mathbf C$ has $r$ independent defining vectors.
+The same product identity gives residue rank $r$ for this updated map.
+Its length-$r$ factorization makes its core triangularizable by Lemmas 2 and 3.
+
+This proves that the finite search in `find_fix_vector` includes a successful candidate in every dimension for a valid symplectic input.
+The search still panics if it exhausts the candidates.
+For a valid input, that panic reports an implementation defect rather than a missing existence theorem.
+
+### Implementation and evidence
 
 Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
 
@@ -291,9 +345,9 @@ The algebraic part carries no dimension limit. The paper's own Lemmas 2 and 3 gi
 criterion, and Callan supplies the binary $r$/$r+1$ length bound. The implementation applies that
 criterion at every $m$ and falls back to $r+1$ otherwise.
 
-The termination part is the construction in this note. When the core is not triangularizable, the
-residue-fix step produces a vector whose transvection makes the updated core triangularizable at
-the same rank.
+The termination argument is the same-rank construction above.
+It places a successful fix vector inside the residue space that the implementation searches.
+It gives no practical time bound for that search.
 
 The finite part is computational. The test suite compares the result against a brute-force BFS
 oracle on every one- and two-qubit symplectic action. Retained evidence covers all of
