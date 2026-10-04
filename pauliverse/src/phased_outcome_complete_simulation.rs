@@ -471,6 +471,19 @@ impl PhasedOutcomeCompleteSimulation {
             .position(|count| count.is_some_and(|uses| uses > 1))
     }
 
+    /// The first symbolic angle that parameterises no rotation, if any.
+    ///
+    /// The branch bit of an angle encodes `exp(i alpha P)` as `cos(alpha) I + i sin(alpha) P`. An
+    /// angle that drives nothing therefore encodes `exp(i alpha I)`, a global phase that depends on
+    /// `alpha`, and not the identity that the caller wrote. Callers that build an action must reject
+    /// such a simulation.
+    ///
+    /// A control that names an angle an even number of times does not use it.
+    #[must_use]
+    pub fn unused_symbolic_angle(&self) -> Option<crate::OutcomeId> {
+        self.symbolic_angle_use_count.iter().position(|count| *count == Some(0))
+    }
+
     fn allocate_random_bit_with_provenance(&mut self, is_symbolic_angle: bool) -> usize {
         self.ensure_outcome_capacity(true);
         let outcome_pos = self.random_outcome_indicator.len();

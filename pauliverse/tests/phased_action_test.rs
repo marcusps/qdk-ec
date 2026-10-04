@@ -1187,3 +1187,46 @@ fn phased_action_from_simulation_rejects_invalid_qubits() {
         "a circuit with a repeated input must be reported, got {repeated_input:?}"
     );
 }
+
+/// An angle that drives no rotation would encode `exp(i alpha I)`. On `|0>` that matches the
+/// rotation `exp(i alpha Z)`, so an unused angle once compared equal to a real rotation.
+#[test]
+fn phased_action_rejects_an_unused_symbolic_angle() {
+    let rotated = {
+        let mut simulation = PhasedOutcomeCompleteSimulation::new(1);
+        let angle = simulation.allocate_symbolic_angle();
+        simulation.symbolic_pauli_exp(&sparse(&[z(0)]), angle);
+        simulation
+    };
+    phased_action_from_simulation(&rotated, &[], &[0]).expect("a used angle has an action");
+
+    let mut unused = PhasedOutcomeCompleteSimulation::new(1);
+    let angle = unused.allocate_symbolic_angle();
+    let result = phased_action_from_simulation(&unused, &[], &[0]);
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleUnused { angle: reported }) if reported == angle),
+        "an unused angle must be reported, got {result:?}"
+    );
+
+    let mut after_measurement = PhasedOutcomeCompleteSimulation::new(2);
+    after_measurement.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    after_measurement.measure(&sparse(&[z(0), z(1)]));
+    let used = after_measurement.allocate_symbolic_angle();
+    let idle = after_measurement.allocate_symbolic_angle();
+    after_measurement.symbolic_pauli_exp(&sparse(&[x(0)]), used);
+    after_measurement.conditional_pauli(&sparse(&[z(0)]), &[idle, idle], true);
+    let result = phased_action_from_simulation(&after_measurement, &[0], &[0]);
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleUnused { angle: reported }) if reported == idle),
+        "an angle named only in pairs is unused and must be reported by outcome id, got {result:?}"
+    );
+
+    let circuit = build_circuit(|builder| {
+        builder.allocate_symbolic_angle();
+    });
+    let result = phased_action_of(&circuit, &[0], &[0]);
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleUnused { .. })),
+        "a circuit with an unused angle must be reported, got {result:?}"
+    );
+}

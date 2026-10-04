@@ -165,8 +165,9 @@ pub trait Simulation: Default {
     ///
     /// Each angle must parameterise exactly one rotation. An angle stands for its rotation through
     /// a single branch bit, so two rotations that share an angle collapse onto the same bit and the
-    /// recorded action no longer determines the operator. Building an action from such a simulation
-    /// is an error.
+    /// recorded action no longer determines the operator. An angle that parameterises no rotation
+    /// encodes the global phase `exp(iα)`, not the identity. Building an action from a simulation
+    /// with a reused or an unused angle is an error.
     ///
     /// Because the comparison of two circuits matches symbolic angles one-to-one, labelling the
     /// rotations of two circuits with angles allocated in the same order is what makes them

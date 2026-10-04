@@ -1287,7 +1287,8 @@ class PhasedOutcomeCompleteSimulation:
         ``angle`` must be a :class:`SymbolicAngle` obtained from :meth:`allocate_symbolic_angle`
         or :meth:`allocate_symbolic_angles`. This is the high-level way to add a free-angle
         exponent ``e^{i alpha P}`` for an arbitrary Pauli ``P``. Each angle must parameterise
-        exactly one exponent; reusing one makes :meth:`phased_action` raise a ``ValueError``.
+        exactly one exponent. A reused or an unused angle makes :meth:`phased_action` raise a
+        ``ValueError``.
         Angles with matching index in two circuits are what make those circuits' exponents
         correspond when their phased actions are compared.
 
@@ -1327,8 +1328,8 @@ class PhasedOutcomeCompleteSimulation:
         Raises:
             ValueError: If ``input_qubits`` or ``output_qubits`` names a qubit twice, if
                 the simulation has fewer than ``system_qubit_count + len(input_qubits)``
-                qubits, or if the non-output system qubits remain entangled with the rest
-                of the state.
+                qubits, if the non-output system qubits remain entangled with the rest of
+                the state, or if a symbolic angle parameterises no exponent or more than one.
         """
         ...
 

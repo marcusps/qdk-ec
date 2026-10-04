@@ -61,6 +61,10 @@ pub enum ActionError {
     /// A symbolic angle parameterises more than one rotation, so the recorded action does not
     /// determine the operator. See [`PhasedOutcomeCompleteSimulation::reused_symbolic_angle`].
     SymbolicAngleReused { angle: usize },
+    /// A symbolic angle parameterises no rotation. Its branch bit would encode the global phase
+    /// `exp(i alpha)` rather than the identity. See
+    /// [`PhasedOutcomeCompleteSimulation::unused_symbolic_angle`].
+    SymbolicAngleUnused { angle: usize },
     /// A discarded auxiliary qubit carries a stabilizer sign that depends on a symbolic angle.
     /// Discarding it would decohere that angle, so the circuit has no phased action.
     AuxiliaryQubitsCarrySymbolicAngle { angle: usize },
@@ -561,6 +565,9 @@ fn phased_action(
 ) -> Result<PhasedCircuitAction, ActionError> {
     if let Some(angle) = simulation.reused_symbolic_angle() {
         return Err(ActionError::SymbolicAngleReused { angle });
+    }
+    if let Some(angle) = simulation.unused_symbolic_angle() {
+        return Err(ActionError::SymbolicAngleUnused { angle });
     }
     // Discarding an auxiliary qubit whose sign follows a symbolic angle traces out that angle's
     // coherence. arXiv:2309.08676 requires a deallocated qubit to be independent of the branch, so

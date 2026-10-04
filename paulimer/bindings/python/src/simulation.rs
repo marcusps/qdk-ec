@@ -421,10 +421,10 @@ impl_simulation!(
         ///
         /// `angle` must be a [`SymbolicAngle`] obtained from [`allocate_symbolic_angle`] or
         /// [`allocate_symbolic_angles`]. This is the high-level way to add a free-angle exponent
-        /// `e^{iα P}` for an arbitrary Pauli `P`. Each angle must parameterise exactly one exponent;
-        /// reusing one makes `phased_action` raise a `ValueError`. Angles with matching `index` in
-        /// two circuits are what make those circuits' exponents correspond when their phased actions
-        /// are compared.
+        /// `e^{iα P}` for an arbitrary Pauli `P`. Each angle must parameterise exactly one exponent.
+        /// A reused or an unused angle makes `phased_action` raise a `ValueError`. Angles with
+        /// matching `index` in two circuits are what make those circuits' exponents correspond when
+        /// their phased actions are compared.
         ///
         /// # Errors
         ///
@@ -459,8 +459,9 @@ impl_simulation!(
         /// # Errors
         ///
         /// Returns a `ValueError` if `input_qubits` or `output_qubits` names a qubit twice, if the
-        /// simulation does not hold every system and reference qubit, or if the non-output system
-        /// qubits remain entangled.
+        /// simulation does not hold every system and reference qubit, if the non-output system
+        /// qubits remain entangled, or if a symbolic angle parameterises no exponent or more than
+        /// one.
         pub fn phased_action(
             &self,
             input_qubits: Vec<usize>,
