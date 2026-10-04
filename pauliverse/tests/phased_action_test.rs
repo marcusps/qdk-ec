@@ -111,6 +111,65 @@ fn opposite_sign_rotations_differ_only_in_relative_phase() {
 }
 
 #[test]
+fn surplus_measurement_conditioned_rotation_sign_is_phase_relevant() {
+    let unconditional = build_circuit(|builder| {
+        let angle = builder.allocate_symbolic_angle();
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), angle);
+    });
+    let conditional = build_circuit(|builder| {
+        let measurement = builder.allocate_random_bit();
+        let angle = builder.allocate_symbolic_angle();
+        builder.conditional_pauli(&sparse(&[x(0)]), &[measurement], true);
+        builder.symbolic_pauli_exp(&sparse(&[z(0)]), angle);
+        builder.conditional_pauli(&sparse(&[x(0)]), &[measurement], true);
+    });
+
+    let unconditional_action = phased_action_of(&unconditional, &[0], &[0]).expect("unconditional action");
+    let conditional_action = phased_action_of(&conditional, &[0], &[0]).expect("conditional action");
+
+    let reasons = unconditional_action
+        .is_equivalent(&conditional_action)
+        .expect_err("a surplus measurement-conditioned rotation sign must be phase relevant");
+    assert_eq!(reasons, vec![ActionsInequivalenceReason::RelativePhase]);
+    let reverse_reasons = conditional_action
+        .is_equivalent(&unconditional_action)
+        .expect_err("surplus mixed measurement-angle phase detection must be symmetric");
+    assert_eq!(reverse_reasons, vec![ActionsInequivalenceReason::RelativePhase]);
+}
+
+fn randomizes_prepared_output(randomize: bool) -> PhasedCircuitAction {
+    let circuit = build_circuit(|builder| {
+        if randomize {
+            let bit = builder.allocate_random_bit();
+            builder.conditional_pauli(&sparse(&[x(0)]), &[bit], true);
+        }
+    });
+    phased_action_of(&circuit, &[], &[0]).expect("prepared output action")
+}
+
+#[test]
+fn surplus_randomness_is_checked_symmetrically() {
+    let pure = randomizes_prepared_output(false);
+    let randomized = randomizes_prepared_output(true);
+    assert!(pure.is_equivalent(&randomized).is_err());
+    assert!(randomized.is_equivalent(&pure).is_err());
+    let harmless = phased_action_of(
+        &build_circuit(|builder| {
+            builder.allocate_random_bit();
+        }),
+        &[],
+        &[0],
+    )
+    .expect("harmless random action");
+
+    pure.is_equivalent(&harmless)
+        .expect("unused surplus randomness must not change the action");
+    harmless
+        .is_equivalent(&pure)
+        .expect("harmless surplus randomness equivalence must be symmetric");
+}
+
+#[test]
 fn rotation_equals_itself() {
     let (zz, zz_input, zz_output) = zz_rotation();
     let action = phased_action_of(&zz, &zz_input, &zz_output).expect("action");
