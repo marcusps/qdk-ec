@@ -346,10 +346,20 @@ impl_simulation!(
             self.inner.linear_sign_phase()
         }
 
+        /// # Errors
+        ///
+        /// Returns a `ValueError` if `random_bits` has fewer entries than `random_outcome_count`.
+        /// Entries past `random_outcome_count` are ignored.
         #[allow(clippy::needless_pass_by_value)]
-        #[must_use]
-        pub fn output_phase_exponent(&self, random_bits: Vec<bool>) -> u8 {
-            self.inner.output_phase_exponent(&random_bits)
+        pub fn output_phase_exponent(&self, random_bits: Vec<bool>) -> PyResult<u8> {
+            let random_outcome_count = self.inner.random_outcome_count();
+            if random_bits.len() < random_outcome_count {
+                return Err(PyValueError::new_err(format!(
+                    "random_bits has length {}, but the simulation has {random_outcome_count} random outcomes",
+                    random_bits.len()
+                )));
+            }
+            Ok(self.inner.output_phase_exponent(&random_bits))
         }
 
         /// Allocate a fresh symbolic angle `α`.

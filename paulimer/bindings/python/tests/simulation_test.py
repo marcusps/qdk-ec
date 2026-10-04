@@ -320,6 +320,17 @@ class TestPhasedOutcomeCompleteSimulationSpecific:
         # The trivial assignment never contributes a phase.
         assert sim.output_phase_exponent([False]) == 0
 
+    def test_output_phase_exponent_rejects_short_random_bits(self):
+        sim = PhasedOutcomeCompleteSimulation(2)
+        sim.measure(SparsePauli("X_0"))
+        sim.measure(SparsePauli("X_1"))
+        assert sim.random_outcome_count == 2
+        with pytest.raises(ValueError, match="random_bits has length 1, but the simulation has 2 random outcomes"):
+            sim.output_phase_exponent([True])
+        with pytest.raises(ValueError, match="random_bits has length 0"):
+            sim.output_phase_exponent([])
+        assert sim.output_phase_exponent([False, False, True]) == sim.output_phase_exponent([False, False])
+
     def test_symbolic_angles_preserve_public_outcome_after_deterministic_measurement(self):
         def action(use_retrieved_angle):
             sim = PhasedOutcomeCompleteSimulation(1)

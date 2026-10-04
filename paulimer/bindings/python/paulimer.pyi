@@ -1247,7 +1247,10 @@ class PhasedOutcomeCompleteSimulation:
 
         Args:
             random_bits: Boolean assignment for each random outcome (length at least
-                ``random_outcome_count``).
+                ``random_outcome_count``). Entries past ``random_outcome_count`` are ignored.
+
+        Raises:
+            ValueError: If ``random_bits`` has fewer than ``random_outcome_count`` entries.
         """
         ...
 
