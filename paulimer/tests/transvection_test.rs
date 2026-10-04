@@ -687,6 +687,13 @@ fn minimal_matches_brute_force_oracle_on_every_three_qubit_action() {
 
         let decomposed = clifford_to_transvections_minimal(&clifford);
         assert_eq!(decomposed.len(), minimum, "length must equal the brute-force minimum");
+        let rebuilt = symplectic_action_from_transvections(&decomposed, 3);
+        assert!(rebuilt.is_valid(), "replayed factors must form a valid tableau");
+        assert_eq!(
+            pack_action(&rebuilt),
+            packed,
+            "replayed action must match the BFS element"
+        );
         for transvection in &decomposed {
             assert!(transvection.is_order_two(), "factors must be Hermitian");
         }
