@@ -623,6 +623,9 @@ class CliffordUnitary:
         blocks runs for minutes and uses hundreds of megabytes. The binding releases the GIL while
         the Rust search runs, so other Python threads keep running, but the call itself cannot be
         interrupted or cancelled.
+
+        Raises:
+            ValueError: If the Clifford tableau is invalid.
         """
         ...
 

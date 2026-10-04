@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- `CliffordUnitary.to_transvections()` raises `ValueError` for an invalid tableau instead of a panic exception.
+- `CliffordUnitary.to_transvections()` and `to_transvections_minimal()` raise `ValueError` for an invalid tableau instead of a panic exception.
 
 ## binar [0.1.7], paulimer [0.2.8], pauliverse [0.1.6] - 2026-10-01
 

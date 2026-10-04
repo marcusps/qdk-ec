@@ -76,10 +76,11 @@ def test_identity_has_no_transvections():
         assert len(identity.fixed_space()) == 2 * qubit_count
 
 
-def test_invalid_transvection_tableau_is_value_error():
+@pytest.mark.parametrize("method", ["to_transvections", "to_transvections_minimal"])
+def test_invalid_transvection_tableau_is_value_error(method):
     with pytest.raises(ValueError, match="the Clifford tableau is invalid"):
-        CliffordUnitary.zero(1).to_transvections()
-    assert CliffordUnitary.identity(0).to_transvections() == []
+        getattr(CliffordUnitary.zero(1), method)()
+    assert getattr(CliffordUnitary.identity(0), method)() == []
 
 
 def test_single_qubit_gate_lengths():

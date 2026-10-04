@@ -329,12 +329,20 @@ impl PyCliffordUnitary {
     /// runs for minutes and uses hundreds of megabytes. The binding releases the GIL while the Rust
     /// search runs, so other Python threads keep running, but the call itself cannot be interrupted
     /// or cancelled.
-    fn to_transvections_minimal(&self, py: Python<'_>) -> Vec<PySparsePauli> {
+    ///
+    /// # Errors
+    ///
+    /// Returns a `ValueError` if the Clifford tableau is invalid.
+    fn to_transvections_minimal(&self, py: Python<'_>) -> PyResult<Vec<PySparsePauli>> {
+        if !self.inner.is_valid() {
+            return Err(PyValueError::new_err("the Clifford tableau is invalid"));
+        }
         let clifford = self.inner.clone();
-        py.detach(move || clifford_to_transvections_minimal(&clifford))
+        Ok(py
+            .detach(move || clifford_to_transvections_minimal(&clifford))
             .into_iter()
             .map(PySparsePauli::from)
-            .collect()
+            .collect())
     }
 
     /// Returns generators of this Clifford's fixed space, the Paulis fixed up to sign under conjugation.
