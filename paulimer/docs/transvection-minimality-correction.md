@@ -55,8 +55,9 @@ $r=3$ and $\ell(\mathbf F)=4$.
 The implementation uses this criterion:
 
 > The minimal length is $r$ **iff** the invertible residue core $\mathbf E$ is
-> congruence-lower-triangularizable over $\mathbb{F}_2$; otherwise our construction returns a
-> decomposition of length $r+1$. Hyperbolicity ($\mathbf E$ *alternating*) of a non-identity
+> congruence-lower-triangularizable over $\mathbb{F}_2$.
+> Otherwise the implementation searches for a decomposition of length $r+1$.
+> Hyperbolicity ($\mathbf E$ *alternating*) of a non-identity
 > element is a special $r+1$ sub-case, but it is **not** the only one: non-alternating cores can
 > fail to be triangularizable too.
 
@@ -275,58 +276,15 @@ r+1 & \text{otherwise (this includes, but is strictly larger than, the hyperboli
 \end{cases}
 $$
 
-### Existence of a same-rank residue fix
+### Limits of the residue fix step
 
-Suppose that the residue core is not triangularizable.
-The length-$r$ criterion then rules out every product of $r$ transvections.
-Callan's bound supplies a product of exactly $r+1$ transvections.
-This existence step is the only part of the argument below that uses Callan's bound.
-We do not assume that the defining vectors already lie in the residue space.
+Exhaustive tests cover the residue fix step for one, two, and three qubits only.
+The step succeeds on every action in these finite domains.
+The repository contains no proof for more qubits.
 
-For any ordered product $\mathbf F=\mathbf T_{\mathbf v_1}\cdots\mathbf T_{\mathbf v_k}$,
-stack the defining vectors as the rows of $\mathbf V$.
-Direct multiplication of the transvections gives
-
-$$
-\mathbf I+\mathbf F=\boldsymbol\Omega\mathbf V^{\mathsf T}\mathbf U\mathbf V,
-\qquad
-\mathbf U=(\mathbf I+\mathbf N)^{-1}
-=\mathbf I+\mathbf N+\cdots+\mathbf N^{k-1},
-$$
-
-where $N_{ij}=\langle\mathbf v_i,\mathbf v_j\rangle$ for $i<j$ and is zero otherwise.
-Thus $\mathbf U$ is upper triangular with unit diagonal and is invertible.
-This identity does not require independent defining vectors.
-It gives $\operatorname{Res}(\mathbf F)\subseteq S$, where $S$ is their span.
-If the $k$ vectors are independent, $\mathbf V^{\mathsf T}$ is injective and $\mathbf V$ is surjective.
-The identity then gives $\operatorname{rank}(\mathbf I+\mathbf F)=k$.
-
-Apply this argument to the length-$(r+1)$ product.
-Its defining vectors cannot all be independent, since the residue rank is $r$.
-Their span therefore has dimension at most $r$.
-The inclusion $\operatorname{Res}(\mathbf F)\subseteq S$ gives the opposite bound.
-Consequently $S=\operatorname{Res}(\mathbf F)$ and $\dim S=r$.
-
-Delete one factor so that the remaining $r$ defining vectors form a basis of $S$.
-Write the original product as $\mathbf F=\mathbf A\mathbf T_{\mathbf v}\mathbf C$, with $\mathbf C$ the suffix after that factor.
-Set $\mathbf w=\mathbf v\mathbf C$.
-In the row-vector convention, conjugation gives
-
-$$
-\mathbf T_{\mathbf w}=\mathbf C^{-1}\mathbf T_{\mathbf v}\mathbf C,
-\qquad
-\mathbf F\mathbf T_{\mathbf w}=\mathbf A\mathbf C.
-$$
-
-Every suffix factor has its defining vector in $S$, so it preserves $S$.
-Hence $\mathbf w$ lies in $S=\operatorname{Res}(\mathbf F)$ and is nonzero.
-The product $\mathbf A\mathbf C$ has $r$ independent defining vectors.
-The same product identity gives residue rank $r$ for this updated map.
-Its length-$r$ factorization makes its core triangularizable by Lemmas 2 and 3.
-
-This proves that the finite search in `find_fix_vector` includes a successful candidate in every dimension for a valid symplectic input.
-The search still panics if it exhausts the candidates.
-For a valid input, that panic reports an implementation defect rather than a missing existence theorem.
+`find_fix_vector` panics if its search exhausts all candidates.
+For a valid input, such a panic leaves the existence question open for that input.
+It does not establish that only an implementation detail is wrong.
 
 ### Implementation and evidence
 
@@ -337,23 +295,19 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
   recurses into the right-orthogonal complement, and **memoizes subspaces proven untriangularizable**
   by a canonical row-reduced key. An alternating restriction has no non-isotropic pivot.
   The search detects it from symmetry and zero diagonal, then memoizes failure without enumerating its span.
-- **The $r+1$ fix vector.** When (and only when) no $\mathbf Q$ exists, `find_fix_vector` appends one
-  extra transvection $\mathbf T_{\mathbf w}$ chosen so that the residue-preserving update
-  $\mathbf F\mathbf T_{\mathbf w}$ *becomes* triangularizable at the same rank, and recurses. This is
-  the non-hyperbolic analogue of the paper's hyperbolic Lemma 1 patch — the case the paper's
-  construction omits.
+- **The $r+1$ fix vector.** When no $\mathbf Q$ exists, `find_fix_vector` searches
+  $\operatorname{Res}(\mathbf F)$ for a vector $\mathbf w$.
+  The update $\mathbf F\mathbf T_{\mathbf w}$ must have a triangularizable residue core at the same rank.
+  If the search finds one, the decomposer recurses on that update and appends $\mathbf T_{\mathbf w}$.
+  The search panics if no candidate succeeds.
 
-The evidence for this criterion has three separate parts.
+The evidence for this criterion has two parts.
 
 The algebraic part carries no dimension limit. The paper's own Lemmas 2 and 3 give the length-$r$
 criterion, and Callan supplies the binary $r$/$r+1$ length bound. The implementation applies that
-criterion at every $m$ and falls back to $r+1$ otherwise.
+criterion at every $m$ and searches for an $r+1$ decomposition otherwise.
 
-The termination argument is the same-rank construction above.
-It places a successful fix vector inside the residue space that the implementation searches.
-It gives no practical time bound for that search.
-
-The finite evidence comes from tests, not from the existence proof.
+The finite evidence comes from tests.
 The default suite compares every one- and two-qubit action with a breadth-first search (BFS) oracle.
 The three-qubit oracle is ignored by default, so a passing default suite does not establish its result.
 Before the replay assertion, that oracle tested factor count and Hermiticity but did not establish that the returned factors reproduced each action.

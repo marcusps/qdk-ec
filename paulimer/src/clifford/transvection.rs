@@ -263,9 +263,12 @@ fn acts_trivially_on(pauli: &SparsePauli, image: &DensePauli) -> bool {
 /// # Panics
 ///
 /// The input must be a valid Clifford, as reported by `is_valid`. An invalid tableau, such as the
-/// one produced by `CliffordUnitary::zero`, can make the residue-fix step fail and panic. The same
-/// panic reports a defect in the residue-fix search for a valid input.
-/// The same-rank existence proof is in `docs/transvection-minimality-correction.md`.
+/// one produced by `CliffordUnitary::zero`, can make the residue-fix step fail and panic.
+/// The search also panics if it exhausts its candidates for a valid input.
+/// Exhaustive tests cover the residue fix step on one, two, and three qubits only.
+/// The repository contains no proof for more qubits.
+/// For a valid input, exhaustion leaves the existence question open for that input.
+/// See `docs/transvection-minimality-correction.md` for the evidence and its limits.
 ///
 /// # Running time and memory
 ///
@@ -653,14 +656,14 @@ fn minimal_decomposition(action: &AlignedBitMatrix, qubit_count: usize) -> Vec<V
     (0..rank).map(|row| matrix_row(&defining, row, dimension)).collect()
 }
 
-/// Finds a residue vector `v` such that `F·T_v` has a congruence-triangularizable residue core of
+/// Searches for a residue vector `v` such that `F·T_v` has a congruence-triangularizable residue core of
 /// the same rank, so that `F` decomposes into `rank + 1` transvections.
 ///
-/// Callan gives the `r`/`r + 1` length bound over GF(2), so a decomposition of length `rank + 1`
-/// exists. The same-rank proof in `docs/transvection-minimality-correction.md` shows that its
-/// defining vectors span `Res(F)`. Delete a factor so that the remaining defining vectors form a
-/// basis, then conjugate the deleted vector through the suffix. This gives a vector in `Res(F)`
-/// whose transvection leaves a rank-`r` product of `r` independent factors.
+/// Exhaustive tests cover this step on one, two, and three qubits only.
+/// The repository contains no proof for more qubits.
+/// If the search exhausts its candidates, it panics.
+/// For a valid input, that panic leaves the existence question open for that input.
+/// See `docs/transvection-minimality-correction.md` for the evidence and its limits.
 ///
 /// Candidates are the nonzero residue vectors in ascending binary-coordinate order. The search is
 /// exhaustive over `Res(F)`.
