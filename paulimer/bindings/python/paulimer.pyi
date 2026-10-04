@@ -1325,8 +1325,10 @@ class PhasedOutcomeCompleteSimulation:
             output_qubits: System qubits carrying the circuit's output.
 
         Raises:
-            ValueError: If the non-output system qubits remain entangled with the rest of
-                the state.
+            ValueError: If ``input_qubits`` or ``output_qubits`` names a qubit twice, if
+                the simulation has fewer than ``system_qubit_count + len(input_qubits)``
+                qubits, or if the non-output system qubits remain entangled with the rest
+                of the state.
         """
         ...
 

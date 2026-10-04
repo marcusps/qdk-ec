@@ -1144,3 +1144,46 @@ fn an_angle_named_three_times_in_one_control_is_one_use() {
         "a second use of the angle must be reported, got {result:?}"
     );
 }
+
+/// Supports that do not describe a Choi-state layout must be reported as errors. Each case once
+/// panicked inside canonicalization or produced an action for a layout that does not exist.
+#[test]
+fn phased_action_from_simulation_rejects_invalid_qubits() {
+    let mut one_qubit = PhasedOutcomeCompleteSimulation::new(1);
+    one_qubit.unitary_op(UnitaryOp::Hadamard, &[0]);
+    let mut three_qubits = PhasedOutcomeCompleteSimulation::new(3);
+    three_qubits.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    three_qubits.unitary_op(UnitaryOp::PrepareBell, &[0, 2]);
+
+    let cases: [(&str, &PhasedOutcomeCompleteSimulation, &[QubitId], &[QubitId]); 4] = [
+        ("output outside the simulation", &one_qubit, &[], &[5]),
+        ("reference qubit outside the simulation", &one_qubit, &[0], &[0]),
+        ("repeated input", &three_qubits, &[0, 0], &[0]),
+        ("repeated output", &one_qubit, &[], &[0, 0]),
+    ];
+    for (name, simulation, inputs, outputs) in cases {
+        let result = phased_action_from_simulation(simulation, inputs, outputs);
+        assert!(
+            matches!(
+                &result,
+                Err(ActionError::InvalidQubits { input_qubits, output_qubits })
+                    if input_qubits == inputs && output_qubits == outputs
+            ),
+            "{name}: expected InvalidQubits, got {result:?}"
+        );
+    }
+
+    phased_action_from_simulation(&one_qubit, &[], &[0]).expect("a valid layout has an action");
+
+    let circuit = build_circuit(|builder| builder.unitary_op(UnitaryOp::Hadamard, &[0]));
+    let repeated_output = phased_action_of(&circuit, &[0], &[0, 0]);
+    assert!(
+        matches!(repeated_output, Err(ActionError::InvalidQubits { .. })),
+        "a circuit with a repeated output must be reported, got {repeated_output:?}"
+    );
+    let repeated_input = phased_action_of(&circuit, &[0, 0], &[0]);
+    assert!(
+        matches!(repeated_input, Err(ActionError::InvalidQubits { .. })),
+        "a circuit with a repeated input must be reported, got {repeated_input:?}"
+    );
+}

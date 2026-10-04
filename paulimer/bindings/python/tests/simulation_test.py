@@ -465,6 +465,21 @@ class TestPhasedCircuitAction:
         assert positive.is_equivalent_up_to_signs(negative)
         assert not positive.is_equivalent(negative)
 
+    @pytest.mark.parametrize(
+        "qubit_count, input_qubits, output_qubits",
+        [
+            (1, [], [5]),
+            (1, [0], [0]),
+            (3, [0, 0], [0]),
+            (1, [], [0, 0]),
+        ],
+        ids=["output-out-of-range", "reference-out-of-range", "repeated-input", "repeated-output"],
+    )
+    def test_phased_action_rejects_invalid_qubits(self, qubit_count, input_qubits, output_qubits):
+        sim = PhasedOutcomeCompleteSimulation(qubit_count)
+        with pytest.raises(ValueError, match="InvalidQubits"):
+            sim.phased_action(input_qubits, output_qubits)
+
     def test_action_is_self_equivalent(self):
         action = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0 Z_1"), a), n=2)
         assert action.is_equivalent(action)

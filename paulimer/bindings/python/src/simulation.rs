@@ -458,7 +458,9 @@ impl_simulation!(
         #[allow(clippy::needless_pass_by_value)]
         /// # Errors
         ///
-        /// Returns a `ValueError` if the non-output system qubits remain entangled.
+        /// Returns a `ValueError` if `input_qubits` or `output_qubits` names a qubit twice, if the
+        /// simulation does not hold every system and reference qubit, or if the non-output system
+        /// qubits remain entangled.
         pub fn phased_action(
             &self,
             input_qubits: Vec<usize>,
