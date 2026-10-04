@@ -364,7 +364,23 @@ The bounded five-block process reached 259 MiB peak resident memory before termi
 That result gives a lower bound on elapsed time, not a completion estimate or a memory upper bound.
 Without the guard, the same three- and four-block probes took 0.017 and 7.694 seconds and returned the same factor counts.
 A separate pre-guard review stopped the five-block case after 25 minutes and reported 3.0 GB peak resident memory.
+The two five-block reports agree with a peak memory growth of roughly 1.9 MiB per second.
 Neither interrupted run establishes the completed decomposition or its total cost.
+
+A SWAP layer applies `SWAP` to every disjoint qubit pair.
+These times come from the `ci-test` profile on the same host.
+
+| Qubits | Factors | Elapsed time |
+| --- | --- | --- |
+| 32 | 33 | 1.156 seconds |
+| 34 | 35 | 2.474 seconds |
+| 36 | 37 | 5.501 seconds |
+| 38 | 39 | 12.361 seconds |
+| 40 | 41 | 27.766 seconds |
+
+Every added pair of qubits multiplies the elapsed time by about 2.2.
+So alternating pruning removes the initial scan, and a SWAP layer still costs exponential time.
+Do not read the 32-qubit entry as evidence that SWAP layers are cheap.
 Use the greedy decomposition when strict minimality is not required.
 
 ## 8. References
