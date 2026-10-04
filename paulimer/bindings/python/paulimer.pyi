@@ -1330,6 +1330,7 @@ class PhasedOutcomeCompleteSimulation:
                 the simulation has fewer than ``system_qubit_count + len(input_qubits)``
                 qubits, if the non-output system qubits remain entangled with the rest of
                 the state, or if a symbolic angle parameterises no exponent or more than one.
+                The message names a symbolic angle by its :attr:`SymbolicAngle.index`.
         """
         ...
 

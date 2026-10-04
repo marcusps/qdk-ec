@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use binar::{BitMatrix, BitVec};
 use paulimer::clifford::CliffordUnitary;
-use pauliverse::action::{phased_action_from_simulation, PhasedCircuitAction};
+use pauliverse::action::{phased_action_from_simulation, ActionError, PhasedCircuitAction};
 use pauliverse::outcome_complete_simulation::OutcomeCompleteSimulation;
 use pauliverse::outcome_free_simulation::OutcomeFreeSimulation;
 use pauliverse::outcome_specific_simulation::OutcomeSpecificSimulation;
@@ -469,9 +469,27 @@ impl_simulation!(
         ) -> PyResult<PyPhasedCircuitAction> {
             phased_action_from_simulation(&self.inner, &input_qubits, &output_qubits)
                 .map(|action| PyPhasedCircuitAction { inner: action })
-                .map_err(|error| PyValueError::new_err(format!("{error:?}")))
+                .map_err(|error| PyValueError::new_err(phased_action_error_message(&error, &self.symbolic_angles())))
         }
 });
+
+/// Rust errors name a symbolic angle by its outcome id. Python callers know the angle by its
+/// `index`, so the message translates the id.
+fn phased_action_error_message(error: &ActionError, angles: &[PySymbolicAngle]) -> String {
+    let (outcome, problem) = match error {
+        ActionError::SymbolicAngleReused { angle } => (*angle, "parameterises more than one exponent"),
+        ActionError::SymbolicAngleUnused { angle } => (*angle, "parameterises no exponent"),
+        ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle } => (
+            *angle,
+            "reaches a discarded qubit, so discarding that qubit would decohere the angle",
+        ),
+        _ => return format!("{error:?}"),
+    };
+    match angles.iter().find(|angle| angle.outcome == outcome) {
+        Some(angle) => format!("symbolic angle {} {problem}", angle.index),
+        None => format!("{error:?}"),
+    }
+}
 
 #[derive(derive_more::From)]
 #[must_use]
