@@ -298,11 +298,18 @@ impl PyCliffordUnitary {
     /// action of this Clifford. Pauli-image signs and the global phase are not reproduced.
     ///
     /// This is a greedy reduction, not a minimal-length algorithm.
-    fn to_transvections(&self) -> Vec<PySparsePauli> {
-        clifford_to_transvections(&self.inner)
+    ///
+    /// # Errors
+    ///
+    /// Returns a `ValueError` if the Clifford tableau is invalid.
+    fn to_transvections(&self) -> PyResult<Vec<PySparsePauli>> {
+        if !self.inner.is_valid() {
+            return Err(PyValueError::new_err("the Clifford tableau is invalid"));
+        }
+        Ok(clifford_to_transvections(&self.inner)
             .into_iter()
             .map(PySparsePauli::from)
-            .collect()
+            .collect())
     }
 
     /// Returns generators of this Clifford's fixed space, the Paulis fixed up to sign under conjugation.

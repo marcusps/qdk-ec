@@ -600,6 +600,9 @@ class CliffordUnitary:
         factors. Pauli-image signs and the global phase are not reproduced.
 
         This is a greedy reduction, not a minimal-length algorithm.
+
+        Raises:
+            ValueError: If the Clifford tableau is invalid.
         """
         ...
 

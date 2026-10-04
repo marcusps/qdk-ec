@@ -4,6 +4,7 @@ The decomposition reproduces a Clifford's symplectic (conjugation) action with a
 pi/4 Pauli exponents, ignoring Pauli-image signs and the global phase.
 """
 
+import pytest
 from binar import BitMatrix, rank
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -51,6 +52,12 @@ def test_identity_has_no_transvections():
         identity = CliffordUnitary.identity(qubit_count)
         assert identity.to_transvections() == []
         assert len(identity.fixed_space()) == 2 * qubit_count
+
+
+def test_invalid_transvection_tableau_is_value_error():
+    with pytest.raises(ValueError, match="the Clifford tableau is invalid"):
+        CliffordUnitary.zero(1).to_transvections()
+    assert CliffordUnitary.identity(0).to_transvections() == []
 
 
 def test_single_qubit_gate_lengths():
