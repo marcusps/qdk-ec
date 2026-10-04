@@ -234,8 +234,8 @@ of the four transvections $X_0,\,X_1,\,X_0X_1,\,Z_0$ found by the search) and ca
 decomposer reproduces exactly this behaviour:
 
 ```text
-residue rank r         = 3          # 2*qubit_count - |centralizer|
-centralizer size       = 1          # = 2m - r
+residue rank r         = 3          # 2*qubit_count - len(fixed_space())
+fixed-space dimension = 1          # = 2m - r
 to_transvections       len = 4
 to_transvections_minimal len = 4    # = r + 1, not r
 ```
