@@ -17,8 +17,9 @@ However, the construction given in and immediately before **Theorem 3** assumes
 that every non-hyperbolic binary symplectic map has a length-$r$
 decomposition. Callan explicitly classifies non-hyperbolic exceptions, and the
 assumption fails on two qubits. This note gives the residue-core criterion that
-the implementation uses instead. It records finite exhaustive verification
-through $m\leq 3$. It does not prove the paper's non-hyperbolic criterion.
+the implementation uses instead. It provides exhaustive tests through three qubits.
+The three-qubit test requires an explicit run because it is ignored by default.
+This note does not prove the paper's non-hyperbolic criterion.
 
 All matrices below are over $\mathbb{F}_2$.
 
@@ -51,7 +52,7 @@ hyperbolic/non-hyperbolic classification, not the universal $r$/$r+1$ range.
 The smallest non-hyperbolic example already occurs on two qubits, with
 $r=3$ and $\ell(\mathbf F)=4$.
 
-The criterion we adopt in the implementation, verified exhaustively for $m\leq 3$, is:
+The implementation uses this criterion:
 
 > The minimal length is $r$ **iff** the invertible residue core $\mathbf E$ is
 > congruence-lower-triangularizable over $\mathbb{F}_2$; otherwise our construction returns a
@@ -59,9 +60,11 @@ The criterion we adopt in the implementation, verified exhaustively for $m\leq 3
 > element is a special $r+1$ sub-case, but it is **not** the only one: non-alternating cores can
 > fail to be triangularizable too.
 
-The criterion itself is algebraic and carries no dimension limit. Exhaustive enumeration of
-$\mathrm{Sp}(2m;2)$ for $m\leq 3$ confirms it and confirms strict minimality on those finite
-domains. The repository ships no machine-checked proof artifact.
+The criterion itself is algebraic and carries no dimension limit.
+Default tests compare every one- and two-qubit action with an independent shortest-path oracle.
+The ignored three-qubit test extends that comparison to $\mathrm{Sp}(6;2)$.
+Section 7 records its explicit replay run and the limits of earlier evidence.
+The repository ships no machine-checked proof artifact.
 
 The Rust implementation therefore keeps its complete congruence search and its
 $r+1$ fallback. A rollback to the paper's non-hyperbolic branch is not warranted.
@@ -332,7 +335,8 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
 - **Triangularization by complete search.** `congruence_triangularize` performs an exhaustive
   backtracking search for $\mathbf Q$: at each node it enumerates all $\psi$-non-isotropic pivots,
   recurses into the right-orthogonal complement, and **memoizes subspaces proven untriangularizable**
-  by a canonical row-reduced key.
+  by a canonical row-reduced key. An alternating restriction has no non-isotropic pivot.
+  The search detects it from symmetry and zero diagonal, then memoizes failure without enumerating its span.
 - **The $r+1$ fix vector.** When (and only when) no $\mathbf Q$ exists, `find_fix_vector` appends one
   extra transvection $\mathbf T_{\mathbf w}$ chosen so that the residue-preserving update
   $\mathbf F\mathbf T_{\mathbf w}$ *becomes* triangularizable at the same rank, and recurses. This is
@@ -349,9 +353,11 @@ The termination argument is the same-rank construction above.
 It places a successful fix vector inside the residue space that the implementation searches.
 It gives no practical time bound for that search.
 
-The finite part is computational. The test suite compares the result against a brute-force BFS
-oracle on every one- and two-qubit symplectic action. Retained evidence covers all of
-$\mathrm{Sp}(6;2)$. These runs are regression and finite-domain evidence only.
+The finite evidence comes from tests, not from the existence proof.
+The default suite compares every one- and two-qubit action with a breadth-first search (BFS) oracle.
+The three-qubit oracle is ignored by default, so a passing default suite does not establish its result.
+Before the replay assertion, that oracle tested factor count and Hermiticity but did not establish that the returned factors reproduced each action.
+The current oracle also replays every decomposition and compares its symplectic action with the BFS element.
 
 The repository ships no proof artifact, so the result is not machine-checked.
 
@@ -376,8 +382,35 @@ The exhaustive three-qubit check runs as an ignored integration test:
 cargo test --profile ci-test -p paulimer --test transvection_test -- --ignored
 ```
 
-It visits all 1,451,520 elements of $\mathrm{Sp}(6;2)$ and takes a few minutes. The repository
-provides no formal proof command.
+It visits all 1,451,520 elements of $\mathrm{Sp}(6;2)$.
+An explicit run on 2026-10-04 passed with replay, tableau validity, and minimal-length assertions enabled.
+That run took 235 seconds on Linux x86_64 with an AMD EPYC 7763 and Rust 1.99.0.
+The test remains ignored by default and supplies finite-domain evidence only.
+The repository provides no formal proof command.
+
+### Measured search limits
+
+Alternating pruning removes the initial span scan for SWAP layers.
+It does not give a polynomial bound for the remaining search.
+Disjoint sums of the class-A example in Section 4 still require substantial search.
+Each two-qubit block applies the transvections $X_0$, $X_1$, $X_0X_1$, and $Z_0$ in that order.
+For several blocks, apply the same sequence on disjoint qubit pairs.
+
+These measurements use the release Python extension on the same Linux host, after alternating pruning.
+The elapsed times cover `to_transvections_minimal()`.
+
+| Class-A blocks | Qubits | Residue rank | Factors | Elapsed time |
+| --- | --- | --- | --- | --- |
+| 3 | 6 | 9 | 9 | 0.013 seconds |
+| 4 | 8 | 12 | 12 | 7.367 seconds |
+| 5 | 10 | 15 | Not obtained | Stopped at 120 seconds |
+
+The bounded five-block process reached 259 MiB peak resident memory before termination.
+That result gives a lower bound on elapsed time, not a completion estimate or a memory upper bound.
+Without the guard, the same three- and four-block probes took 0.017 and 7.694 seconds and returned the same factor counts.
+A separate pre-guard review stopped the five-block case after 25 minutes and reported 3.0 GB peak resident memory.
+Neither interrupted run establishes the completed decomposition or its total cost.
+Use the greedy decomposition when strict minimality is not required.
 
 ## 8. References
 
