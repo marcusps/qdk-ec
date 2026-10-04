@@ -262,7 +262,7 @@ The Rust implementation explores every non-isotropic pivot and memoizes
 subspaces already proved unsolvable, so its decision procedure does not depend
 on a greedy choice. The earlier version of this note cited a specific
 proptest regression file that is no longer present; that historical claim is
-not needed for the paper counterexample or the correctness argument here.
+not needed for the paper counterexample or for any statement in this note.
 
 ## 6. Corrected result and implementation
 
@@ -283,8 +283,9 @@ The step succeeds on every action in these finite domains.
 The repository contains no proof for more qubits.
 
 `find_fix_vector` panics if its search exhausts all candidates.
-For a valid input, such a panic leaves the existence question open for that input.
-It does not establish that only an implementation detail is wrong.
+The open question is whether `Res(F)` always contains a fix vector of the same residue rank.
+This repository does not answer it beyond three qubits.
+So a panic on a valid input does not show that only an implementation detail is wrong.
 
 ### Implementation and evidence
 

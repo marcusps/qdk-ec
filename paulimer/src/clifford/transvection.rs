@@ -267,7 +267,7 @@ fn acts_trivially_on(pauli: &SparsePauli, image: &DensePauli) -> bool {
 /// The search also panics if it exhausts its candidates for a valid input.
 /// Exhaustive tests cover the residue fix step on one, two, and three qubits only.
 /// The repository contains no proof for more qubits.
-/// For a valid input, exhaustion leaves the existence question open for that input.
+/// The open question is whether `Res(F)` always contains a fix vector of the same residue rank.
 /// See `docs/transvection-minimality-correction.md` for the evidence and its limits.
 ///
 /// # Running time and memory
@@ -662,7 +662,7 @@ fn minimal_decomposition(action: &AlignedBitMatrix, qubit_count: usize) -> Vec<V
 /// Exhaustive tests cover this step on one, two, and three qubits only.
 /// The repository contains no proof for more qubits.
 /// If the search exhausts its candidates, it panics.
-/// For a valid input, that panic leaves the existence question open for that input.
+/// The open question is whether `Res(F)` always contains a fix vector of the same residue rank.
 /// See `docs/transvection-minimality-correction.md` for the evidence and its limits.
 ///
 /// Candidates are the nonzero residue vectors in ascending binary-coordinate order. The search is
