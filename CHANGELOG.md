@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `clifford_to_transvections` in paulimer, with `CliffordUnitary.to_transvections()` in the Python bindings, decomposing a Clifford's symplectic action into a linear number of Hermitian Pauli generators of `π/4` exponents.
-- `clifford_centralizer` in paulimer, with `CliffordUnitary.centralizer()` in the Python bindings, returning Hermitian generators of the Pauli operators that conjugation fixes up to sign.
+- `clifford_fixed_space` in paulimer, with `CliffordUnitary.fixed_space()` in the Python bindings, returning Hermitian generators of the Pauli operators that conjugation fixes up to sign.
 - `Bitwise::aligned_words` and `BitwiseMut::aligned_words_mut` in binar, which return the words of bit vectors and views stored in aligned blocks.
 
 ### Changed

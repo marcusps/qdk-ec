@@ -95,8 +95,12 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
     recorded
 }
 
-/// Returns generators of the Clifford's centralizer: the Pauli operators fixed (up to sign) by
-/// conjugation, i.e. the `P` with `clifford · P · clifford† = ±P`.
+/// Returns generators of the fixed space `Fix(F)`: Paulis with `clifford · P · clifford† = ±P`.
+///
+/// This is the projective centralizer of the Clifford in the Pauli group with phase quotiented out.
+/// In contrast, [`crate::pauli_group::centralizer_of`] requires exact commutation.
+/// For example, Clifford `X` fixes `Z` up to sign because `X Z X = -Z`.
+/// Thus `Z` belongs to this fixed space but not to the centralizer of `X`.
 ///
 /// This is `Fix(F)`, the kernel of the residue map `P ↦ conj(P) · P`, computed as the left null
 /// space of the residue matrix over GF(2). The returned Paulis are independent positive Hermitian
@@ -108,12 +112,12 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
 ///
 /// ```
 /// use paulimer::{CliffordUnitary, Pauli};
-/// use paulimer::clifford::{clifford_centralizer, Clifford, CliffordMutable};
+/// use paulimer::clifford::{clifford_fixed_space, Clifford, CliffordMutable};
 ///
 /// let mut clifford = CliffordUnitary::identity(1);
 /// clifford.left_mul_root_z(0); // S fixes Z, sends X -> Y
 ///
-/// let generators = clifford_centralizer(&clifford);
+/// let generators = clifford_fixed_space(&clifford);
 /// // Every generator is fixed (up to sign) under conjugation.
 /// assert!(generators.iter().all(|pauli| {
 ///     let image = clifford.image(pauli);
@@ -121,7 +125,7 @@ pub fn clifford_to_transvections(clifford: &CliffordUnitary) -> Vec<SparsePauli>
 /// }));
 /// ```
 #[must_use]
-pub fn clifford_centralizer(clifford: &CliffordUnitary) -> Vec<SparsePauli> {
+pub fn clifford_fixed_space(clifford: &CliffordUnitary) -> Vec<SparsePauli> {
     let qubit_count = clifford.num_qubits();
     let dimension = 2 * qubit_count;
     let mut residue = AlignedBitMatrix::zeros(dimension, dimension);

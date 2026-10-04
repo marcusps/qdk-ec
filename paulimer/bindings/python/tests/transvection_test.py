@@ -19,7 +19,7 @@ def _rebuild_from_transvections(transvections, qubit_count):
 
 
 def _residue_rank(clifford):
-    """The residue rank ``rank(I + F)``, computed independently of ``centralizer()``."""
+    """The residue rank ``rank(I + F)``, computed independently of ``fixed_space()``."""
     residue = clifford.symplectic_matrix ^ BitMatrix.identity(2 * clifford.qubit_count)
     return rank(residue)
 
@@ -50,7 +50,7 @@ def test_identity_has_no_transvections():
     for qubit_count in range(5):
         identity = CliffordUnitary.identity(qubit_count)
         assert identity.to_transvections() == []
-        assert len(identity.centralizer()) == 2 * qubit_count
+        assert len(identity.fixed_space()) == 2 * qubit_count
 
 
 def test_single_qubit_gate_lengths():
@@ -63,12 +63,19 @@ def test_single_qubit_gate_lengths():
     assert len(hadamard.to_transvections()) == 1
 
 
+def test_fixed_space_of_pauli_x_includes_z():
+    clifford = CliffordUnitary.from_name("X", [0], 1)
+    pauli_z = SparsePauli("Z_0")
+    assert pauli_z in clifford.fixed_space()
+    assert SparsePauli.from_dense(clifford.image_of(pauli_z)) == -pauli_z
+
+
 def test_swap_hyperbolic_branch():
     swap = CliffordUnitary.from_name("Swap", [0, 1], 2)
     _assert_valid_decomposition(swap)
     assert _residue_rank(swap) == 2
     assert len(swap.to_transvections()) == 3
-    assert len(swap.centralizer()) == 2
+    assert len(swap.fixed_space()) == 2
 
 
 def test_two_qubit_gates():
@@ -77,24 +84,24 @@ def test_two_qubit_gates():
         _assert_valid_decomposition(clifford)
 
 
-def test_centralizer_generators_are_conjugation_fixed():
+def test_fixed_space_generators_are_conjugation_fixed():
     clifford = CliffordUnitary.identity(3)
     clifford.left_mul(UnitaryOpcode.Hadamard, [0])
     clifford.left_mul(UnitaryOpcode.ControlledX, [0, 1])
     clifford.left_mul(UnitaryOpcode.SqrtZ, [2])
-    centralizer = clifford.centralizer()
-    assert all(_is_conjugation_fixed(clifford, pauli) for pauli in centralizer)
-    assert all(pauli.weight > 0 for pauli in centralizer)
-    assert all(pauli.phase == 1 for pauli in centralizer)
-    assert len(centralizer) == 2 * clifford.qubit_count - _residue_rank(clifford)
+    fixed_space = clifford.fixed_space()
+    assert all(_is_conjugation_fixed(clifford, pauli) for pauli in fixed_space)
+    assert all(pauli.weight > 0 for pauli in fixed_space)
+    assert all(pauli.phase == 1 for pauli in fixed_space)
+    assert len(fixed_space) == 2 * clifford.qubit_count - _residue_rank(clifford)
 
 
-def test_centralizer_generators_of_a_y_axis_rotation_are_hermitian():
+def test_fixed_space_generators_of_a_y_axis_rotation_are_hermitian():
     clifford = CliffordUnitary.from_name("SqrtY", [0], 1)
-    centralizer = clifford.centralizer()
-    assert len(centralizer) == 1
-    assert _is_conjugation_fixed(clifford, centralizer[0])
-    assert centralizer[0].phase == 1
+    fixed_space = clifford.fixed_space()
+    assert len(fixed_space) == 1
+    assert _is_conjugation_fixed(clifford, fixed_space[0])
+    assert fixed_space[0].phase == 1
 
 
 _SINGLE_QUBIT_GATES = ["Hadamard", "SqrtZ", "SqrtX", "X", "Y", "Z"]
@@ -129,7 +136,7 @@ def test_random_cliffords_reproduce_symplectic_action(clifford):
 
 @settings(max_examples=200)
 @given(_random_clifford())
-def test_random_centralizers_are_conjugation_fixed(clifford):
-    for generator in clifford.centralizer():
+def test_random_fixed_spaces_are_conjugation_fixed(clifford):
+    for generator in clifford.fixed_space():
         assert _is_conjugation_fixed(clifford, generator)
         assert generator.weight > 0

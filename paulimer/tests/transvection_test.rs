@@ -9,7 +9,7 @@
 use binar::Bitwise;
 use binar::matrix::AlignedBitMatrix;
 use paulimer::UnitaryOp;
-use paulimer::clifford::{Clifford, CliffordMutable, CliffordUnitary, clifford_centralizer, clifford_to_transvections};
+use paulimer::clifford::{Clifford, CliffordMutable, CliffordUnitary, clifford_fixed_space, clifford_to_transvections};
 use paulimer::pauli::{Pauli, SparsePauli};
 use proptest::collection::vec;
 use proptest::prelude::*;
@@ -38,7 +38,7 @@ fn is_non_identity(pauli: &SparsePauli) -> bool {
 /// The residue rank `r = rank(I + F)` of the symplectic action.
 ///
 /// This is computed from the symplectic matrix alone so that it stays independent of
-/// [`clifford_centralizer`]; deriving it from the centralizer length would make the fixed-space
+/// [`clifford_fixed_space`]; deriving it from the fixed-space dimension would make the fixed-space
 /// dimension assertions tautological.
 fn residue_rank(clifford: &CliffordUnitary) -> usize {
     let mut residue = clifford.symplectic_matrix();
@@ -98,9 +98,9 @@ fn identity_decomposes_to_no_transvections() {
             transvections.is_empty(),
             "identity has no transvections (qubit_count {qubit_count})"
         );
-        let centralizer = clifford_centralizer(&identity);
+        let fixed_space = clifford_fixed_space(&identity);
         assert_eq!(
-            centralizer.len(),
+            fixed_space.len(),
             2 * qubit_count,
             "identity commutes with all {qubit_count} Pauli generators"
         );
@@ -140,11 +140,22 @@ fn pauli_gates_are_conjugation_trivial() {
             "Pauli axis {axis} needs no factor"
         );
         assert_eq!(
-            clifford_centralizer(&clifford).len(),
+            clifford_fixed_space(&clifford).len(),
             2,
-            "a Pauli commutes with all generators"
+            "a Pauli fixes every generator up to sign"
         );
     }
+}
+
+#[test]
+fn fixed_space_of_pauli_x_includes_z() {
+    let mut clifford = CliffordUnitary::identity(1);
+    clifford.left_mul_pauli(&SparsePauli::x(0, 1));
+    let pauli_z = SparsePauli::z(0, 1);
+
+    let fixed_space = clifford_fixed_space(&clifford);
+    assert!(fixed_space.contains(&pauli_z));
+    assert_eq!(SparsePauli::from(clifford.image(&pauli_z)), -pauli_z);
 }
 
 #[test]
@@ -156,7 +167,7 @@ fn swap_exercises_the_hyperbolic_branch() {
     assert_valid_decomposition(&swap);
     assert_eq!(residue_rank(&swap), 2);
     assert_eq!(clifford_to_transvections(&swap).len(), 3);
-    assert_eq!(clifford_centralizer(&swap).len(), 2);
+    assert_eq!(clifford_fixed_space(&swap).len(), 2);
 }
 
 #[test]
@@ -183,42 +194,42 @@ fn composite_circuit_reproduces_symplectic_action() {
 }
 
 #[test]
-fn centralizer_generators_are_conjugation_fixed_and_independent() {
+fn fixed_space_generators_are_conjugation_fixed_and_independent() {
     let mut clifford = CliffordUnitary::identity(3);
     clifford.left_mul_hadamard(0);
     clifford.left_mul_cx(0, 1);
     clifford.left_mul_root_z(2);
 
-    let centralizer = clifford_centralizer(&clifford);
-    assert!(centralizer.iter().all(|pauli| is_conjugation_fixed(&clifford, pauli)));
-    assert!(centralizer.iter().all(is_non_identity));
+    let fixed_space = clifford_fixed_space(&clifford);
+    assert!(fixed_space.iter().all(|pauli| is_conjugation_fixed(&clifford, pauli)));
+    assert!(fixed_space.iter().all(is_non_identity));
     assert_eq!(
-        centralizer.len(),
+        fixed_space.len(),
         2 * clifford.num_qubits() - residue_rank(&clifford),
         "the fixed space has dimension 2n - rank(I + F)"
     );
     assert_eq!(
-        binary_rank(&centralizer, clifford.num_qubits()),
-        centralizer.len(),
+        binary_rank(&fixed_space, clifford.num_qubits()),
+        fixed_space.len(),
         "the generators must be independent"
     );
     assert!(
-        centralizer.iter().all(|pauli| pauli.xyz_phase_exponent() == 0),
-        "centralizer generators must be positive Hermitian observables"
+        fixed_space.iter().all(|pauli| pauli.xyz_phase_exponent() == 0),
+        "fixed-space generators must be positive Hermitian observables"
     );
 }
 
 #[test]
-fn centralizer_generators_of_a_y_axis_rotation_are_hermitian() {
+fn fixed_space_generators_of_a_y_axis_rotation_are_hermitian() {
     let mut clifford = CliffordUnitary::identity(1);
     clifford.left_mul(UnitaryOp::SqrtY, &[0]);
 
-    let centralizer = clifford_centralizer(&clifford);
-    assert_eq!(centralizer.len(), 1, "a sqrt(Y) rotation fixes exactly the Y axis");
-    assert!(is_conjugation_fixed(&clifford, &centralizer[0]));
-    assert!(centralizer[0].is_order_two(), "the generator must be Hermitian");
+    let fixed_space = clifford_fixed_space(&clifford);
+    assert_eq!(fixed_space.len(), 1, "a sqrt(Y) rotation fixes exactly the Y axis");
+    assert!(is_conjugation_fixed(&clifford, &fixed_space[0]));
+    assert!(fixed_space[0].is_order_two(), "the generator must be Hermitian");
     assert_eq!(
-        centralizer[0].xyz_phase_exponent(),
+        fixed_space[0].xyz_phase_exponent(),
         0,
         "the generator must be the positive Hermitian representative"
     );
@@ -297,14 +308,14 @@ proptest! {
     }
 
     #[test]
-    fn centralizer_is_conjugation_fixed((qubit_count, gates) in scenario()) {
+    fn fixed_space_is_conjugation_fixed((qubit_count, gates) in scenario()) {
         let clifford = clifford_from_gates(qubit_count, &gates);
-        let centralizer = clifford_centralizer(&clifford);
-        prop_assert_eq!(centralizer.len(), 2 * qubit_count - residue_rank(&clifford));
-        prop_assert_eq!(binary_rank(&centralizer, qubit_count), centralizer.len());
-        for generator in centralizer {
+        let fixed_space = clifford_fixed_space(&clifford);
+        prop_assert_eq!(fixed_space.len(), 2 * qubit_count - residue_rank(&clifford));
+        prop_assert_eq!(binary_rank(&fixed_space, qubit_count), fixed_space.len());
+        for generator in fixed_space {
             prop_assert!(is_conjugation_fixed(&clifford, &generator));
-            prop_assert!(is_non_identity(&generator), "centralizer generators must be non-identity");
+            prop_assert!(is_non_identity(&generator), "fixed-space generators must be non-identity");
             prop_assert_eq!(generator.xyz_phase_exponent(), 0);
         }
     }

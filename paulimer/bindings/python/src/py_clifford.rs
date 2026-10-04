@@ -1,6 +1,6 @@
 use derive_more::{Deref, DerefMut, From, Into};
 use paulimer::clifford::{
-    clifford_centralizer, clifford_to_transvections, group_encoding_clifford_of, split_phased_css,
+    clifford_fixed_space, clifford_to_transvections, group_encoding_clifford_of, split_phased_css,
     split_qubit_cliffords_and_css, Clifford, CliffordMutable, CliffordUnitary, XOrZ,
 };
 use paulimer::pauli::{as_sparse, DensePauli, SparsePauli};
@@ -305,12 +305,16 @@ impl PyCliffordUnitary {
             .collect()
     }
 
-    /// Returns generators of this Clifford's centralizer: the Pauli operators fixed up to sign under
-    /// conjugation (``clifford * P * clifford_dagger == +/- P``).
+    /// Returns generators of this Clifford's fixed space, the Paulis fixed up to sign under conjugation.
+    ///
+    /// This is the projective centralizer in the Pauli group with phase quotiented out.
+    /// In contrast, ``centralizer_of`` requires exact commutation.
+    /// Clifford ``X`` fixes ``Z`` up to sign because ``X Z X = -Z``.
+    /// Thus ``Z`` belongs to the fixed space but not to the centralizer of ``X``.
     ///
     /// The generators are independent Hermitian observables with phase ``1``.
-    fn centralizer(&self) -> Vec<PySparsePauli> {
-        clifford_centralizer(&self.inner)
+    fn fixed_space(&self) -> Vec<PySparsePauli> {
+        clifford_fixed_space(&self.inner)
             .into_iter()
             .map(PySparsePauli::from)
             .collect()

@@ -603,8 +603,13 @@ class CliffordUnitary:
         """
         ...
 
-    def centralizer(self) -> list[SparsePauli]:
-        """Generators of the centralizer: Paulis fixed up to sign under conjugation.
+    def fixed_space(self) -> list[SparsePauli]:
+        """Generators of ``Fix(F)``, the Paulis fixed up to sign under conjugation.
+
+        This is the projective centralizer in the Pauli group with phase quotiented out.
+        In contrast, :func:`centralizer_of` requires exact commutation.
+        Clifford ``X`` fixes ``Z`` up to sign because ``X Z X = -Z``.
+        Thus ``Z`` belongs to the fixed space but not to the centralizer of ``X``.
 
         The generators are independent Hermitian observables with phase ``1``.
         """
