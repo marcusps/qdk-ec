@@ -482,6 +482,36 @@ fn captured_regression_one() {
     );
 }
 
+/// A hinted measurement must reproduce the dense state on every branch for both signs of the hint.
+/// The negative-hint cases fail when the branch sign `(-1)^⟨a ⊕ 1, r⟩` of a negative hint is
+/// dropped. The positive-hint cases are controls that do not depend on that sign.
+#[test]
+fn measure_with_hint_matches_dense_state_for_both_hint_signs() {
+    for hint_sign in ["", "-"] {
+        let hinted = |observable: &str, hint: &str| Op::MeasureHinted(observable.into(), format!("{hint_sign}{hint}"));
+        verify(&[hinted("X", "Z")], 1);
+        verify(&[hinted("Y", "Z")], 1);
+        verify(&[hinted("-X", "Z")], 1);
+        verify(
+            &[
+                Op::Gate(UnitaryOp::Hadamard, vec![0]),
+                Op::Measure("Z".into()),
+                hinted("X", "Z"),
+            ],
+            1,
+        );
+        verify(
+            &[
+                Op::Gate(UnitaryOp::Hadamard, vec![0]),
+                Op::Gate(UnitaryOp::ControlledX, vec![0, 1]),
+                Op::Measure("XI".into()),
+                hinted("ZI", "XX"),
+            ],
+            2,
+        );
+    }
+}
+
 #[test]
 fn phased_outcome_complete_tracks_dense_statevector() {
     let mut rng = rand::rng();

@@ -362,9 +362,11 @@ impl PhasedOutcomeCompleteSimulation {
     /// Measures a Pauli observable using an anti-commuting hint operator, tracking the exact phase.
     ///
     /// Implements case 5 of Algorithm 4.2. Given an anti-commuting hint `P'` with preimage
-    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← e^{iπ/4 (i P' P)} R`, the quadratic
-    /// and linear `-1` phases absorb the outcome-dependent stabiliser sign, and the `(-1)^α` sign
-    /// relabels the reported outcome (`m = r ⊕ α`) via `outcome_shift` rather than a global phase.
+    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← e^{iπ/4 (i P' P)} R` and the
+    /// quadratic and linear `-1` phases absorb the outcome-dependent stabiliser sign. A negative hint
+    /// (`α = 1`) also adds the branch sign `(-1)^⟨a ⊕ 1, r⟩` to the linear `-1` phase `s`. The hint
+    /// sign does not change `outcome_shift`: for either sign the reported outcome is the new random
+    /// bit.
     ///
     /// # Panics
     ///
