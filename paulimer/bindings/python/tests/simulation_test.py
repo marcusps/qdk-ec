@@ -320,6 +320,17 @@ class TestPhasedOutcomeCompleteSimulationSpecific:
         # The trivial assignment never contributes a phase.
         assert sim.output_phase_exponent([False]) == 0
 
+    def test_output_phase_exponent_rejects_short_random_bits(self):
+        sim = PhasedOutcomeCompleteSimulation(2)
+        sim.measure(SparsePauli("X_0"))
+        sim.measure(SparsePauli("X_1"))
+        assert sim.random_outcome_count == 2
+        with pytest.raises(ValueError, match="random_bits has length 1, but the simulation has 2 random outcomes"):
+            sim.output_phase_exponent([True])
+        with pytest.raises(ValueError, match="random_bits has length 0"):
+            sim.output_phase_exponent([])
+        assert sim.output_phase_exponent([False, False, True]) == sim.output_phase_exponent([False, False])
+
     def test_symbolic_angles_preserve_public_outcome_after_deterministic_measurement(self):
         def action(use_retrieved_angle):
             sim = PhasedOutcomeCompleteSimulation(1)
@@ -417,6 +428,35 @@ class TestSymbolicAngleIdentity:
         sim.apply_symbolic_pauli_exp(SparsePauli("Z_1"), angle)
 
 
+def _angle_reused_after_measurements():
+    sim = PhasedOutcomeCompleteSimulation(2)
+    sim.apply_unitary(UnitaryOpcode.Hadamard, [1])
+    sim.measure(SparsePauli("Z_1"))
+    sim.measure(SparsePauli("Z_1"))
+    angle = sim.allocate_symbolic_angle()
+    sim.apply_symbolic_pauli_exp(SparsePauli("Z_0"), angle)
+    sim.apply_symbolic_pauli_exp(SparsePauli("X_0"), angle)
+    return sim, [], [0]
+
+
+def _angle_unused_after_measurement():
+    sim = PhasedOutcomeCompleteSimulation(2)
+    sim.apply_unitary(UnitaryOpcode.Hadamard, [1])
+    sim.measure(SparsePauli("Z_1"))
+    angles = sim.allocate_symbolic_angles(2)
+    sim.apply_symbolic_pauli_exp(SparsePauli("Z_0"), angles[0])
+    return sim, [], [0]
+
+
+def _angle_reaches_discarded_qubit_after_measurement():
+    sim = PhasedOutcomeCompleteSimulation(3)
+    sim.apply_unitary(UnitaryOpcode.PrepareBell, [0, 1])
+    sim.measure(SparsePauli("Z_0 Z_1"))
+    angle = sim.allocate_symbolic_angle()
+    sim.apply_symbolic_pauli_exp(SparsePauli("X_0 X_2"), angle)
+    return sim, [0], [0]
+
+
 class TestPhasedCircuitAction:
 
     def test_phased_action_returns_action(self):
@@ -453,6 +493,35 @@ class TestPhasedCircuitAction:
         negative = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("-Z_0"), a))
         assert positive.is_equivalent_up_to_signs(negative)
         assert not positive.is_equivalent(negative)
+
+    @pytest.mark.parametrize(
+        "qubit_count, input_qubits, output_qubits",
+        [
+            (1, [], [5]),
+            (1, [0], [0]),
+            (3, [0, 0], [0]),
+            (1, [], [0, 0]),
+        ],
+        ids=["output-out-of-range", "reference-out-of-range", "repeated-input", "repeated-output"],
+    )
+    def test_phased_action_rejects_invalid_qubits(self, qubit_count, input_qubits, output_qubits):
+        sim = PhasedOutcomeCompleteSimulation(qubit_count)
+        with pytest.raises(ValueError, match="InvalidQubits"):
+            sim.phased_action(input_qubits, output_qubits)
+
+    @pytest.mark.parametrize(
+        "build, message",
+        [
+            (_angle_reused_after_measurements, r"^symbolic angle 0 parameterises more than one exponent$"),
+            (_angle_unused_after_measurement, r"^symbolic angle 1 parameterises no exponent$"),
+            (_angle_reaches_discarded_qubit_after_measurement, r"^symbolic angle 0 reaches a discarded qubit"),
+        ],
+        ids=["reused", "unused", "discarded"],
+    )
+    def test_phased_action_error_names_angle_by_index(self, build, message):
+        sim, input_qubits, output_qubits = build()
+        with pytest.raises(ValueError, match=message):
+            sim.phased_action(input_qubits, output_qubits)
 
     def test_action_is_self_equivalent(self):
         action = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0 Z_1"), a), n=2)

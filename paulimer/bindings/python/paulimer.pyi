@@ -1247,7 +1247,10 @@ class PhasedOutcomeCompleteSimulation:
 
         Args:
             random_bits: Boolean assignment for each random outcome (length at least
-                ``random_outcome_count``).
+                ``random_outcome_count``). Entries past ``random_outcome_count`` are ignored.
+
+        Raises:
+            ValueError: If ``random_bits`` has fewer than ``random_outcome_count`` entries.
         """
         ...
 
@@ -1284,7 +1287,8 @@ class PhasedOutcomeCompleteSimulation:
         ``angle`` must be a :class:`SymbolicAngle` obtained from :meth:`allocate_symbolic_angle`
         or :meth:`allocate_symbolic_angles`. This is the high-level way to add a free-angle
         exponent ``e^{i alpha P}`` for an arbitrary Pauli ``P``. Each angle must parameterise
-        exactly one exponent; reusing one makes :meth:`phased_action` raise a ``ValueError``.
+        exactly one exponent. A reused or an unused angle makes :meth:`phased_action` raise a
+        ``ValueError``.
         Angles with matching index in two circuits are what make those circuits' exponents
         correspond when their phased actions are compared.
 
@@ -1322,8 +1326,12 @@ class PhasedOutcomeCompleteSimulation:
             output_qubits: System qubits carrying the circuit's output.
 
         Raises:
-            ValueError: If the non-output system qubits remain entangled with the rest of
-                the state or auxiliary separation fails.
+            ValueError: If ``input_qubits`` or ``output_qubits`` names a qubit twice, if
+                the simulation has fewer than ``system_qubit_count + len(input_qubits)``
+                qubits, if the non-output system qubits remain entangled with the rest of
+                the state, if auxiliary separation fails, or if a symbolic angle
+                parameterises no exponent or more than one.
+                The message names a symbolic angle by its :attr:`SymbolicAngle.index`.
         """
         ...
 

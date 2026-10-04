@@ -362,9 +362,11 @@ impl PhasedOutcomeCompleteSimulation {
     /// Measures a Pauli observable using an anti-commuting hint operator, tracking the exact phase.
     ///
     /// Implements case 5 of Algorithm 4.2. Given an anti-commuting hint `P'` with preimage
-    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← e^{iπ/4 (i P' P)} R`, the quadratic
-    /// and linear `-1` phases absorb the outcome-dependent stabiliser sign, and the `(-1)^α` sign
-    /// relabels the reported outcome (`m = r ⊕ α`) via `outcome_shift` rather than a global phase.
+    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← e^{iπ/4 (i P' P)} R` and the
+    /// quadratic and linear `-1` phases absorb the outcome-dependent stabiliser sign. A negative hint
+    /// (`α = 1`) also adds the branch sign `(-1)^⟨a ⊕ 1, r⟩` to the linear `-1` phase `s`. The hint
+    /// sign does not change `outcome_shift`: for either sign the reported outcome is the new random
+    /// bit.
     ///
     /// # Panics
     ///
@@ -467,6 +469,19 @@ impl PhasedOutcomeCompleteSimulation {
         self.symbolic_angle_use_count
             .iter()
             .position(|count| count.is_some_and(|uses| uses > 1))
+    }
+
+    /// The first symbolic angle that parameterises no rotation, if any.
+    ///
+    /// The branch bit of an angle encodes `exp(i alpha P)` as `cos(alpha) I + i sin(alpha) P`. An
+    /// angle that drives nothing therefore encodes `exp(i alpha I)`, a global phase that depends on
+    /// `alpha`, and not the identity that the caller wrote. Callers that build an action must reject
+    /// such a simulation.
+    ///
+    /// A control that names an angle an even number of times does not use it.
+    #[must_use]
+    pub fn unused_symbolic_angle(&self) -> Option<crate::OutcomeId> {
+        self.symbolic_angle_use_count.iter().position(|count| *count == Some(0))
     }
 
     fn allocate_random_bit_with_provenance(&mut self, is_symbolic_angle: bool) -> usize {

@@ -1309,3 +1309,109 @@ fn an_angle_named_three_times_in_one_control_is_one_use() {
         "a second use of the angle must be reported, got {result:?}"
     );
 }
+
+/// Supports that do not describe a Choi-state layout must be reported as errors. Each case once
+/// panicked inside canonicalization or produced an action for a layout that does not exist.
+#[test]
+fn phased_action_from_simulation_rejects_invalid_qubits() {
+    let mut one_qubit = PhasedOutcomeCompleteSimulation::new(1);
+    one_qubit.unitary_op(UnitaryOp::Hadamard, &[0]);
+    let mut three_qubits = PhasedOutcomeCompleteSimulation::new(3);
+    three_qubits.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    three_qubits.unitary_op(UnitaryOp::PrepareBell, &[0, 2]);
+
+    let cases: [(&str, &PhasedOutcomeCompleteSimulation, &[QubitId], &[QubitId]); 4] = [
+        ("output outside the simulation", &one_qubit, &[], &[5]),
+        ("reference qubit outside the simulation", &one_qubit, &[0], &[0]),
+        ("repeated input", &three_qubits, &[0, 0], &[0]),
+        ("repeated output", &one_qubit, &[], &[0, 0]),
+    ];
+    for (name, simulation, inputs, outputs) in cases {
+        let result = phased_action_from_simulation(simulation, inputs, outputs);
+        assert!(
+            matches!(
+                &result,
+                Err(ActionError::InvalidQubits { input_qubits, output_qubits })
+                    if input_qubits == inputs && output_qubits == outputs
+            ),
+            "{name}: expected InvalidQubits, got {result:?}"
+        );
+    }
+
+    phased_action_from_simulation(&one_qubit, &[], &[0]).expect("a valid layout has an action");
+
+    let circuit = build_circuit(|builder| builder.unitary_op(UnitaryOp::Hadamard, &[0]));
+    let repeated_output = phased_action_of(&circuit, &[0], &[0, 0]);
+    assert!(
+        matches!(repeated_output, Err(ActionError::InvalidQubits { .. })),
+        "a circuit with a repeated output must be reported, got {repeated_output:?}"
+    );
+    let repeated_input = phased_action_of(&circuit, &[0, 0], &[0]);
+    assert!(
+        matches!(repeated_input, Err(ActionError::InvalidQubits { .. })),
+        "a circuit with a repeated input must be reported, got {repeated_input:?}"
+    );
+}
+
+/// An angle that drives no rotation would encode `exp(i alpha I)`. On `|0>` that matches the
+/// rotation `exp(i alpha Z)`, so an unused angle once compared equal to a real rotation.
+#[test]
+fn phased_action_rejects_an_unused_symbolic_angle() {
+    let rotated = {
+        let mut simulation = PhasedOutcomeCompleteSimulation::new(1);
+        let angle = simulation.allocate_symbolic_angle();
+        simulation.symbolic_pauli_exp(&sparse(&[z(0)]), angle);
+        simulation
+    };
+    phased_action_from_simulation(&rotated, &[], &[0]).expect("a used angle has an action");
+
+    let mut unused = PhasedOutcomeCompleteSimulation::new(1);
+    let angle = unused.allocate_symbolic_angle();
+    let result = phased_action_from_simulation(&unused, &[], &[0]);
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleUnused { angle: reported }) if reported == angle),
+        "an unused angle must be reported, got {result:?}"
+    );
+
+    let mut after_measurement = PhasedOutcomeCompleteSimulation::new(2);
+    after_measurement.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    after_measurement.measure(&sparse(&[z(0), z(1)]));
+    let used = after_measurement.allocate_symbolic_angle();
+    let idle = after_measurement.allocate_symbolic_angle();
+    after_measurement.symbolic_pauli_exp(&sparse(&[x(0)]), used);
+    after_measurement.conditional_pauli(&sparse(&[z(0)]), &[idle, idle], true);
+    let result = phased_action_from_simulation(&after_measurement, &[0], &[0]);
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleUnused { angle: reported }) if reported == idle),
+        "an angle named only in pairs is unused and must be reported by outcome id, got {result:?}"
+    );
+
+    let circuit = build_circuit(|builder| {
+        builder.allocate_symbolic_angle();
+    });
+    let result = phased_action_of(&circuit, &[0], &[0]);
+    assert!(
+        matches!(result, Err(ActionError::SymbolicAngleUnused { .. })),
+        "a circuit with an unused angle must be reported, got {result:?}"
+    );
+}
+
+/// A deterministic measurement takes an outcome id without a random bit. The auxiliary error must
+/// still name the angle by the outcome id that the caller received, not by its random bit.
+#[test]
+fn auxiliary_angle_error_names_the_outcome_id() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(3);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let deterministic = simulation.measure(&sparse(&[z(0), z(1)]));
+    assert_eq!(deterministic, 0, "the Bell parity is deterministic");
+    let angle = simulation.allocate_symbolic_angle();
+    assert_eq!(angle, 1, "the angle takes the next outcome id");
+    simulation.symbolic_pauli_exp(&sparse(&[x(0), x(2)]), angle);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle: reported }) if reported == angle),
+        "the auxiliary error must name outcome id {angle}, got {result:?}"
+    );
+}

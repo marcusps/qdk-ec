@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use binar::{BitMatrix, BitVec};
 use paulimer::clifford::CliffordUnitary;
-use pauliverse::action::{phased_action_from_simulation, PhasedCircuitAction};
+use pauliverse::action::{phased_action_from_simulation, ActionError, PhasedCircuitAction};
 use pauliverse::outcome_complete_simulation::OutcomeCompleteSimulation;
 use pauliverse::outcome_free_simulation::OutcomeFreeSimulation;
 use pauliverse::outcome_specific_simulation::OutcomeSpecificSimulation;
@@ -346,10 +346,20 @@ impl_simulation!(
             self.inner.linear_sign_phase()
         }
 
+        /// # Errors
+        ///
+        /// Returns a `ValueError` if `random_bits` has fewer entries than `random_outcome_count`.
+        /// Entries past `random_outcome_count` are ignored.
         #[allow(clippy::needless_pass_by_value)]
-        #[must_use]
-        pub fn output_phase_exponent(&self, random_bits: Vec<bool>) -> u8 {
-            self.inner.output_phase_exponent(&random_bits)
+        pub fn output_phase_exponent(&self, random_bits: Vec<bool>) -> PyResult<u8> {
+            let random_outcome_count = self.inner.random_outcome_count();
+            if random_bits.len() < random_outcome_count {
+                return Err(PyValueError::new_err(format!(
+                    "random_bits has length {}, but the simulation has {random_outcome_count} random outcomes",
+                    random_bits.len()
+                )));
+            }
+            Ok(self.inner.output_phase_exponent(&random_bits))
         }
 
         /// Allocate a fresh symbolic angle `α`.
@@ -411,10 +421,10 @@ impl_simulation!(
         ///
         /// `angle` must be a [`SymbolicAngle`] obtained from [`allocate_symbolic_angle`] or
         /// [`allocate_symbolic_angles`]. This is the high-level way to add a free-angle exponent
-        /// `e^{iα P}` for an arbitrary Pauli `P`. Each angle must parameterise exactly one exponent;
-        /// reusing one makes `phased_action` raise a `ValueError`. Angles with matching `index` in
-        /// two circuits are what make those circuits' exponents correspond when their phased actions
-        /// are compared.
+        /// `e^{iα P}` for an arbitrary Pauli `P`. Each angle must parameterise exactly one exponent.
+        /// A reused or an unused angle makes `phased_action` raise a `ValueError`. Angles with
+        /// matching `index` in two circuits are what make those circuits' exponents correspond when
+        /// their phased actions are compared.
         ///
         /// # Errors
         ///
@@ -448,8 +458,10 @@ impl_simulation!(
         #[allow(clippy::needless_pass_by_value)]
         /// # Errors
         ///
-        /// Returns a `ValueError` if the non-output system qubits remain entangled or auxiliary
-        /// separation fails.
+        /// Returns a `ValueError` if `input_qubits` or `output_qubits` names a qubit twice, if the
+        /// simulation does not hold every system and reference qubit, if the non-output system
+        /// qubits remain entangled, if auxiliary separation fails, or if a symbolic angle
+        /// parameterises no exponent or more than one.
         pub fn phased_action(
             &self,
             input_qubits: Vec<usize>,
@@ -457,9 +469,27 @@ impl_simulation!(
         ) -> PyResult<PyPhasedCircuitAction> {
             phased_action_from_simulation(&self.inner, &input_qubits, &output_qubits)
                 .map(|action| PyPhasedCircuitAction { inner: action })
-                .map_err(|error| PyValueError::new_err(format!("{error:?}")))
+                .map_err(|error| PyValueError::new_err(phased_action_error_message(&error, &self.symbolic_angles())))
         }
 });
+
+/// Rust errors name a symbolic angle by its outcome id. Python callers know the angle by its
+/// `index`, so the message translates the id.
+fn phased_action_error_message(error: &ActionError, angles: &[PySymbolicAngle]) -> String {
+    let (outcome, problem) = match error {
+        ActionError::SymbolicAngleReused { angle } => (*angle, "parameterises more than one exponent"),
+        ActionError::SymbolicAngleUnused { angle } => (*angle, "parameterises no exponent"),
+        ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle } => (
+            *angle,
+            "reaches a discarded qubit, so discarding that qubit would decohere the angle",
+        ),
+        _ => return format!("{error:?}"),
+    };
+    match angles.iter().find(|angle| angle.outcome == outcome) {
+        Some(angle) => format!("symbolic angle {} {problem}", angle.index),
+        None => format!("{error:?}"),
+    }
+}
 
 #[derive(derive_more::From)]
 #[must_use]

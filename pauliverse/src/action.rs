@@ -67,6 +67,11 @@ pub enum ActionError {
     /// [`Simulation::allocate_symbolic_angle`].
     /// See [`PhasedOutcomeCompleteSimulation::reused_symbolic_angle`].
     SymbolicAngleReused { angle: usize },
+    /// A symbolic angle parameterises no rotation. Its branch bit would encode the global phase
+    /// `exp(i alpha)` rather than the identity. `angle` is the outcome id returned by
+    /// [`Simulation::allocate_symbolic_angle`].
+    /// See [`PhasedOutcomeCompleteSimulation::unused_symbolic_angle`].
+    SymbolicAngleUnused { angle: usize },
     /// A discarded auxiliary qubit carries a stabilizer sign that changes with a symbolic angle
     /// that no physical outcome reveals. Discarding it would decohere that angle, so this
     /// representation cannot record the circuit. `angle` is the outcome id returned by
@@ -76,6 +81,12 @@ pub enum ActionError {
     /// carries the same recorded data as a rotation that spans a retained qubit, so both are
     /// refused.
     AuxiliaryQubitsCarrySymbolicAngle { angle: usize },
+    /// The qubits do not describe a Choi-state layout. Either `input_qubits` or `output_qubits`
+    /// names a qubit twice, or the simulation does not hold every system and reference qubit.
+    InvalidQubits {
+        input_qubits: Vec<QubitId>,
+        output_qubits: Vec<QubitId>,
+    },
     #[from]
     AuxiliarySeparationFailed(AuxiliarySeparationError),
     #[from]
@@ -488,15 +499,18 @@ pub struct PhasedCircuitAction {
 ///
 /// # Errors
 ///
-/// Returns [`ActionError::AuxiliaryQubitsEntangled`] if a non-output system qubit remains entangled,
-/// [`ActionError::AuxiliarySeparationFailed`] if `output_qubits` contains repeated entries or the
-/// transient auxiliary qubits cannot be separated, or [`ActionError::SimulationFailed`] if circuit
-/// simulation fails.
+/// Returns [`ActionError::InvalidQubits`] if `input_qubits` or `output_qubits` names a qubit twice,
+/// [`ActionError::AuxiliaryQubitsEntangled`] if a non-output system qubit remains entangled,
+/// [`ActionError::AuxiliarySeparationFailed`] if the transient auxiliary qubits cannot be separated,
+/// or [`ActionError::SimulationFailed`] if circuit simulation fails.
 pub fn phased_action_of(
     circuit: &Circuit,
     input_qubits: &[QubitId],
     output_qubits: &[QubitId],
 ) -> Result<PhasedCircuitAction, ActionError> {
+    if has_repeated_qubit(input_qubits) || has_repeated_qubit(output_qubits) {
+        return Err(invalid_qubits(input_qubits, output_qubits));
+    }
     let (action, simulation) = build_action::<PhasedOutcomeCompleteSimulation>(circuit, input_qubits, output_qubits)?;
     let qubit_count = circuit
         .qubit_count()
@@ -519,9 +533,11 @@ pub fn phased_action_of(
 ///
 /// # Errors
 ///
-/// Returns [`ActionError::AuxiliaryQubitsEntangled`] if the non-output system qubits remain
-/// entangled with the rest of the state, or [`ActionError::AuxiliarySeparationFailed`] if
-/// `output_qubits` contains repeated entries or the transient auxiliary qubits cannot be separated.
+/// Returns [`ActionError::InvalidQubits`] if `input_qubits` or `output_qubits` names a qubit twice,
+/// or if the simulation has fewer than `system_qubit_count + input_qubits.len()` qubits. Returns
+/// [`ActionError::AuxiliaryQubitsEntangled`] if the non-output system qubits remain entangled with
+/// the rest of the state, or [`ActionError::AuxiliarySeparationFailed`] if the transient auxiliary
+/// qubits cannot be separated.
 pub fn phased_action_from_simulation(
     simulation: &PhasedOutcomeCompleteSimulation,
     input_qubits: &[QubitId],
@@ -534,6 +550,12 @@ pub fn phased_action_from_simulation(
         .max()
         .map_or(0, |qubit| qubit + 1);
     let reference_qubits: Vec<QubitId> = (system_qubit_count..system_qubit_count + input_qubits.len()).collect();
+    if system_qubit_count + input_qubits.len() > simulation.qubit_count()
+        || has_repeated_qubit(input_qubits)
+        || has_repeated_qubit(output_qubits)
+    {
+        return Err(invalid_qubits(input_qubits, output_qubits));
+    }
     let action = action_from_simulation(
         simulation,
         input_qubits,
@@ -542,6 +564,18 @@ pub fn phased_action_from_simulation(
         system_qubit_count,
     )?;
     phased_action(action, simulation, &reference_qubits, output_qubits)
+}
+
+fn has_repeated_qubit(qubits: &[QubitId]) -> bool {
+    let mut seen = std::collections::HashSet::with_capacity(qubits.len());
+    qubits.iter().any(|qubit| !seen.insert(*qubit))
+}
+
+fn invalid_qubits(input_qubits: &[QubitId], output_qubits: &[QubitId]) -> ActionError {
+    ActionError::InvalidQubits {
+        input_qubits: input_qubits.to_vec(),
+        output_qubits: output_qubits.to_vec(),
+    }
 }
 
 /// The outcome id of a symbolic angle whose branch a discarded auxiliary qubit records but no
@@ -618,6 +652,9 @@ fn phased_action(
 ) -> Result<PhasedCircuitAction, ActionError> {
     if let Some(angle) = simulation.reused_symbolic_angle() {
         return Err(ActionError::SymbolicAngleReused { angle });
+    }
+    if let Some(angle) = simulation.unused_symbolic_angle() {
+        return Err(ActionError::SymbolicAngleUnused { angle });
     }
     // arXiv:2309.08676 deallocates a qubit only when its state is the same on every branch. An
     // auxiliary state that the physical outcomes fix meets this; one that also follows an
