@@ -1230,3 +1230,23 @@ fn phased_action_rejects_an_unused_symbolic_angle() {
         "a circuit with an unused angle must be reported, got {result:?}"
     );
 }
+
+/// A deterministic measurement takes an outcome id without a random bit. The auxiliary error must
+/// still name the angle by the outcome id that the caller received, not by its random bit.
+#[test]
+fn auxiliary_angle_error_names_the_outcome_id() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(3);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let deterministic = simulation.measure(&sparse(&[z(0), z(1)]));
+    assert_eq!(deterministic, 0, "the Bell parity is deterministic");
+    let angle = simulation.allocate_symbolic_angle();
+    assert_eq!(angle, 1, "the angle takes the next outcome id");
+    simulation.symbolic_pauli_exp(&sparse(&[x(0), x(2)]), angle);
+
+    let result = phased_action_from_simulation(&simulation, &[0], &[0]);
+
+    assert!(
+        matches!(result, Err(ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle: reported }) if reported == angle),
+        "the auxiliary error must name outcome id {angle}, got {result:?}"
+    );
+}

@@ -59,14 +59,18 @@ pub enum ActionError {
         auxiliary_qubits: Vec<QubitId>,
     },
     /// A symbolic angle parameterises more than one rotation, so the recorded action does not
-    /// determine the operator. See [`PhasedOutcomeCompleteSimulation::reused_symbolic_angle`].
+    /// determine the operator. `angle` is the outcome id returned by
+    /// [`Simulation::allocate_symbolic_angle`].
+    /// See [`PhasedOutcomeCompleteSimulation::reused_symbolic_angle`].
     SymbolicAngleReused { angle: usize },
     /// A symbolic angle parameterises no rotation. Its branch bit would encode the global phase
-    /// `exp(i alpha)` rather than the identity. See
-    /// [`PhasedOutcomeCompleteSimulation::unused_symbolic_angle`].
+    /// `exp(i alpha)` rather than the identity. `angle` is the outcome id returned by
+    /// [`Simulation::allocate_symbolic_angle`].
+    /// See [`PhasedOutcomeCompleteSimulation::unused_symbolic_angle`].
     SymbolicAngleUnused { angle: usize },
     /// A discarded auxiliary qubit carries a stabilizer sign that depends on a symbolic angle.
-    /// Discarding it would decohere that angle, so the circuit has no phased action.
+    /// Discarding it would decohere that angle, so the circuit has no phased action. `angle` is
+    /// the outcome id returned by [`Simulation::allocate_symbolic_angle`].
     AuxiliaryQubitsCarrySymbolicAngle { angle: usize },
     /// The qubits do not describe a Choi-state layout. Either `input_qubits` or `output_qubits`
     /// names a qubit twice, or the simulation does not hold every system and reference qubit.
@@ -545,16 +549,33 @@ fn invalid_qubits(input_qubits: &[QubitId], output_qubits: &[QubitId]) -> Action
     }
 }
 
-/// The first symbolic angle that a discarded auxiliary qubit's stabilizer sign depends on.
+/// The outcome id of the first symbolic angle that a discarded auxiliary qubit's stabilizer sign
+/// depends on.
 fn symbolic_angle_on_auxiliary_signs(
     action: &CircuitAction,
     simulation: &PhasedOutcomeCompleteSimulation,
 ) -> Option<usize> {
     let signs = action.auxiliary_stabilizers.sign_from_random.matrix();
     let angles = simulation.symbolic_angle_indicator();
-    (0..signs.column_count())
+    let random_bit = (0..signs.column_count())
         .filter(|column| angles.get(*column).copied().unwrap_or(false))
-        .find(|column| (0..signs.row_count()).any(|row| signs[(row, *column)]))
+        .find(|column| (0..signs.row_count()).any(|row| signs[(row, *column)]))?;
+    let outcome = random_bit_outcome_id(simulation, random_bit);
+    debug_assert!(
+        outcome.is_some(),
+        "every inner random bit is reported by one public outcome"
+    );
+    outcome
+}
+
+fn random_bit_outcome_id(simulation: &PhasedOutcomeCompleteSimulation, random_bit: usize) -> Option<usize> {
+    simulation
+        .random_outcome_indicator()
+        .iter()
+        .enumerate()
+        .filter(|(_, is_random)| **is_random)
+        .nth(random_bit)
+        .map(|(outcome, _)| outcome)
 }
 
 /// Assembles a [`PhasedCircuitAction`] from a computed `action` and the `simulation` that recorded
