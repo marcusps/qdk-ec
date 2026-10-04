@@ -6,7 +6,6 @@ pi/4 Pauli exponents, ignoring Pauli-image signs and the global phase.
 
 import sys
 import threading
-import time
 
 import pytest
 from binar import BitMatrix, rank
@@ -190,20 +189,37 @@ def test_random_fixed_spaces_are_conjugation_fixed(clifford):
     reason="threading is unavailable under Emscripten/Pyodide",
 )
 def test_minimal_decomposition_releases_the_gil():
-    """A long minimal search must let other Python threads run."""
-    qubit_count = 20
+    """An observer must run during the native search, before Python resumes."""
+    qubit_count = 32
     permutation = []
     for qubit in range(0, qubit_count, 2):
         permutation += [qubit + 1, qubit]
     swap_layer = CliffordUnitary.identity(qubit_count)
     swap_layer.left_mul_permutation(permutation, list(range(qubit_count)))
 
-    worker = threading.Thread(target=swap_layer.to_transvections_minimal)
-    worker.start()
-    ticks = 0
-    while worker.is_alive():
-        time.sleep(0.001)
-        ticks += 1
-    worker.join()
+    ready = threading.Event()
+    start = threading.Event()
+    observed = threading.Event()
 
-    assert ticks > 5, f"the search held the GIL. The main thread only ran {ticks} times"
+    def observer():
+        ready.set()
+        if start.wait(timeout=10):
+            observed.set()
+
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(60)
+    worker = threading.Thread(target=observer)
+    try:
+        worker.start()
+        assert ready.wait(timeout=10), "the observer did not start"
+        start.set()
+        factors = swap_layer.to_transvections_minimal()
+        observed_during_call = observed.is_set()
+    finally:
+        sys.setswitchinterval(interval)
+        start.set()
+        worker.join(timeout=10)
+
+    assert not worker.is_alive()
+    assert len(factors) == 33
+    assert observed_during_call, "the search held the GIL"

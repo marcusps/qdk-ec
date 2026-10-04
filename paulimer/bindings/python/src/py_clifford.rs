@@ -324,11 +324,11 @@ impl PyCliffordUnitary {
     /// which can use more factors.
     ///
     /// The call can run for a long time on structured high-rank inputs, because the exact search
-    /// can be exponential in the residue rank, in both running time and memoization space. A
-    /// 20-qubit swap layer takes about one second, but a 10-qubit sum of five Callan class-A blocks
-    /// runs for minutes and uses hundreds of megabytes. The binding releases the GIL while the Rust
-    /// search runs, so other Python threads keep running, but the call itself cannot be interrupted
-    /// or cancelled.
+    /// can be exponential in the residue rank, in both running time and memoization space.
+    /// Alternating restrictions return without a span scan, but Callan class-A sums can still be
+    /// impractical. See ``docs/transvection-minimality-correction.md`` for measured limits.
+    /// The binding releases the GIL while the Rust search runs, so other Python threads keep running.
+    /// The call itself cannot be interrupted or cancelled.
     ///
     /// # Errors
     ///

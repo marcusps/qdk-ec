@@ -456,6 +456,31 @@ fn minimal_callan_class_a_needs_r_plus_one() {
 }
 
 #[test]
+fn minimal_swap_layer_of_32_qubits_finishes() {
+    let qubit_count = 32;
+    let mut clifford = CliffordUnitary::identity(qubit_count);
+    for qubit in (0..qubit_count).step_by(2) {
+        clifford.left_mul_swap(qubit, qubit + 1);
+    }
+    let expected = clifford.symplectic_matrix();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        sender
+            .send(clifford_to_transvections_minimal(&clifford))
+            .expect("the test must receive the decomposition");
+    });
+    let factors = receiver
+        .recv_timeout(std::time::Duration::from_secs(60))
+        .expect("a 32-qubit SWAP layer must finish within 60 seconds");
+    worker.join().expect("the decomposition worker must not panic");
+
+    assert_eq!(factors.len(), qubit_count + 1);
+    let rebuilt = symplectic_action_from_transvections(&factors, qubit_count);
+    assert!(rebuilt.is_valid());
+    assert_eq!(rebuilt.symplectic_matrix(), expected);
+}
+
+#[test]
 fn minimal_two_qubit_gates() {
     let mut cx = CliffordUnitary::identity(2);
     cx.left_mul_cx(0, 1);
