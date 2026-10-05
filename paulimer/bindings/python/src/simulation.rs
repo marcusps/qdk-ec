@@ -346,6 +346,12 @@ impl_simulation!(
             self.inner.linear_sign_phase()
         }
 
+        /// Return the `zeta_8 = e^{i pi/4}` exponent of the scalar prefactor.
+        ///
+        /// Index `random_bits` by random outcome, not by the outcome id that `measure` returns.
+        /// The two indices differ after any deterministic outcome, and a vector indexed by
+        /// outcome id gives a wrong exponent without an error.
+        ///
         /// # Errors
         ///
         /// Returns a `ValueError` if `random_bits` has fewer entries than `random_outcome_count`.

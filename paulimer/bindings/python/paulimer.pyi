@@ -1245,6 +1245,10 @@ class PhasedOutcomeCompleteSimulation:
         the scalar ``i^<p, r> (-1)^<B r + s, r>`` multiplying ``R|A r>`` in the output
         state. The phase of ``R|A r>`` itself is carried by the phased encoder.
 
+        Index ``random_bits`` by random outcome, not by the outcome id that
+        :meth:`measure` returns. The two indices differ after any deterministic outcome,
+        and a vector indexed by outcome id gives a wrong exponent without an error.
+
         Args:
             random_bits: Boolean assignment for each random outcome (length at least
                 ``random_outcome_count``). Entries past ``random_outcome_count`` are ignored.
@@ -1318,8 +1322,10 @@ class PhasedOutcomeCompleteSimulation:
         ``n..2n``).
 
         Symbolic angles (allocated with :meth:`allocate_symbolic_angle`) are matched
-        one-to-one by index between the two compared actions, while genuine measurement
-        randomness is marginalized over (see :meth:`PhasedCircuitAction.is_equivalent`).
+        one-to-one by index between the two compared actions. Measurement randomness is
+        not marginalized over. The comparison holds at each physical outcome, and it
+        ignores an extra true-random record only when that record uniformly refines the
+        same outcome operation (see :meth:`PhasedCircuitAction.is_equivalent`).
 
         Args:
             input_qubits: System qubits entangled with reference qubits.
