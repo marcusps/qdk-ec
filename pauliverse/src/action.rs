@@ -464,21 +464,24 @@ impl CircuitAction {
     }
 }
 
-/// The exact-global-phase analog of [`CircuitAction`], computed with a
+/// The phase-aware analog of [`CircuitAction`], computed with a
 /// [`PhasedOutcomeCompleteSimulation`] so that the **relative `ζ₈` phases between branches** of the
 /// circuit's Choi state are retained in addition to the phaseless stabilizer data.
 ///
 /// A [`CircuitAction`] determines the Choi state only up to phase, so it cannot distinguish circuits
 /// that act identically on the Pauli group but differ by branch-dependent phases — for example
 /// `e^{iα Z}` and `e^{-iα Z}`, whose conditioned Paulis `+Z` and `-Z` share a symplectic action.
-/// [`PhasedCircuitAction`] additionally compares the per-branch phase function
-/// `φ(r) = i^⟨p, r⟩ (-1)^⟨B r + s, r⟩`, capturing exactly that information.
+/// [`PhasedCircuitAction`] compares the simulator's explicit branch phase and the encoder's
+/// label-dependent phase in a common unsigned stabilizer frame.
 ///
-/// The comparison is *up to a single global phase* common to all branches: the encoder's absolute
-/// phase is ignored by [`Self::is_equivalent`], so two Choi states that differ only by an overall
-/// scalar are reported as equivalent. Use [`Self::is_equivalent_with_global_phase`] to include the
+/// The comparison ignores an angle-independent phase within each physical-outcome sector.
+/// It retains relative phases between virtual assignments in that sector.
+/// Use [`Self::is_equivalent_with_global_phase`] to include the
 /// absolute phase recovered by the §4.3 auxiliary-qubit separation of
 /// [arXiv:2603.24717](https://arxiv.org/abs/2603.24717), or inspect it with [`Self::global_phase`].
+///
+/// Dense branch-vector tests cover this comparison. They are not a proof of soundness or
+/// completeness. The default correspondence does not search all possible outcome relabelings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PhasedCircuitAction {
     action: CircuitAction,
@@ -760,9 +763,15 @@ impl PhasedCircuitAction {
         self.action.is_equivalent_up_to_signs(&other.action)
     }
 
-    /// Verifies that two phased actions implement the same operator on every input, enforcing the
-    /// **virtual/true random-bit distinction**: symbolic-angle (virtual) random bits must correspond
-    /// *one to one* between the two actions, while true random bits may differ.
+    /// Compares actions under the default angle and outcome correspondence.
+    ///
+    /// At each physical outcome, Kraus operators must agree for every angle value up to an
+    /// angle-independent phase. Extra true-random records are ignored only when they uniformly
+    /// refine the same outcome operation, with angle-independent weights. Outcomes with
+    /// angle-dependent proportionality factors are not merged.
+    ///
+    /// Dense branch-vector tests cover this comparison. They are not a proof of soundness or
+    /// completeness. The default correspondence does not search all possible outcome relabelings.
     ///
     /// A symbolic rotation `e^{iα P}` is modelled by conditioning `P` on a bit allocated via
     /// [`Simulation::allocate_symbolic_angle`]. Two encodings of the same parameterised circuit are
@@ -792,9 +801,9 @@ impl PhasedCircuitAction {
     /// Like [`Self::is_equivalent`], but additionally requires the two actions' global `ζ₈` phases
     /// to agree.
     ///
-    /// [`Self::is_equivalent`] compares operators up to a common global phase, which is the
-    /// physically meaningful notion, because an overall phase is unobservable. This stronger check
-    /// also pins [`Self::global_phase`], which distinguishes `Co` from `-Co`. When the operators
+    /// [`Self::is_equivalent`] ignores angle-independent phases within physical-outcome sectors.
+    /// This stronger check also pins [`Self::global_phase`], which distinguishes `Co` from `-Co`.
+    /// When the operators
     /// agree only up to a non-trivial global phase,
     /// [`ActionsInequivalenceReason::GlobalPhase`] is added to the reasons.
     ///
@@ -820,8 +829,8 @@ impl PhasedCircuitAction {
         Ok(())
     }
 
-    /// Check if two phased actions are equivalent (up to a single global phase) when outcomes are
-    /// remapped, comparing both the [`CircuitAction`] data and the relative branch phases.
+    /// Compares actions under a supplied outcome correspondence, using the per-outcome phase
+    /// convention of [`Self::is_equivalent`].
     ///
     /// The outcome remapping `self_outcomes_from_other_outcomes` follows the same convention as
     /// [`CircuitAction::is_equivalent_with_map`]: outcomes of `self` equal `A(o_other)`. When the map
@@ -829,12 +838,19 @@ impl PhasedCircuitAction {
     ///
     /// This is the lower-level escape hatch behind [`Self::is_equivalent`]. The supplied map may
     /// affinely remap *true* random bits, but every symbolic-angle row must equal the corresponding
-    /// angle coordinate in allocation order. True-random rows may also depend on angle bits.
+    /// angle coordinate in allocation order. A true-random row can depend on an angle coordinate
+    /// only when the physical outcome record determines that dependence.
+    ///
+    /// The map must preserve physical-outcome fibres in both directions and cover every
+    /// nonredundant outcome of `self`. Selecting only some active outcomes is not equivalence.
+    /// It must also map possible records to possible records, including deterministic outcomes.
     ///
     /// # Errors
     ///
     /// Returns a list of [`ActionsInequivalenceReason`] if the actions differ; the additional
-    /// [`ActionsInequivalenceReason::RelativePhase`] is returned when only the branch phases differ.
+    /// [`ActionsInequivalenceReason::RelativePhase`] also reports incompatible physical-outcome
+    /// fibres. [`ActionsInequivalenceReason::RandomOutcomeCoverage`] reports omitted outcome classes
+    /// or a map that selects impossible records.
     pub fn is_equivalent_with_map(
         &self,
         other: &PhasedCircuitAction,

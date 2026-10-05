@@ -1337,16 +1337,20 @@ class PhasedOutcomeCompleteSimulation:
 
 @final
 class PhasedCircuitAction:
-    """The action of a circuit on every input, with exact relative branch phases.
+    """The action of a circuit on every input, with relative branch phases.
 
     Produced by :meth:`PhasedOutcomeCompleteSimulation.phased_action`. Two actions are
-    compared up to a single overall global phase; the *relative* phases between branches
-    are retained, so circuits that act identically on the Pauli group but differ by a
+    compared up to an angle-independent phase within each physical-outcome sector.
+    Relative phases between virtual assignments in that sector are retained, so circuits
+    that act identically on the Pauli group but differ by a
     branch-dependent phase (for example ``e^{i a Z}`` versus ``e^{-i a Z}``, whose
     conditioned Paulis ``+Z`` and ``-Z`` share a symplectic action) are distinguished.
 
     Symbolic angles are matched one-to-one by index between the two compared actions, while
-    genuine measurement random bits are marginalized over (as in the phaseless comparison).
+    only uniform redundant true-random records are ignored.
+    Encoder phases use a common unsigned stabilizer frame, including under record flips.
+    Dense branch-vector tests cover this comparison. They are not a proof of soundness or
+    completeness. The default correspondence does not search all possible outcome relabelings.
     """
 
     @property
@@ -1355,11 +1359,16 @@ class PhasedCircuitAction:
         ...
 
     def is_equivalent(self, other: PhasedCircuitAction) -> bool:
-        """Whether two circuits implement the same operator on every input.
+        """Whether the actions agree under the default angle and outcome correspondence.
 
-        Compares both the stabilizer (symplectic) action and the exact relative branch
-        phases, up to a single global phase. Symbolic angles are matched one-to-one by
-        index with those of ``other``, while genuine measurement randomness is marginalized.
+        At each physical outcome, Kraus operators must agree for every angle value up to
+        an angle-independent phase. Symbolic angles match one-to-one by allocation index.
+        Extra true-random records are ignored only when they uniformly refine the same
+        outcome operation, with angle-independent weights. Outcomes with angle-dependent
+        proportionality factors are not merged.
+
+        Dense branch-vector tests cover this comparison. They are not a proof of soundness or
+        completeness. The default correspondence does not search all possible outcome relabelings.
         """
         ...
 
