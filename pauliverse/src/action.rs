@@ -5,7 +5,10 @@ use crate::{
     circuit::{Circuit, SimulationError},
 };
 use binar::{AffineMap, BitMatrix, BitVec, Bitwise, BitwiseMut, IndexSet};
-use paulimer::{CliffordUnitary, Pauli, PauliMutable, SparsePauli, clifford::standard_restriction_with_sign_matrix};
+use paulimer::{
+    CliffordMutable, CliffordUnitary, Pauli, PauliMutable, SparsePauli,
+    clifford::{Clifford, group_encoding_clifford_of, standard_restriction_with_sign_matrix},
+};
 
 type QubitId = crate::circuit::QubitId;
 
@@ -599,9 +602,10 @@ fn phased_action(
         return Err(ActionError::AuxiliaryQubitsCarrySymbolicAngle { angle });
     }
     let symbolic_angles: BitVec = simulation.symbolic_angle_indicator().iter().copied().collect();
+    let phase = PhaseData::from_simulation(simulation, &action);
     Ok(PhasedCircuitAction {
         action,
-        phase: PhaseData::from_simulation(simulation),
+        phase,
         physical_outcomes_from_random: physical_outcome_matrix(simulation),
         symbolic_angles,
     })
@@ -980,8 +984,8 @@ fn phase_is_invariant_along(linear: &[i32], quadratic: &[i32], direction: &BitVe
 
 /// Branch phase function of a Choi state, indexed by the inner random bits.
 ///
-/// The `ζ₈` phase of branch `r` is `ζ₈^φ(r)` with `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)`, matching
-/// [`PhasedOutcomeCompleteSimulation::output_phase_exponent`].
+/// Adds the simulator's explicit phase to the encoder phase in an unsigned marginal frame.
+/// A branch-independent constant is omitted.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PhaseData {
     /// `p`: linear `i` phase.
@@ -990,15 +994,68 @@ pub(crate) struct PhaseData {
     linear_sign: BitVec,
     /// `B`: quadratic `-1` phase.
     quadratic: BitMatrix,
+    branch_labels: BitMatrix,
+    encoder_linear: Vec<u8>,
+    encoder_quadratic: BitMatrix,
 }
 
 impl PhaseData {
-    /// Extracts the branch phase function recorded by `simulation`.
-    pub(crate) fn from_simulation(simulation: &PhasedOutcomeCompleteSimulation) -> Self {
+    /// Uses the tensor of unsigned marginal encoders as the reference.
+    /// For `D|0> = scalar |d>` and `D X_i D† = i^p_i X^x_i Z^z_i`, the linear coefficient is
+    /// `2 p_i + 4 <z_i, d>` and the quadratic coefficient is `4 <z_i, x_j>`.
+    fn from_simulation(simulation: &PhasedOutcomeCompleteSimulation, action: &CircuitAction) -> Self {
+        let choi = &action.choi_state_stabilizers;
+        let auxiliary = &action.auxiliary_stabilizers;
+        let choi_count = choi.canonical_generators.len();
+        let qubit_count = simulation.qubit_count();
+        let reference = group_encoding_clifford_of(&choi.canonical_generators, choi_count).tensor(
+            &group_encoding_clifford_of(&auxiliary.canonical_generators, qubit_count - choi_count),
+        );
+        let order: Vec<_> = choi
+            .canonical_to_original
+            .iter()
+            .chain(&auxiliary.canonical_to_original)
+            .copied()
+            .collect();
+        let mut encoder = simulation.state_encoder();
+        encoder.left_mul_permutation(&order, &(0..qubit_count).collect::<Vec<_>>());
+        let images: Vec<_> = (0..qubit_count)
+            .map(|bit| reference.preimage(&encoder.image_x(bit)))
+            .collect();
+        let offset: BitVec = (0..qubit_count)
+            .map(|bit| {
+                let preimage = encoder.preimage(&reference.image_z(bit));
+                debug_assert!(preimage.x_bits().is_zero());
+                preimage.xz_phase_exponent() % 4 == 2
+            })
+            .collect();
+        let encoder_linear = images
+            .iter()
+            .map(|image| {
+                let shifted_sign = image.z_bits().support().filter(|&bit| offset.index(bit)).count() % 2 == 1;
+                (2 * (image.xz_phase_exponent() % 4) + 4 * u8::from(shifted_sign)) % 8
+            })
+            .collect();
+        let mut encoder_quadratic = BitMatrix::zeros(qubit_count, qubit_count);
+        for first in 0..qubit_count {
+            for second in first + 1..qubit_count {
+                let coupled = images[first]
+                    .z_bits()
+                    .support()
+                    .filter(|&bit| images[second].x_bits().index(bit))
+                    .count()
+                    % 2
+                    == 1;
+                encoder_quadratic.set((first, second), coupled);
+            }
+        }
         PhaseData {
             linear_i: simulation.linear_i_phase(),
             linear_sign: simulation.linear_sign_phase(),
             quadratic: simulation.quadratic_phase_matrix(),
+            branch_labels: simulation.sign_matrix(),
+            encoder_linear,
+            encoder_quadratic,
         }
     }
 
@@ -1006,15 +1063,25 @@ impl PhaseData {
         self.linear_i.len()
     }
 
-    /// The `ζ₈` exponent `φ(r) = 2⟨p, r⟩ + 4⟨B r + s, r⟩ (mod 8)` for the branch `random_bits`.
+    /// The relative phase exponent in the unsigned marginal frame.
     pub(crate) fn phase_exponent(&self, random_bits: &BitVec) -> u8 {
-        phase_form_exponent(
+        let mut phase = phase_form_exponent(
             self.random_count(),
             |index| random_bits.index(index),
             |index| self.linear_i.index(index),
             |index| self.linear_sign.index(index),
             |row, column| self.quadratic.get((row, column)),
-        )
+        );
+        let label = &self.branch_labels * &random_bits.as_view();
+        for first in label.support() {
+            phase = (phase + self.encoder_linear[first]) % 8;
+            for second in label.support().filter(|&bit| bit > first) {
+                if self.encoder_quadratic.get((first, second)) {
+                    phase = (phase + 4) % 8;
+                }
+            }
+        }
+        phase
     }
 }
 
