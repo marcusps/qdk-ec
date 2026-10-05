@@ -833,8 +833,16 @@ impl PhasedCircuitAction {
         };
         let (linear, quadratic) = quadratic_phase_coefficients(&phase_difference, other_dimension);
         let kernel = other.physical_outcomes_from_random.kernel();
+        if kernel.row_count() != self.physical_outcomes_from_random.kernel().row_count() {
+            return false;
+        }
         for row in 0..kernel.row_count() {
             let direction: BitVec = (&kernel.row(row)).into();
+            let mapped = self_random_from_other_random.matrix() * &direction.as_view();
+            let observed = &self.physical_outcomes_from_random * &mapped.as_view();
+            if observed.support().next().is_some() {
+                return false;
+            }
             if !phase_is_invariant_along(&linear, &quadratic, &direction) {
                 return false;
             }
