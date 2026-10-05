@@ -115,6 +115,8 @@ pub enum ActionsInequivalenceReason {
     /// with one another or with true (measurement) random bits, which does not correspond to any
     /// operator equality. Only produced by [`PhasedCircuitAction::is_equivalent_with_map`].
     SymbolicAngleMixed,
+    /// The supplied correspondence omits a nonredundant outcome or selects an impossible record of `self`.
+    RandomOutcomeCoverage,
 }
 
 /// [`Circuit`]s in pauliverse include fixed number of qubits and do not have prepare and destroy instructions.
@@ -720,7 +722,65 @@ impl PhasedCircuitAction {
         if !self.angle_correspondence_is_clean(other, &self_random_from_other_random) {
             return Err(vec![ActionsInequivalenceReason::SymbolicAngleMixed]);
         }
-        self.check_with_random_map(other, &self_random_from_other_random, None)
+        if self.action.outcomes_from_random.dot(&self_random_from_other_random) != self_outcomes_from_other_random {
+            return Err(vec![ActionsInequivalenceReason::RandomOutcomeCoverage]);
+        }
+        self.check_with_random_map(other, &self_random_from_other_random, None)?;
+        if !self.random_map_covers_self(&self_random_from_other_random) {
+            return Err(vec![ActionsInequivalenceReason::RandomOutcomeCoverage]);
+        }
+        Ok(())
+    }
+
+    /// Covers every self assignment modulo true-random translations that preserve Choi signs
+    /// and change phase only by a constant on each physical-outcome fibre.
+    ///
+    /// A debug assertion checks that physical-kernel directions contain only angle bits. The polar
+    /// form's diagonal then adds only constraints already imposed by the angle rows, so it is omitted.
+    fn random_map_covers_self(&self, random_map: &AffineMap) -> bool {
+        let dimension = self.phase.random_count();
+        if random_map.matrix().rank() == dimension {
+            return true;
+        }
+        let (_, quadratic) =
+            quadratic_phase_coefficients(&|random| i32::from(self.phase.phase_exponent(random)), dimension);
+        let mut phase_polar_form = BitMatrix::zeros(dimension, dimension);
+        for first in 0..dimension {
+            for second in first + 1..dimension {
+                let coupled = quadratic[first * dimension + second] & 4 != 0;
+                phase_polar_form.set((first, second), coupled);
+                phase_polar_form.set((second, first), coupled);
+            }
+        }
+        let physical_kernel = self.physical_outcomes_from_random.kernel();
+        debug_assert!(
+            (0..physical_kernel.row_count()).all(|row| physical_kernel
+                .row(row)
+                .support()
+                .all(|bit| self.symbolic_angles.index(bit))),
+            "a physical-kernel direction contains a true-random bit"
+        );
+        let phase_constraints = &physical_kernel * &phase_polar_form;
+        let signs = self.action.choi_state_stabilizers.sign_from_random.matrix();
+        let angle_count = self.symbolic_angles.support().count();
+        let mut constraints = BitMatrix::zeros(
+            angle_count + signs.row_count() + phase_constraints.row_count(),
+            dimension,
+        );
+        for (row, angle) in self.symbolic_angles.support().enumerate() {
+            constraints.set((row, angle), true);
+        }
+        for row in 0..signs.row_count() {
+            for bit in signs.row(row).support() {
+                constraints.set((angle_count + row, bit), true);
+            }
+        }
+        for row in 0..phase_constraints.row_count() {
+            for bit in phase_constraints.row(row).support() {
+                constraints.set((angle_count + signs.row_count() + row, bit), true);
+            }
+        }
+        (&constraints * random_map.matrix()).rank() == constraints.rank()
     }
 
     /// Builds the random-bit correspondence used by [`Self::is_equivalent`]. Symbolic-angle bits and
