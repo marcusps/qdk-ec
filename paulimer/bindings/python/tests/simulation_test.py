@@ -459,6 +459,26 @@ def _angle_reaches_discarded_qubit_after_measurement():
 
 class TestPhasedCircuitAction:
 
+    @pytest.mark.parametrize(
+        "first_final, second_final",
+        [(UnitaryOpcode.Y, UnitaryOpcode.Z), (None, UnitaryOpcode.X)],
+        ids=["y-versus-z", "identity-versus-x"],
+    )
+    def test_measurement_before_rotation_keeps_encoder_phase(self, first_final, second_final):
+        def build(final):
+            simulation = PhasedOutcomeCompleteSimulation(1)
+            simulation.measure(SparsePauli("X_0"))
+            angle = simulation.allocate_symbolic_angle()
+            simulation.apply_symbolic_pauli_exp(SparsePauli("Z_0"), angle)
+            if final is not None:
+                simulation.apply_unitary(final, [0])
+            return simulation.phased_action([], [0])
+
+        first = build(first_final)
+        second = build(second_final)
+        assert not first.is_equivalent(second)
+        assert not second.is_equivalent(first)
+
     def test_phased_action_returns_action(self):
         action = _choi_action(lambda sim, a: sim.apply_symbolic_pauli_exp(SparsePauli("Z_0"), a))
         assert isinstance(action, PhasedCircuitAction)
