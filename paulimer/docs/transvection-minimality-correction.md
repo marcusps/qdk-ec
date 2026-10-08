@@ -278,8 +278,11 @@ $$
 
 ### Limits of the residue fix step
 
-Exhaustive tests cover the residue fix step for one, two, and three qubits only.
-The step succeeds on every action in these finite domains.
+The public oracles cover complete decompositions through three qubits.
+They do not exercise the retained residue fix search on those inputs.
+Separate direct tests call the retained search on all 225 two-qubit and 150,255 three-qubit rank-plus-one actions.
+No one-qubit action needs that search.
+The three-qubit direct test is ignored by default.
 The repository contains no proof for more qubits.
 
 `find_fix_vector` panics if its search exhausts all candidates.
@@ -296,7 +299,10 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
   recurses into the right-orthogonal complement, and **memoizes subspaces proven untriangularizable**
   by a canonical row-reduced key. An alternating restriction has no non-isotropic pivot.
   The search detects it from symmetry and zero diagonal, then memoizes failure without enumerating its span.
-- **The $r+1$ fix vector.** When no $\mathbf Q$ exists, `find_fix_vector` searches
+- **The $r+1$ case.** When no $\mathbf Q$ exists, the implementation first tries a
+  [bordered construction](bordered-transvection-construction.md).
+  It accepts that candidate only after exact action replay and structural checks.
+  If construction or verification fails, `find_fix_vector` searches
   $\operatorname{Res}(\mathbf F)$ for a vector $\mathbf w$.
   The update $\mathbf F\mathbf T_{\mathbf w}$ must have a triangularizable residue core at the same rank.
   If the search finds one, the decomposer recurses on that update and appends $\mathbf T_{\mathbf w}$.
@@ -337,7 +343,16 @@ The exhaustive three-qubit check runs as an ignored integration test:
 cargo test --profile ci-test -p paulimer --test transvection_test -- --ignored
 ```
 
-It visits all 1,451,520 elements of $\mathrm{Sp}(6;2)$.
+The retained search has a separate direct check:
+
+```bash
+cargo test --profile ci-test -p paulimer --lib retained_search_covers -- --include-ignored
+```
+
+Each three-qubit check visits all 1,451,520 elements of $\mathrm{Sp}(6;2)$.
+The direct check calls `find_fix_vector` on the 150,255 rank-plus-one cases.
+It checks the residue membership, preserved rank, updated core, and replayed action.
+The following timing describes the earlier public-oracle run.
 An explicit run on 2026-10-04 passed with replay, tableau validity, and minimal-length assertions enabled.
 That run took 235 seconds on Linux x86_64 with an AMD EPYC 7763 and Rust 1.99.0.
 The test remains ignored by default and supplies finite-domain evidence only.
@@ -353,6 +368,8 @@ For several blocks, apply the same sequence on disjoint qubit pairs.
 
 These measurements use the release Python extension on the same Linux host, after alternating pruning.
 The elapsed times cover `to_transvections_minimal()`.
+They precede the bordered construction.
+The [construction note](bordered-transvection-construction.md) records the later comparison.
 
 | Class-A blocks | Qubits | Residue rank | Factors | Elapsed time |
 | --- | --- | --- | --- | --- |
@@ -360,15 +377,15 @@ The elapsed times cover `to_transvections_minimal()`.
 | 4 | 8 | 12 | 12 | 7.367 seconds |
 | 5 | 10 | 15 | Not obtained | Stopped at 120 seconds |
 
-The bounded five-block process reached 259 MiB peak resident memory before termination.
-That result gives a lower bound on elapsed time, not a completion estimate or a memory upper bound.
+Peak memory for the five-block case cannot be measured reproducibly from these runs.
+The search does not finish, and the figure depends on when the measurement stops.
+This note therefore reports no five-block memory figure or memory growth rate.
 Without the guard, the same three- and four-block probes took 0.017 and 7.694 seconds and returned the same factor counts.
-A separate pre-guard review stopped the five-block case after 25 minutes and reported 3.0 GB peak resident memory.
-The two five-block reports agree with a peak memory growth of roughly 1.9 MiB per second.
+A separate pre-guard review stopped the five-block case after 25 minutes.
 Neither interrupted run establishes the completed decomposition or its total cost.
 
 A SWAP layer applies `SWAP` to every disjoint qubit pair.
-These times come from the `ci-test` profile on the same host.
+These baseline times come from the `ci-test` profile on the same host, before the bordered construction.
 
 | Qubits | Factors | Elapsed time |
 | --- | --- | --- |
@@ -378,9 +395,9 @@ These times come from the `ci-test` profile on the same host.
 | 38 | 39 | 12.361 seconds |
 | 40 | 41 | 27.766 seconds |
 
-Every added pair of qubits multiplies the elapsed time by about 2.2.
-So alternating pruning removes the initial scan, and a SWAP layer still costs exponential time.
-Do not read the 32-qubit entry as evidence that SWAP layers are cheap.
+In this baseline, every added pair of qubits multiplies the elapsed time by about 2.2.
+Alternating pruning alone removes the initial scan but leaves the later search costs.
+The [construction note](bordered-transvection-construction.md) records the replacement of those later searches.
 Use the greedy decomposition when strict minimality is not required.
 
 ## 8. References

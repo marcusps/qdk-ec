@@ -621,6 +621,9 @@ class CliffordUnitary:
         can be exponential in the residue rank, in both running time and memoization space.
         Alternating restrictions return without a span scan, but Callan class-A sums can still be
         impractical. See ``docs/transvection-minimality-correction.md`` for measured limits.
+        The rank-plus-one case first tries a bordered construction and checks its exact action.
+        A failed candidate uses the retained exhaustive search.
+        See ``docs/bordered-transvection-construction.md`` for the algorithm and measured coverage.
         The binding releases the GIL while the Rust search runs, so other Python threads keep running.
         The call itself cannot be interrupted or cancelled.
 

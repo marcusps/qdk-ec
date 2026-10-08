@@ -189,13 +189,22 @@ def test_random_fixed_spaces_are_conjugation_fixed(clifford):
     reason="threading is unavailable under Emscripten/Pyodide",
 )
 def test_minimal_decomposition_releases_the_gil():
-    """An observer must run during the native search, before Python resumes."""
-    qubit_count = 32
-    permutation = []
-    for qubit in range(0, qubit_count, 2):
-        permutation += [qubit + 1, qubit]
-    swap_layer = CliffordUnitary.identity(qubit_count)
-    swap_layer.left_mul_permutation(permutation, list(range(qubit_count)))
+    """Give the observer time to run on one CPU during a sub-second native call.
+
+    The long switch interval prevents an ordinary Python switch before the call.
+    """
+    qubit_count = 7
+    clifford = CliffordUnitary.identity(qubit_count)
+    for first in range(0, 6, 2):
+        second = first + 1
+        for pauli in [
+            SparsePauli(f"X_{first}"),
+            SparsePauli(f"X_{second}"),
+            SparsePauli(f"X_{first} X_{second}"),
+            SparsePauli(f"Z_{first}"),
+        ]:
+            clifford.left_mul_pauli_exp(pauli)
+    clifford.left_mul_pauli_exp(SparsePauli("Z_4 X_6"))
 
     ready = threading.Event()
     start = threading.Event()
@@ -213,7 +222,7 @@ def test_minimal_decomposition_releases_the_gil():
         worker.start()
         assert ready.wait(timeout=10), "the observer did not start"
         start.set()
-        factors = swap_layer.to_transvections_minimal()
+        factors = clifford.to_transvections_minimal()
         observed_during_call = observed.is_set()
     finally:
         sys.setswitchinterval(interval)
@@ -221,5 +230,8 @@ def test_minimal_decomposition_releases_the_gil():
         worker.join(timeout=10)
 
     assert not worker.is_alive()
-    assert len(factors) == 33
+    assert len(factors) == 10
     assert observed_during_call, "the search held the GIL"
+    rebuilt = _rebuild_from_transvections(factors, qubit_count)
+    assert rebuilt.is_valid
+    assert rebuilt.symplectic_matrix == clifford.symplectic_matrix

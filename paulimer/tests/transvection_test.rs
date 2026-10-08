@@ -17,6 +17,10 @@ use proptest::prelude::*;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
+#[path = "support/symplectic_oracle.rs"]
+mod symplectic_oracle;
+use symplectic_oracle::{PackedAction, enumerate_actions};
+
 /// Rebuilds a Clifford's symplectic action by replaying transvections on the identity.
 fn symplectic_action_from_transvections(transvections: &[SparsePauli], qubit_count: usize) -> CliffordUnitary {
     let mut rebuilt = CliffordUnitary::identity(qubit_count);
@@ -583,32 +587,7 @@ fn minimal_matches_brute_force_oracle_on_every_one_and_two_qubit_action() {
     }
 }
 
-/// A three-qubit symplectic action packed as six six-bit rows, used only by the exhaustive
-/// three-qubit oracle.
-type PackedAction = u64;
-
 const THREE_QUBIT_DIMENSION: usize = 6;
-const THREE_QUBIT_ROW_MASK: u64 = (1 << THREE_QUBIT_DIMENSION) - 1;
-
-fn symplectic_form(left: u64, right: u64) -> bool {
-    let left_x = left & 0b111;
-    let left_z = left >> 3;
-    let right_x = right & 0b111;
-    let right_z = right >> 3;
-    ((left_x & right_z) ^ (left_z & right_x)).count_ones() % 2 == 1
-}
-
-fn apply_packed_transvection(action: PackedAction, vector: u64) -> PackedAction {
-    let mut updated = 0;
-    for row in 0..THREE_QUBIT_DIMENSION {
-        let mut image = (action >> (THREE_QUBIT_DIMENSION * row)) & THREE_QUBIT_ROW_MASK;
-        if symplectic_form(image, vector) {
-            image ^= vector;
-        }
-        updated |= image << (THREE_QUBIT_DIMENSION * row);
-    }
-    updated
-}
 
 fn three_qubit_pauli_of_vector(vector: u64) -> SparsePauli {
     let x_bits: IndexSet = (0..3).filter(|&qubit| vector >> qubit & 1 == 1).collect();
@@ -648,25 +627,7 @@ fn pack_action(clifford: &CliffordUnitary) -> PackedAction {
 #[ignore = "visits all of Sp(6;2) and takes minutes"]
 fn minimal_matches_brute_force_oracle_on_every_three_qubit_action() {
     let identity = pack_action(&CliffordUnitary::identity(3));
-    let mut reached: HashMap<PackedAction, (usize, u64, PackedAction)> = HashMap::new();
-    reached.insert(identity, (0, 0, identity));
-    let mut frontier = vec![identity];
-    let mut distance = 0usize;
-
-    while !frontier.is_empty() {
-        distance += 1;
-        let mut next = Vec::new();
-        for &action in &frontier {
-            for vector in 1..(1u64 << THREE_QUBIT_DIMENSION) {
-                let candidate = apply_packed_transvection(action, vector);
-                if let Entry::Vacant(slot) = reached.entry(candidate) {
-                    slot.insert((distance, vector, action));
-                    next.push(candidate);
-                }
-            }
-        }
-        frontier = next;
-    }
+    let reached = enumerate_actions(3);
     assert_eq!(reached.len(), 1_451_520, "the search must visit all of Sp(6;2)");
 
     let mut census: HashMap<(usize, usize), usize> = HashMap::new();
