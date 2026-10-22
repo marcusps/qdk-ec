@@ -1,0 +1,31 @@
+name: Binar Lean formal proof
+
+on:
+  pull_request:
+    paths:
+      - "binar/formal/**"
+      - "binar/src/**"
+      - ".github/workflows/binar-lean-formal.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "binar/formal/**"
+      - "binar/src/**"
+      - ".github/workflows/binar-lean-formal.yaml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: binar/formal
+          auto-config: false
+          build: true
+      - name: Reject admitted proofs and project axioms
+        working-directory: binar/formal
+        run: |
+          ! grep -R -nE '(^|[[:space:]])(sorry|admit|axiom)([[:space:]]|$)' \
+            BinarFormal BinarFormal.lean

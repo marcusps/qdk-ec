@@ -1,0 +1,17 @@
+name = "binarFormal"
+version = "0.1.0"
+keywords = ["formal-verification", "linear-algebra", "gf2"]
+defaultTargets = ["BinarFormal"]
+
+[leanOptions]
+pp.unicode.fun = true
+relaxedAutoImplicit = false
+warningAsError = true
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.32.2"
+
+[[lean_lib]]
+name = "BinarFormal"
