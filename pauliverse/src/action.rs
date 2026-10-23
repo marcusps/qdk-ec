@@ -1032,8 +1032,7 @@ impl PhasedCircuitAction {
         if random_map.matrix().rank() == dimension {
             return true;
         }
-        let (_, quadratic) =
-            quadratic_phase_coefficients(&|random| i32::from(self.phase.phase_exponent(random)), dimension);
+        let (_, quadratic) = self.phase.coefficients_under_map(None);
         let mut phase_polar_form = BitMatrix::zeros(dimension, dimension);
         for first in 0..dimension {
             for second in first + 1..dimension {
@@ -1172,13 +1171,18 @@ impl PhasedCircuitAction {
         if kernel.row_count() == 0 {
             return true;
         }
-        let other_dimension = other.phase.random_count();
-        let phase_difference = |other_random: &BitVec| {
-            let self_random = self_random_from_other_random.apply(other_random);
-            (i32::from(self.phase.phase_exponent(&self_random)) - i32::from(other.phase.phase_exponent(other_random)))
-                .rem_euclid(8)
-        };
-        let (linear, quadratic) = quadratic_phase_coefficients(&phase_difference, other_dimension);
+        let (self_linear, self_quadratic) = self.phase.coefficients_under_map(Some(self_random_from_other_random));
+        let (other_linear, other_quadratic) = other.phase.coefficients_under_map(None);
+        let linear: Vec<i32> = self_linear
+            .iter()
+            .zip(&other_linear)
+            .map(|(&s, &o)| (s - o).rem_euclid(8))
+            .collect();
+        let quadratic: Vec<i32> = self_quadratic
+            .iter()
+            .zip(&other_quadratic)
+            .map(|(&s, &o)| (s - o).rem_euclid(8))
+            .collect();
         for row in 0..kernel.row_count() {
             let direction: BitVec = (&kernel.row(row)).into();
             let mapped = self_random_from_other_random.matrix() * &direction.as_view();
@@ -1192,24 +1196,6 @@ impl PhasedCircuitAction {
         }
         true
     }
-}
-
-fn quadratic_phase_coefficients(phase: &impl Fn(&BitVec) -> i32, dimension: usize) -> (Vec<i32>, Vec<i32>) {
-    let constant = phase(&BitVec::zeros(dimension));
-    let mut linear = vec![0; dimension];
-    for (first, coefficient) in linear.iter_mut().enumerate() {
-        *coefficient = (phase(&unit_vector(dimension, &[first])) - constant).rem_euclid(8);
-    }
-
-    let mut quadratic = vec![0; dimension * dimension];
-    for first in 0..dimension {
-        for second in (first + 1)..dimension {
-            quadratic[first * dimension + second] =
-                (phase(&unit_vector(dimension, &[first, second])) - constant - linear[first] - linear[second])
-                    .rem_euclid(8);
-        }
-    }
-    (linear, quadratic)
 }
 
 fn phase_is_invariant_along(linear: &[i32], quadratic: &[i32], direction: &BitVec) -> bool {
@@ -1330,6 +1316,87 @@ impl PhaseData {
 
     fn random_count(&self) -> usize {
         self.linear_i.len()
+    }
+
+    /// Computes the linear and strictly upper-triangular quadratic `ζ₈` phase coefficients of
+    /// `r ↦ self.phase_exponent(random_map(r))` via [`BitMatrix::congruence`].
+    fn coefficients_under_map(&self, random_map: Option<&AffineMap>) -> (Vec<i32>, Vec<i32>) {
+        let qubit_count = self.encoder_linear.len();
+        let mut total_encoder_quadratic = self.encoder_quadratic.clone();
+        for qubit in 0..qubit_count {
+            if self.encoder_linear[qubit] & 2 != 0 {
+                total_encoder_quadratic.set((qubit, qubit), true);
+            }
+        }
+
+        let (dimension, branch_labels_t, sim_quadratic, mapped_linear_i, mapped_linear_sign) = match random_map {
+            None => (
+                self.random_count(),
+                self.branch_labels.transposed(),
+                self.quadratic.clone(),
+                self.linear_i.clone(),
+                self.linear_sign.clone(),
+            ),
+            Some(map) => {
+                let matrix = map.matrix();
+                let matrix_t = matrix.transposed();
+                (
+                    matrix.column_count(),
+                    (&self.branch_labels * matrix).transposed(),
+                    self.quadratic.congruence(&matrix_t),
+                    &matrix_t * &self.linear_i.as_view(),
+                    &matrix_t * &self.linear_sign.as_view(),
+                )
+            }
+        };
+
+        let enc_quadratic = total_encoder_quadratic.congruence(&branch_labels_t);
+
+        let linear = if let Some(map) = random_map
+            && !map.shift().is_zero()
+        {
+            let constant = i32::from(self.phase_exponent(map.shift()));
+            (0..dimension)
+                .map(|first| {
+                    let mapped = map.apply(&unit_vector(dimension, &[first]));
+                    (i32::from(self.phase_exponent(&mapped)) - constant).rem_euclid(8)
+                })
+                .collect()
+        } else {
+            (0..dimension)
+                .map(|first| {
+                    let mut phase = (2 * u8::from(mapped_linear_i.index(first))
+                        + 4 * u8::from(mapped_linear_sign.index(first) ^ sim_quadratic.get((first, first))))
+                        % 8;
+                    let mut diag_parity = false;
+                    for qubit in branch_labels_t.row(first).support() {
+                        phase = (phase + self.encoder_linear[qubit]) % 8;
+                        if self.encoder_linear[qubit] & 2 != 0 {
+                            diag_parity = !diag_parity;
+                        }
+                    }
+                    if enc_quadratic.get((first, first)) ^ diag_parity {
+                        phase = (phase + 4) % 8;
+                    }
+                    i32::from(phase)
+                })
+                .collect()
+        };
+
+        let mut quadratic = vec![0i32; dimension * dimension];
+        for first in 0..dimension {
+            for second in (first + 1)..dimension {
+                let coupled = sim_quadratic.get((first, second))
+                    ^ sim_quadratic.get((second, first))
+                    ^ enc_quadratic.get((first, second))
+                    ^ enc_quadratic.get((second, first))
+                    ^ (mapped_linear_i.index(first) && mapped_linear_i.index(second));
+                if coupled {
+                    quadratic[first * dimension + second] = 4;
+                }
+            }
+        }
+        (linear, quadratic)
     }
 
     /// The relative phase exponent in the unsigned marginal frame.
