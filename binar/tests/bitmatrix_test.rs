@@ -775,6 +775,16 @@ fn random_bitvec(size: usize) -> AlignedBitVec {
 }
 
 #[test]
+fn test_dot_mul_transpose_and_congruence_across_size_thresholds() {
+    for &n in &[4usize, 17, 63, 64, 65, 143, 144, 150] {
+        let a = random_bitmatrix(n, n);
+        let b = random_bitmatrix(n, n);
+        assert_eq!(a.mul_transpose(&b), a.dot(&b.transposed()));
+        assert_eq!(a.congruence(&b), b.dot(&a).dot(&b.transposed()));
+    }
+}
+
+#[test]
 fn row_stacked_respects_swap_rows() {
     let mut m = AlignedBitMatrix::identity(4);
     m.swap_rows(0, 3);
@@ -968,4 +978,82 @@ fn from_sparse_columns_index_out_of_bounds() {
 fn from_sparse_rows_index_out_of_bounds() {
     let rows: Vec<IndexSet> = vec![[5].into_iter().collect()];
     assert!(AlignedBitMatrix::from_sparse_rows(&rows, 1, 3).is_err());
+}
+
+#[test]
+fn random_with_rng_clears_padding_across_word_boundaries() {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0x2026_1023);
+    for columns in [1, 4, 63, 64, 65, 127, 128, 129, 192, 256, 320, 384, 448, 511, 512, 513] {
+        let matrix = AlignedBitMatrix::random_with_rng(8, columns, &mut rng);
+        let mut rebuilt = AlignedBitMatrix::zeros(8, columns);
+        for row in 0..8 {
+            assert!(
+                matrix.row(row).support().all(|col| col < columns),
+                "support out of bounds for columns={columns}"
+            );
+            for col in 0..columns {
+                if matrix.get((row, col)) {
+                    rebuilt.set((row, col), true);
+                }
+            }
+            assert_eq!(
+                matrix.row(row).weight(),
+                rebuilt.row(row).weight(),
+                "weight mismatch for columns={columns}"
+            );
+        }
+        assert_eq!(matrix, rebuilt);
+        if columns > BitBlock::BLOCK_BIT_LEN {
+            let first_block_weight: usize = (0..8)
+                .map(|row| {
+                    (0..BitBlock::BLOCK_BIT_LEN)
+                        .filter(|&col| matrix.get((row, col)))
+                        .count()
+                })
+                .sum();
+            assert!(
+                first_block_weight > BitBlock::BLOCK_BIT_LEN,
+                "leading 512-bit block was wiped for columns={columns} (weight={first_block_weight})"
+            );
+        }
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        matrix.hash(&mut h1);
+        rebuilt.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish(), "hash mismatch for columns={columns}");
+    }
+}
+
+#[test]
+fn ones_clears_padding_across_word_boundaries() {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+
+    for columns in [1, 4, 63, 64, 65, 127, 128, 129, 192, 256, 320, 384, 448, 511, 512, 513] {
+        let matrix = AlignedBitMatrix::ones(4, columns);
+        let mut rebuilt = AlignedBitMatrix::zeros(4, columns);
+        for row in 0..4 {
+            assert_eq!(
+                matrix.row(row).weight(),
+                columns,
+                "weight mismatch for columns={columns}"
+            );
+            assert_eq!(
+                matrix.row(row).support().max(),
+                Some(columns - 1),
+                "max support mismatch for columns={columns}"
+            );
+            for col in 0..columns {
+                assert!(matrix.get((row, col)));
+                rebuilt.set((row, col), true);
+            }
+        }
+        assert_eq!(matrix, rebuilt);
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        matrix.hash(&mut h1);
+        rebuilt.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish(), "hash mismatch for columns={columns}");
+    }
 }
