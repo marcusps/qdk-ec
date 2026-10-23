@@ -127,7 +127,7 @@ criterion_main!(benches);
 
 pub fn mul_transpose_benchmark(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("Bitmatrix::mul_transpose");
-    for size in [100usize, 1000usize, 5000usize] {
+    for size in [16usize, 48usize, 64usize, 100usize, 1000usize, 5000usize] {
         group.sample_size(10);
         let parameters = Parameters((0.5, size));
         group.bench_with_input(
