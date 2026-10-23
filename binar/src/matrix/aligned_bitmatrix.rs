@@ -1082,9 +1082,17 @@ impl PartialEq for AlignedBitMatrix {
         if self.shape() != other.shape() {
             return false;
         }
+        let full_words = self.column_count / Word::BITS as usize;
+        let rem_bits = self.column_count % Word::BITS as usize;
+        let tail_mask = (1u64 << rem_bits) - 1;
         for irow in 0..self.row_count() {
-            for icol in 0..self.column_count() {
-                if self[(irow, icol)] != other[(irow, icol)] {
+            let left_row = self.row(irow);
+            let right_row = other.row(irow);
+            if let (Some(lw), Some(rw)) = (left_row.aligned_words(), right_row.aligned_words()) {
+                if lw[..full_words] != rw[..full_words] {
+                    return false;
+                }
+                if rem_bits > 0 && ((lw[full_words] ^ rw[full_words]) & tail_mask) != 0 {
                     return false;
                 }
             }
