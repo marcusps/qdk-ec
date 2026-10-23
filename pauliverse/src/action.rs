@@ -746,6 +746,9 @@ fn symbolic_angle_on_auxiliary_signs(
     physical_outcomes_from_random: &BitMatrix,
 ) -> Option<usize> {
     let signs = action.auxiliary_stabilizers.sign_from_random.matrix();
+    if signs.row_count() == 0 {
+        return None;
+    }
     debug_assert!(
         signs.column_count() <= physical_outcomes_from_random.column_count(),
         "both matrices are indexed by inner random bit, so the signs cannot name more of them"
