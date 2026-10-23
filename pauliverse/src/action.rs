@@ -6,7 +6,7 @@ use crate::{
 };
 use binar::{AffineMap, BitMatrix, BitVec, Bitwise, BitwiseMut, IndexSet};
 use paulimer::{
-    CliffordMutable, CliffordUnitary, Pauli, PauliMutable, SparsePauli,
+    CliffordMutable, CliffordUnitary, Pauli, PauliMutable, PauliTensorBatch, SparsePauli,
     clifford::{
         AuxiliarySeparationError, Clifford, group_encoding_clifford_of, separate_auxiliary_qubits,
         standard_restriction_with_sign_matrix,
@@ -1313,19 +1313,8 @@ impl PhaseData {
                 (2 * (image.xz_phase_exponent() % 4) + 4 * u8::from(shifted_sign)) % 8
             })
             .collect();
-        let mut encoder_quadratic = BitMatrix::zeros(qubit_count, qubit_count);
-        for first in 0..qubit_count {
-            for second in first + 1..qubit_count {
-                let coupled = images[first]
-                    .z_bits()
-                    .support()
-                    .filter(|&bit| images[second].x_bits().index(bit))
-                    .count()
-                    % 2
-                    == 1;
-                encoder_quadratic.set((first, second), coupled);
-            }
-        }
+        let encoder_quadratic =
+            BitMatrix::from_aligned(PauliTensorBatch::from_dense(&images, qubit_count).zx_upper_couplings());
         PhaseData {
             linear_i: simulation.linear_i_phase(),
             linear_sign: simulation.linear_sign_phase(),
