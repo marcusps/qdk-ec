@@ -340,8 +340,8 @@ impl OutcomeCompleteSimulation {
         pauli: &PauliUnitary<Bits, Phase>,
         inner_bits_indicator: &AlignedBitVec,
     ) {
-        let preimage = self.clifford.preimage(pauli);
-        for x_bit_pos in preimage.x_bits().support() {
+        assign_clifford_preimage(&mut self.core.preimage, &self.clifford, pauli);
+        for x_bit_pos in self.core.preimage.x_bits().support() {
             self.core
                 .sign_matrix
                 .row_mut(x_bit_pos)
