@@ -1231,6 +1231,16 @@ impl AlignedBitMatrix {
             self.dot(&other.transposed())
         }
     }
+
+    /// Compute the congruence transformation `map * self * map^T` over GF(2).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `map.column_count() != self.row_count()` or
+    /// `self.column_count() != map.column_count()`.
+    pub fn congruence(&self, map: &Self) -> Self {
+        map.dot(self).mul_transpose(map)
+    }
 }
 
 impl Mul<&AlignedBitView<'_>> for &AlignedBitMatrix {

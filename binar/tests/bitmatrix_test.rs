@@ -775,6 +775,16 @@ fn random_bitvec(size: usize) -> AlignedBitVec {
 }
 
 #[test]
+fn test_dot_mul_transpose_and_congruence_across_size_thresholds() {
+    for &n in &[4usize, 17, 63, 64, 65, 143, 144, 150] {
+        let a = random_bitmatrix(n, n);
+        let b = random_bitmatrix(n, n);
+        assert_eq!(a.mul_transpose(&b), a.dot(&b.transposed()));
+        assert_eq!(a.congruence(&b), b.dot(&a).dot(&b.transposed()));
+    }
+}
+
+#[test]
 fn row_stacked_respects_swap_rows() {
     let mut m = AlignedBitMatrix::identity(4);
     m.swap_rows(0, 3);
