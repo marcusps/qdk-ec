@@ -1165,6 +1165,13 @@ impl PhasedCircuitAction {
 
     /// Checks that the phase difference is constant on every physical-outcome fibre.
     fn relative_phase_matches(&self, other: &PhasedCircuitAction, self_random_from_other_random: &AffineMap) -> bool {
+        let kernel = other.physical_outcomes_from_random.kernel();
+        if kernel.row_count() != self.physical_outcomes_from_random.kernel().row_count() {
+            return false;
+        }
+        if kernel.row_count() == 0 {
+            return true;
+        }
         let other_dimension = other.phase.random_count();
         let phase_difference = |other_random: &BitVec| {
             let self_random = self_random_from_other_random.apply(other_random);
@@ -1172,10 +1179,6 @@ impl PhasedCircuitAction {
                 .rem_euclid(8)
         };
         let (linear, quadratic) = quadratic_phase_coefficients(&phase_difference, other_dimension);
-        let kernel = other.physical_outcomes_from_random.kernel();
-        if kernel.row_count() != self.physical_outcomes_from_random.kernel().row_count() {
-            return false;
-        }
         for row in 0..kernel.row_count() {
             let direction: BitVec = (&kernel.row(row)).into();
             let mapped = self_random_from_other_random.matrix() * &direction.as_view();
