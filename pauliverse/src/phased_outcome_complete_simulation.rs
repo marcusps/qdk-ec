@@ -1,12 +1,13 @@
 use crate::Simulation;
 use crate::action::phase_form_exponent;
-use crate::outcome_complete_simulation::row_sum;
-use crate::outcome_free_simulation::{max_pair_support, max_support};
+use crate::outcome_complete_simulation::{OutcomeCompleteCore, row_sum};
+use crate::outcome_free_simulation::{assign_clifford_preimage, max_pair_support, max_support};
 use binar::{BitMatrix, BitVec};
 use binar::{Bitwise, BitwiseMut, BitwisePairMut, matrix::AlignedBitMatrix, vec::AlignedBitVec};
 use paulimer::clifford::{Clifford, CliffordUnitary, PhasedCliffordUnitary};
-use paulimer::pauli::{Pauli, PauliBits, PauliUnitary, anti_commutes_with, generic::PhaseExponent};
+use paulimer::pauli::{DensePauli, Pauli, PauliBits, PauliUnitary, anti_commutes_with, generic::PhaseExponent};
 use paulimer::pauli::{PauliBinaryOps, PauliMutable};
+use paulimer::traits::NeutralElement;
 use paulimer::{CLIFFORD_BIT_ALIGNMENT, UnitaryOp};
 use rand::RngExt;
 
@@ -76,17 +77,12 @@ type SparsePauli = paulimer::pauli::SparsePauli;
 #[must_use]
 pub struct PhasedOutcomeCompleteSimulation {
     phased_clifford: PhasedCliffordUnitary,       // R (phased encoder)
-    sign_matrix: AlignedBitMatrix,                // A
+    core: OutcomeCompleteCore,                    // A, M, v_0, vec(q), preimage
     quadratic_phase_matrix: AlignedBitMatrix,     // B
-    outcome_matrix: AlignedBitMatrix,             // M
-    outcome_shift: AlignedBitVec,                 // v_0
     linear_i_phase: AlignedBitVec,                // p
     linear_sign_phase: AlignedBitVec,             // s
-    random_outcome_indicator: Vec<bool>,          // vec(q), [j] is true iff vec(q)_j = 1/2
     symbolic_angle_indicator: Vec<bool>,          // [k] is true iff random bit k is a symbolic rotation angle
     symbolic_angle_use_count: Vec<Option<usize>>, // [j] counts the rotations an angle outcome j drives
-    random_bit_count: usize,
-    qubit_count: usize,
 }
 
 impl std::fmt::Debug for PhasedOutcomeCompleteSimulation {
@@ -102,12 +98,12 @@ impl std::fmt::Debug for PhasedOutcomeCompleteSimulation {
                 "linear_sign_phase",
                 &self.linear_sign_phase().iter().collect::<Vec<bool>>(),
             )
-            .field("random_outcome_indicator", &self.random_outcome_indicator)
+            .field("random_outcome_indicator", &self.core.random_outcome_indicator)
             .field("symbolic_angle_indicator", &self.symbolic_angle_indicator)
             .field("symbolic_angle_use_count", &self.symbolic_angle_use_count)
-            .field("random_bit_count", &self.random_bit_count)
-            .field("qubit_count", &self.qubit_count)
-            .finish()
+            .field("random_bit_count", &self.core.random_bit_count)
+            .field("qubit_count", &self.core.qubit_count)
+            .finish_non_exhaustive()
     }
 }
 
@@ -129,7 +125,7 @@ impl PhasedOutcomeCompleteSimulation {
     /// Get the phased Clifford unitary encoding the current stabilizer state with exact global phase.
     pub fn phased_state_encoder(&self) -> PhasedCliffordUnitary {
         let mut res = self.phased_clifford.clone();
-        res.resize(self.qubit_count);
+        res.resize(self.core.qubit_count);
         res
     }
 
@@ -138,15 +134,12 @@ impl PhasedOutcomeCompleteSimulation {
     /// Returns a cache-aligned reference for efficiency.
     #[must_use]
     pub fn aligned_sign_matrix(&self) -> &AlignedBitMatrix {
-        &self.sign_matrix
+        &self.core.sign_matrix
     }
 
     /// Get a copy of the sign matrix `A` without alignment constraints.
     pub fn sign_matrix(&self) -> BitMatrix {
-        BitMatrix::from_aligned(AlignedBitMatrix::from_row_iter(
-            self.sign_matrix.row_iterator(0..self.qubit_count()),
-            self.random_outcome_count(),
-        ))
+        self.core.sign_matrix()
     }
 
     /// Get the quadratic phase matrix `B` (cache-aligned).
@@ -168,26 +161,23 @@ impl PhasedOutcomeCompleteSimulation {
     /// Get the outcome matrix `M` encoding all `2^{n_r}` measurement branches (cache-aligned).
     #[must_use]
     pub fn aligned_outcome_matrix(&self) -> &AlignedBitMatrix {
-        &self.outcome_matrix
+        &self.core.outcome_matrix
     }
 
     /// Get a copy of the outcome matrix `M` without alignment constraints.
     pub fn outcome_matrix(&self) -> BitMatrix {
-        BitMatrix::from_aligned(AlignedBitMatrix::from_row_iter(
-            self.outcome_matrix.row_iterator(0..self.outcome_count()),
-            self.random_outcome_count(),
-        ))
+        self.core.outcome_matrix()
     }
 
     /// Get the outcome shift vector `v₀` (cache-aligned).
     #[must_use]
     pub fn aligned_outcome_shift(&self) -> &AlignedBitVec {
-        &self.outcome_shift
+        &self.core.outcome_shift
     }
 
     /// Get a copy of the outcome shift vector `v₀` without alignment constraints.
     pub fn outcome_shift(&self) -> BitVec {
-        BitVec::from_aligned(self.outcome_count(), self.outcome_shift.clone())
+        self.core.outcome_shift()
     }
 
     /// Get the linear `i`-phase vector `p` (cache-aligned).
@@ -249,26 +239,12 @@ impl PhasedOutcomeCompleteSimulation {
 
     /// Sample measurement outcomes using a provided random number generator.
     pub fn sample_with_rng<R: RngExt>(&self, num_shots: usize, rng: &mut R) -> BitMatrix {
-        let num_outcomes = self.outcome_count();
-        let num_random_bits = self.random_outcome_count();
-
-        if num_outcomes == 0 {
-            return BitMatrix::from_aligned(AlignedBitMatrix::zeros(num_shots, 0));
-        }
-
-        let random_matrix = AlignedBitMatrix::random_with_rng(num_shots, num_random_bits, rng);
-        let outcome_matrix =
-            AlignedBitMatrix::from_row_iter(self.outcome_matrix.row_iterator(0..num_outcomes), num_random_bits);
-        let mut result = random_matrix.mul_transpose(&outcome_matrix);
-        for shot in 0..num_shots {
-            result.row_mut(shot).bitxor_assign(&self.outcome_shift.as_view());
-        }
-        BitMatrix::from_aligned(result)
+        self.core.sample_with_rng(num_shots, rng)
     }
 
     fn ensure_qubit_capacity(&mut self, max_qubit_id: Option<usize>) {
         if let Some(max_qubit_id) = max_qubit_id {
-            self.qubit_count = std::cmp::max(self.qubit_count, max_qubit_id + 1);
+            self.core.qubit_count = std::cmp::max(self.core.qubit_count, max_qubit_id + 1);
             if max_qubit_id >= self.qubit_capacity() {
                 let new_capacity = (max_qubit_id + 1).next_power_of_two();
                 self.reserve_qubits(new_capacity);
@@ -312,14 +288,17 @@ impl PhasedOutcomeCompleteSimulation {
         inner_bits_indicator: &AlignedBitVec,
     ) {
         let preimage = self.phased_clifford.clifford().preimage(pauli);
-        let z_times_sign_matrix = row_sum(&self.sign_matrix, preimage.z_bits().support());
+        let z_times_sign_matrix = row_sum(&self.core.sign_matrix, preimage.z_bits().support());
         for row in inner_bits_indicator.support() {
             self.quadratic_phase_matrix
                 .row_mut(row)
                 .bitxor_assign(&z_times_sign_matrix);
         }
         for x_bit_pos in preimage.x_bits().support() {
-            self.sign_matrix.row_mut(x_bit_pos).bitxor_assign(inner_bits_indicator);
+            self.core
+                .sign_matrix
+                .row_mut(x_bit_pos)
+                .bitxor_assign(inner_bits_indicator);
         }
         let l = preimage.xz_phase_exponent().value();
         if l & 1 == 1 {
@@ -340,22 +319,16 @@ impl PhasedOutcomeCompleteSimulation {
 
     pub fn with_capacity(qubit_count: usize, outcome_count: usize, random_outcome_count: usize) -> Self {
         const MIN_CAPACITY: usize = CLIFFORD_BIT_ALIGNMENT;
-        let outcome_capacity = outcome_count.max(MIN_CAPACITY);
         let random_capacity = random_outcome_count.max(MIN_CAPACITY);
 
         PhasedOutcomeCompleteSimulation {
             phased_clifford: PhasedCliffordUnitary::identity(qubit_count),
-            sign_matrix: AlignedBitMatrix::zeros(qubit_count, random_capacity),
+            core: OutcomeCompleteCore::with_capacity(qubit_count, outcome_count, random_outcome_count),
             quadratic_phase_matrix: AlignedBitMatrix::zeros(random_capacity, random_capacity),
-            outcome_matrix: AlignedBitMatrix::zeros(outcome_capacity, random_capacity),
-            outcome_shift: AlignedBitVec::zeros(outcome_capacity),
             linear_i_phase: AlignedBitVec::zeros(random_capacity),
             linear_sign_phase: AlignedBitVec::zeros(random_capacity),
-            random_outcome_indicator: Vec::with_capacity(outcome_count),
             symbolic_angle_indicator: Vec::with_capacity(random_outcome_count),
             symbolic_angle_use_count: Vec::with_capacity(random_outcome_count),
-            random_bit_count: 0,
-            qubit_count,
         }
     }
 
@@ -398,9 +371,9 @@ impl PhasedOutcomeCompleteSimulation {
             self.phased_clifford.left_mul_pauli_exp(&rotation);
 
             // a = A^T b', with the new random bit appended: a_with_zero and a_with_one = a ⊕ {0,1}.
-            let a_with_zero = row_sum(&self.sign_matrix, preimage.z_bits().support());
+            let a_with_zero = row_sum(&self.core.sign_matrix, preimage.z_bits().support());
             let mut a_with_one = a_with_zero.clone();
-            a_with_one.assign_index(self.random_bit_count, true);
+            a_with_one.assign_index(self.core.random_bit_count, true);
             self.allocate_random_bit();
 
             // B <- B + (a ⊕ 0)(a ⊕ 1)^T.
@@ -418,31 +391,24 @@ impl PhasedOutcomeCompleteSimulation {
         }
     }
 
-    fn measure_deterministic<Bits: PauliBits, Phase: PhaseExponent>(&mut self, preimage: &PauliUnitary<Bits, Phase>) {
+    fn measure_deterministic(&mut self) {
         self.ensure_outcome_capacity(false);
-        let outcome_matrix_row = row_sum(&self.sign_matrix, preimage.z_bits().support());
-        let outcome_position = self.random_outcome_indicator.len();
-        self.outcome_matrix
-            .row_mut(outcome_position)
-            .assign(&outcome_matrix_row);
-        debug_assert!(preimage.xz_phase_exponent().is_even());
-        if preimage.xz_phase_exponent().value() == 2 {
-            self.outcome_shift.assign_index(outcome_position, true);
-        }
-        self.random_outcome_indicator.push(false);
+        let preimage = std::mem::replace(&mut self.core.preimage, DensePauli::neutral_element_of_size(0));
+        self.core.record_deterministic_outcome(&preimage);
+        self.core.preimage = preimage;
         self.symbolic_angle_use_count.push(None);
     }
 
     /// Get the number of random (non-deterministic) measurement outcomes.
     #[must_use]
     pub fn random_outcome_count(&self) -> usize {
-        self.random_bit_count
+        self.core.random_bit_count
     }
 
     /// Get indicators for which outcomes are random.
     #[must_use]
     pub fn random_outcome_indicator(&self) -> &[bool] {
-        &self.random_outcome_indicator
+        &self.core.random_outcome_indicator
     }
 
     /// Get indicators for which random bits are symbolic rotation angles.
@@ -486,14 +452,9 @@ impl PhasedOutcomeCompleteSimulation {
 
     fn allocate_random_bit_with_provenance(&mut self, is_symbolic_angle: bool) -> usize {
         self.ensure_outcome_capacity(true);
-        let outcome_pos = self.random_outcome_indicator.len();
-        self.outcome_matrix
-            .row_mut(outcome_pos)
-            .assign_index(self.random_bit_count, true);
-        self.random_outcome_indicator.push(true);
+        let (outcome_pos, _) = self.core.record_random_outcome();
         self.symbolic_angle_indicator.push(is_symbolic_angle);
         self.symbolic_angle_use_count.push(is_symbolic_angle.then_some(0));
-        self.random_bit_count += 1;
         outcome_pos
     }
 }
@@ -545,7 +506,7 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
     }
 
     fn qubit_count(&self) -> usize {
-        self.qubit_count
+        self.core.qubit_count
     }
 
     fn conditional_pauli(&mut self, observable: &SparsePauli, outcomes: &[usize], parity: bool) {
@@ -565,19 +526,19 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
         }
         self.ensure_qubit_capacity(observable.max_support());
         let shift_parity = outcomes.iter().fold(false, |accumulated, &outcome| {
-            accumulated ^ self.outcome_shift.index(outcome)
+            accumulated ^ self.core.outcome_shift.index(outcome)
         });
         if shift_parity == parity {
             self.pauli(observable);
         }
-        let inner_bits_indicator = row_sum(&self.outcome_matrix, outcomes);
+        let inner_bits_indicator = row_sum(&self.core.outcome_matrix, outcomes);
         self.apply_pauli_conditioned_on_inner_random_bits(observable, &inner_bits_indicator);
     }
 
     fn is_stabilizer(&self, observable: &SparsePauli) -> bool {
         let preimage = self.phased_clifford.clifford().preimage(observable);
         if preimage.x_bits().is_zero() {
-            let sign_parity_indicator = row_sum(&self.sign_matrix, preimage.z_bits().support());
+            let sign_parity_indicator = row_sum(&self.core.sign_matrix, preimage.z_bits().support());
             sign_parity_indicator.is_zero() && preimage.xz_phase_exponent().value() == 0
         } else {
             false
@@ -587,15 +548,8 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
     fn is_stabilizer_with_conditional_sign(&self, observable: &SparsePauli, outcomes: &[crate::OutcomeId]) -> bool {
         let preimage = self.phased_clifford.clifford().preimage(observable);
         if preimage.x_bits().is_zero() && preimage.xz_phase_exponent().is_even() {
-            let sign_parity_indicator = row_sum(&self.sign_matrix, preimage.z_bits().support());
-            let shift = preimage.xz_phase_exponent().value() / 2 == 1;
-            let expected_parity_indicator = row_sum(&self.outcome_matrix, outcomes.iter().copied());
-            let expected_shift = outcomes
-                .iter()
-                .copied()
-                .map(|o| self.outcome_shift.index(o))
-                .fold(false, |acc, v| acc ^ v);
-            (sign_parity_indicator == expected_parity_indicator) && (shift == expected_shift)
+            self.core
+                .is_stabilizer_with_conditional_sign_from_preimage(&preimage, outcomes)
         } else {
             false
         }
@@ -603,15 +557,15 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
 
     fn measure(&mut self, observable: &SparsePauli) -> usize {
         self.ensure_qubit_capacity(observable.max_support());
-        let preimage = self.phased_clifford.clifford().preimage(observable);
-        let non_zero_pos = preimage.x_bits().support().next();
+        assign_clifford_preimage(&mut self.core.preimage, self.phased_clifford.clifford(), observable);
+        let non_zero_pos = self.core.preimage.x_bits().support().next();
         match non_zero_pos {
             Some(pos) => {
                 let hint = self.phased_clifford.clifford().image_z(pos);
                 self.measure_pauli_with_hint_generic(observable, &hint);
             }
             None => {
-                self.measure_deterministic(&preimage);
+                self.measure_deterministic();
             }
         }
         self.outcome_count() - 1
@@ -624,7 +578,7 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
     }
 
     fn outcome_count(&self) -> usize {
-        self.random_outcome_indicator.len()
+        self.core.random_outcome_indicator.len()
     }
 
     fn with_capacity(qubit_count: usize, outcome_count: usize, random_outcome_count: usize) -> Self
@@ -635,43 +589,36 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
     }
 
     fn qubit_capacity(&self) -> usize {
-        debug_assert_eq!(self.phased_clifford.num_qubits(), self.sign_matrix.row_count());
+        debug_assert_eq!(self.phased_clifford.num_qubits(), self.core.sign_matrix.row_count());
         self.phased_clifford.num_qubits()
     }
 
     fn outcome_capacity(&self) -> usize {
-        self.outcome_matrix.row_count()
+        self.core.outcome_matrix.row_count()
     }
 
     fn random_outcome_capacity(&self) -> usize {
-        debug_assert_eq!(self.outcome_matrix.column_count(), self.sign_matrix.column_count());
-        self.outcome_matrix.column_count()
+        debug_assert_eq!(
+            self.core.outcome_matrix.column_count(),
+            self.core.sign_matrix.column_count()
+        );
+        self.core.outcome_matrix.column_count()
     }
 
+    #[inline(never)]
     fn reserve_qubits(&mut self, new_capacity: usize) {
         if new_capacity > self.qubit_capacity() {
-            self.sign_matrix.resize(new_capacity, self.sign_matrix.column_count());
+            self.core.resize_qubits(new_capacity);
             self.phased_clifford.resize(new_capacity);
         }
     }
 
     fn reserve_outcomes(&mut self, new_outcome_capacity: usize, new_random_outcome_capacity: usize) {
-        assert!(
-            new_outcome_capacity >= new_random_outcome_capacity,
-            "outcome capacity must be at least random outcome capacity"
-        );
-        let new_outcome_capacity = new_outcome_capacity.max(self.outcome_capacity());
-        let new_random_outcome_capacity = new_random_outcome_capacity.max(self.random_outcome_capacity());
-
-        self.outcome_matrix
-            .resize(new_outcome_capacity, new_random_outcome_capacity);
-        self.sign_matrix
-            .resize(self.sign_matrix.row_count(), new_random_outcome_capacity);
+        let (_, new_random_outcome_capacity) = self
+            .core
+            .resize_outcomes(new_outcome_capacity, new_random_outcome_capacity);
         self.quadratic_phase_matrix
             .resize(new_random_outcome_capacity, new_random_outcome_capacity);
-        if self.outcome_shift.len() < new_outcome_capacity {
-            self.outcome_shift.resize(new_outcome_capacity);
-        }
         if self.linear_i_phase.len() < new_random_outcome_capacity {
             self.linear_i_phase.resize(new_random_outcome_capacity);
         }
