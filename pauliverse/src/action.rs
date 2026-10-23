@@ -1205,29 +1205,26 @@ fn phase_is_invariant_along(linear: &[i32], quadratic: &[i32], direction: &BitVe
     for bit in direction.support() {
         derivative_constant += linear[bit];
         derivative_linear[bit] -= 2 * linear[bit];
-    }
-    for first in 0..dimension {
-        for second in (first + 1)..dimension {
-            let coefficient = quadratic[first * dimension + second];
-            match (direction.index(first), direction.index(second)) {
-                (true, true) => {
-                    derivative_constant += coefficient;
-                    derivative_linear[first] -= coefficient;
-                    derivative_linear[second] -= coefficient;
+        for other in 0..bit {
+            if !direction.index(other) {
+                let coefficient = quadratic[other * dimension + bit];
+                if (2 * coefficient).rem_euclid(8) != 0 {
+                    return false;
                 }
-                (true, false) => {
-                    if (2 * coefficient).rem_euclid(8) != 0 {
-                        return false;
-                    }
-                    derivative_linear[second] += coefficient;
+                derivative_linear[other] += coefficient;
+            }
+        }
+        for other in (bit + 1)..dimension {
+            let coefficient = quadratic[bit * dimension + other];
+            if direction.index(other) {
+                derivative_constant += coefficient;
+                derivative_linear[bit] -= coefficient;
+                derivative_linear[other] -= coefficient;
+            } else {
+                if (2 * coefficient).rem_euclid(8) != 0 {
+                    return false;
                 }
-                (false, true) => {
-                    if (2 * coefficient).rem_euclid(8) != 0 {
-                        return false;
-                    }
-                    derivative_linear[first] += coefficient;
-                }
-                (false, false) => {}
+                derivative_linear[other] += coefficient;
             }
         }
     }
