@@ -1,7 +1,25 @@
 # paulimer formal verification
 
-Lean 4 proofs for the minimal symplectic-transvection decomposition used by
+Lean 4 proofs for Paulimer's phase-aware Pauli algebra and the minimal
+symplectic-transvection decomposition used by
 `paulimer::clifford_to_transvections_minimal`.
+
+`PaulimerFormal.Pauli` defines storage-independent Paulis in Paulimer's `xz`
+phase convention, `i^p X^x Z^z`. It proves the group laws, xz/xyz phase
+conversion, the Y-count/Y-weight identity, commutation and anticommutation
+criteria, the phase-only center, the self-inverse criterion corresponding to
+Hermiticity, unique zero-`xyz`-phase normalization, conjugation signs, and the
+order-four bound. Its one-qubit interpretation uses Physlib's concrete Pauli
+matrices and is proved multiplicative by `oneQubitMatrix_mul`;
+`oneQubitMatrixHom` packages that result as a monoid homomorphism. The
+symbolic X, Y, and Z generators are also proved equal to Physlib's
+corresponding matrices.
+
+These Pauli results verify the canonical mathematics, not yet Paulimer's
+dense or sparse Rust representations. Their refinement to executable packed
+models and compiled Rust remains separate work. The concrete one-qubit bridge
+does not yet connect the symbolic Hermiticity or complex-conjugation
+definitions to matrix conjugate transpose or entrywise conjugation.
 
 The theorem concerns the Clifford's binary symplectic action. Pauli-image signs
 and global phase are outside its scope. It proves the action-level
@@ -45,9 +63,9 @@ Implementation-facing matrix lemmas make the correspondence explicit:
   faithful basis to the canonical core used by the one-fix theorem.
 
 These lemmas assume the stated matrix invariants; they do not verify Rust's
-row reducer or triangularizer. Positive Hermitian normalization, the greedy
-algorithm and its `4m + 2` guard, Python GIL behavior, and resource bounds
-remain outside the formalization.
+row reducer or triangularizer. The use of positive phase normalization in the
+Rust transvection pipeline, the greedy algorithm and its `4m + 2` guard,
+Python GIL behavior, and resource bounds remain outside the formalization.
 
 `PaulimerFormal.BinarBridge` imports the sibling `BinarFormal` project and
 records the shared `X`-then-`Z` coordinate convention. Its main refinement
@@ -61,9 +79,10 @@ matrix semantics:
 This is a semantic bridge to Binar's executable Lean model. It does not by
 itself prove that the compiled Rust packed representation matches that model.
 
-The project pins Lean **4.34.0** and mathlib
-`5ed2965256430c3649e86755f9576b54eca72435`. The local BinarFormal dependency
-uses the same pins:
+The project pins Lean **4.34.0**, mathlib
+`5ed2965256430c3649e86755f9576b54eca72435`, and Physlib
+`d410e856abdd7c4c747332da2533c1596327a473`. The local BinarFormal dependency
+uses the same Lean and mathlib pins:
 
 ```bash
 lake build

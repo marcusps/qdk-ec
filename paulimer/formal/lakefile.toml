@@ -18,5 +18,10 @@ rev = "5ed2965256430c3649e86755f9576b54eca72435"
 name = "binarFormal"
 path = "../../binar/formal"
 
+[[require]]
+name = "Physlib"
+git = "https://github.com/leanprover-community/physlib"
+rev = "d410e856abdd7c4c747332da2533c1596327a473"
+
 [[lean_lib]]
 name = "PaulimerFormal"
