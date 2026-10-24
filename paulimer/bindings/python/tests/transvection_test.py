@@ -10,10 +10,10 @@ import threading
 from pathlib import Path
 
 import pytest
+from binar import BitMatrix, rank
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from binar import BitMatrix, rank
 from paulimer import CliffordUnitary, SparsePauli, UnitaryOpcode
 
 
