@@ -163,7 +163,7 @@ impl PhasedCliffordUnitary {
     #[must_use]
     pub fn state_amplitude_phase_exponent_usize(&self, value: usize) -> Option<u8> {
         let mut basis = AlignedBitVec::zeros(self.num_qubits());
-        for qubit in 0..self.num_qubits() {
+        for qubit in 0..self.num_qubits().min(usize::BITS as usize) {
             basis.assign_index(qubit, (value >> qubit) & 1 == 1);
         }
         self.state_amplitude_phase_exponent(&basis)

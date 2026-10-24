@@ -1,10 +1,4 @@
-//! Dense (full state vector) simulation oracle shared by the `paulimer` and
-//! `pauliverse` integration tests.
-//!
-//! This crate exists only to remove the duplicated brute-force statevector
-//! simulator that both test suites used to carry inline. It is never published
-//! (`publish = false`) and is depended on only as a `dev-dependency`.
-
+#![allow(dead_code)]
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,

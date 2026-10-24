@@ -1,6 +1,5 @@
 use crate::Simulation;
-use crate::action::phase_form_exponent;
-use crate::outcome_complete_simulation::row_sum;
+use crate::outcome_complete_simulation::{BranchBitLocation, OutcomeParity, branch_bit_locations, row_sum};
 use crate::outcome_free_simulation::{max_pair_support, max_support};
 use binar::{BitMatrix, BitVec};
 use binar::{Bitwise, BitwiseMut, BitwisePairMut, matrix::AlignedBitMatrix, vec::AlignedBitVec};
@@ -28,8 +27,8 @@ type SparsePauli = paulimer::pauli::SparsePauli;
 ///
 /// For a circuit with `n` output qubits and `n_M` outcomes the simulator maintains a vector
 /// `q ∈ {1, 1/2}^{n_M}` of conditional outcome probabilities together with a *phased* Clifford
-/// encoder `R` and `𝔽₂` data `A`, `B`, `M`, `v₀`, `p`, `s`. For a random-bit vector
-/// `r ∈ {0,1}^{n_r}` (where `n_r` is the number of random outcomes) the outcome vector is
+/// encoder `R` and `𝔽₂` data `A`, `B`, `M`, `v₀`, `p`, `s`. For a branch-bit vector
+/// `r ∈ {0,1}^{n_r}` (where `n_r` is the number of branch bits) the outcome vector is
 /// `v = v₀ + M r` and the exact output state is
 ///
 /// ```text
@@ -42,13 +41,13 @@ type SparsePauli = paulimer::pauli::SparsePauli;
 /// | code field             | paper symbol | meaning                                       |
 /// |------------------------|--------------|-----------------------------------------------|
 /// | `phased_clifford`      | `R`          | phased state encoder (exact global phase)     |
-/// | `sign_matrix`          | `A`          | random bits → computational-basis register    |
+/// | `sign_matrix`          | `A`          | branch bits → computational-basis register    |
 /// | `quadratic_phase_matrix` | `B`        | quadratic `-1` phase                          |
-/// | `outcome_matrix`       | `M`          | random bits → outcome vector                  |
+/// | `outcome_matrix`       | `M`          | branch bits → outcome vector                  |
 /// | `outcome_shift`        | `v₀`         | deterministic outcome shift                   |
 /// | `linear_i_phase`       | `p`          | linear `i` phase                              |
 /// | `linear_sign_phase`    | `s`          | linear `-1` phase                             |
-/// | `random_outcome_indicator` | `q`      | which outcomes are random (probability 1/2)   |
+/// | `outcome_introduces_branch_bit` | `q`      | which outcomes introduce a branch coordinate   |
 ///
 /// # Phase-resolved Clifford application
 ///
@@ -71,7 +70,7 @@ type SparsePauli = paulimer::pauli::SparsePauli;
 /// sim.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
 ///
 /// // The encoder now prepares a Bell pair with an exactly-known global phase.
-/// assert_eq!(sim.random_outcome_count(), 0);
+/// assert_eq!(sim.branch_bit_count(), 0);
 /// ```
 #[must_use]
 pub struct PhasedOutcomeCompleteSimulation {
@@ -82,10 +81,10 @@ pub struct PhasedOutcomeCompleteSimulation {
     outcome_shift: AlignedBitVec,                 // v_0
     linear_i_phase: AlignedBitVec,                // p
     linear_sign_phase: AlignedBitVec,             // s
-    random_outcome_indicator: Vec<bool>,          // vec(q), [j] is true iff vec(q)_j = 1/2
+    outcome_introduces_branch_bit: Vec<bool>,     // vec(q), [j] is true iff vec(q)_j = 1/2
     symbolic_angle_indicator: Vec<bool>,          // [k] is true iff random bit k is a symbolic rotation angle
     symbolic_angle_use_count: Vec<Option<usize>>, // [j] counts the rotations an angle outcome j drives
-    random_bit_count: usize,
+    branch_bit_count: usize,
     qubit_count: usize,
 }
 
@@ -102,10 +101,10 @@ impl std::fmt::Debug for PhasedOutcomeCompleteSimulation {
                 "linear_sign_phase",
                 &self.linear_sign_phase().iter().collect::<Vec<bool>>(),
             )
-            .field("random_outcome_indicator", &self.random_outcome_indicator)
+            .field("outcome_introduces_branch_bit", &self.outcome_introduces_branch_bit)
             .field("symbolic_angle_indicator", &self.symbolic_angle_indicator)
             .field("symbolic_angle_use_count", &self.symbolic_angle_use_count)
-            .field("random_bit_count", &self.random_bit_count)
+            .field("branch_bit_count", &self.branch_bit_count)
             .field("qubit_count", &self.qubit_count)
             .finish()
     }
@@ -118,6 +117,10 @@ impl Default for PhasedOutcomeCompleteSimulation {
 }
 
 impl PhasedOutcomeCompleteSimulation {
+    pub(crate) fn branch_bit_locations(&self) -> impl Iterator<Item = BranchBitLocation> + '_ {
+        branch_bit_locations(&self.outcome_introduces_branch_bit)
+    }
+
     /// Get the phaseless Clifford unitary encoding the current stabilizer state.
     ///
     /// This is the unitary `R` such that `R|0⟩` represents the stabilizer state, with the global
@@ -133,7 +136,7 @@ impl PhasedOutcomeCompleteSimulation {
         res
     }
 
-    /// Get the sign matrix `A` tracking how computational-basis registers depend on random bits.
+    /// Get the sign matrix `A` tracking how computational-basis registers depend on branch bits.
     ///
     /// Returns a cache-aligned reference for efficiency.
     #[must_use]
@@ -145,7 +148,7 @@ impl PhasedOutcomeCompleteSimulation {
     pub fn sign_matrix(&self) -> BitMatrix {
         BitMatrix::from_aligned(AlignedBitMatrix::from_row_iter(
             self.sign_matrix.row_iterator(0..self.qubit_count()),
-            self.random_outcome_count(),
+            self.branch_bit_count(),
         ))
     }
 
@@ -160,8 +163,8 @@ impl PhasedOutcomeCompleteSimulation {
     /// Get a copy of the quadratic phase matrix `B` without alignment constraints.
     pub fn quadratic_phase_matrix(&self) -> BitMatrix {
         BitMatrix::from_aligned(AlignedBitMatrix::from_row_iter(
-            self.quadratic_phase_matrix.row_iterator(0..self.random_outcome_count()),
-            self.random_outcome_count(),
+            self.quadratic_phase_matrix.row_iterator(0..self.branch_bit_count()),
+            self.branch_bit_count(),
         ))
     }
 
@@ -175,7 +178,7 @@ impl PhasedOutcomeCompleteSimulation {
     pub fn outcome_matrix(&self) -> BitMatrix {
         BitMatrix::from_aligned(AlignedBitMatrix::from_row_iter(
             self.outcome_matrix.row_iterator(0..self.outcome_count()),
-            self.random_outcome_count(),
+            self.branch_bit_count(),
         ))
     }
 
@@ -200,7 +203,7 @@ impl PhasedOutcomeCompleteSimulation {
 
     /// Get a copy of the linear `i`-phase vector `p` without alignment constraints.
     pub fn linear_i_phase(&self) -> BitVec {
-        BitVec::from_aligned(self.random_outcome_count(), self.linear_i_phase.clone())
+        BitVec::from_aligned(self.branch_bit_count(), self.linear_i_phase.clone())
     }
 
     /// Get the linear `-1`-phase vector `s` (cache-aligned).
@@ -213,28 +216,28 @@ impl PhasedOutcomeCompleteSimulation {
 
     /// Get a copy of the linear `-1`-phase vector `s` without alignment constraints.
     pub fn linear_sign_phase(&self) -> BitVec {
-        BitVec::from_aligned(self.random_outcome_count(), self.linear_sign_phase.clone())
+        BitVec::from_aligned(self.branch_bit_count(), self.linear_sign_phase.clone())
     }
 
     /// Returns the `ζ₈ = e^{iπ/4}` exponent of the scalar `i^⟨p, r⟩ (-1)^⟨B r + s, r⟩` for the given
-    /// random-bit assignment `r`.
+    /// branch-bit assignment `r`.
     ///
     /// This is the `r`-dependent prefactor multiplying `R|A r⟩` in the output state. The remaining
     /// phase of `R|A r⟩` itself is carried by [`Self::phased_state_encoder`].
     ///
     /// # Panics
     ///
-    /// Panics if `random_bits` has fewer than [`Self::random_outcome_count`] entries.
+    /// Panics if `branch_assignment` has fewer than [`Self::branch_bit_count`] entries.
     #[must_use]
-    pub fn output_phase_exponent(&self, random_bits: &[bool]) -> u8 {
-        let n_random = self.random_outcome_count();
+    pub fn output_phase_exponent(&self, branch_assignment: &[bool]) -> u8 {
+        let branch_count = self.branch_bit_count();
         assert!(
-            random_bits.len() >= n_random,
-            "random_bits is shorter than the number of random outcomes"
+            branch_assignment.len() >= branch_count,
+            "branch_assignment is shorter than the number of branch bits"
         );
         phase_form_exponent(
-            n_random,
-            |index| random_bits[index],
+            branch_count,
+            |index| branch_assignment[index],
             |index| self.linear_i_phase.index(index),
             |index| self.linear_sign_phase.index(index),
             |row, column| self.quadratic_phase_matrix.get((row, column)),
@@ -250,7 +253,7 @@ impl PhasedOutcomeCompleteSimulation {
     /// Sample measurement outcomes using a provided random number generator.
     pub fn sample_with_rng<R: RngExt>(&self, num_shots: usize, rng: &mut R) -> BitMatrix {
         let num_outcomes = self.outcome_count();
-        let num_random_bits = self.random_outcome_count();
+        let num_random_bits = self.branch_bit_count();
 
         if num_outcomes == 0 {
             return BitMatrix::from_aligned(AlignedBitMatrix::zeros(num_shots, 0));
@@ -277,25 +280,25 @@ impl PhasedOutcomeCompleteSimulation {
     }
 
     #[inline]
-    fn ensure_outcome_capacity(&mut self, random_outcome: bool) {
+    fn ensure_outcome_capacity(&mut self, introduces_branch_bit: bool) {
         let mut new_outcome_capacity = self.outcome_capacity();
         let next_outcome_pos = self.outcome_count();
         if next_outcome_pos >= self.outcome_capacity() {
             new_outcome_capacity = (next_outcome_pos + 1).next_power_of_two();
         }
 
-        let mut new_random_outcome_capacity = self.random_outcome_capacity();
-        if random_outcome {
-            let next_random_bit = self.random_outcome_count();
-            if next_random_bit >= self.random_outcome_capacity() {
-                new_random_outcome_capacity = (next_random_bit + 1).next_power_of_two();
+        let mut new_branch_bit_capacity = self.branch_bit_capacity();
+        if introduces_branch_bit {
+            let next_random_bit = self.branch_bit_count();
+            if next_random_bit >= self.branch_bit_capacity() {
+                new_branch_bit_capacity = (next_random_bit + 1).next_power_of_two();
             }
         }
 
-        self.reserve_outcomes(new_outcome_capacity, new_random_outcome_capacity);
+        self.reserve_outcomes(new_outcome_capacity, new_branch_bit_capacity);
     }
 
-    /// Applies a Pauli `P` conditioned on the random-bit parity `⟨indicator, r⟩`, updating the
+    /// Applies a Pauli `P` conditioned on the branch-bit parity `⟨indicator, r⟩`, updating the
     /// state matrix `A` and the phase data `B`, `p`, `s` accordingly.
     ///
     /// This realises step 4b of Algorithm 4.2: with preimage `i^l X^x Z^z = R† P R`,
@@ -306,20 +309,20 @@ impl PhasedOutcomeCompleteSimulation {
     /// * for odd `l`, the extra `i^⟨indicator, r⟩` flips `p` by `indicator`, and its carry against the
     ///   existing i-phase, `(-1)^{⟨p, r⟩⟨indicator, r⟩}`, adds the outer product `p ⊗ indicator` to `B`;
     /// * for `l` with the two-bit set, the `(-1)^⟨indicator, r⟩` factor flips `s` by `indicator`.
-    fn apply_pauli_conditioned_on_inner_random_bits<Bits: PauliBits, Phase: PhaseExponent>(
+    fn apply_pauli_conditioned_on_branch_bits<Bits: PauliBits, Phase: PhaseExponent>(
         &mut self,
         pauli: &PauliUnitary<Bits, Phase>,
-        inner_bits_indicator: &AlignedBitVec,
+        branch_mask: &AlignedBitVec,
     ) {
         let preimage = self.phased_clifford.clifford().preimage(pauli);
         let z_times_sign_matrix = row_sum(&self.sign_matrix, preimage.z_bits().support());
-        for row in inner_bits_indicator.support() {
+        for row in branch_mask.support() {
             self.quadratic_phase_matrix
                 .row_mut(row)
                 .bitxor_assign(&z_times_sign_matrix);
         }
         for x_bit_pos in preimage.x_bits().support() {
-            self.sign_matrix.row_mut(x_bit_pos).bitxor_assign(inner_bits_indicator);
+            self.sign_matrix.row_mut(x_bit_pos).bitxor_assign(branch_mask);
         }
         let l = preimage.xz_phase_exponent().value();
         if l & 1 == 1 {
@@ -327,34 +330,32 @@ impl PhasedOutcomeCompleteSimulation {
             // i·i = -1 from overlap with the existing i-phase is the quadratic cross term
             // (-1)^{⟨p, r⟩⟨indicator, r⟩}, absorbed into `B` as the outer product `p ⊗ indicator`.
             for row in self.linear_i_phase.support() {
-                self.quadratic_phase_matrix
-                    .row_mut(row)
-                    .bitxor_assign(inner_bits_indicator);
+                self.quadratic_phase_matrix.row_mut(row).bitxor_assign(branch_mask);
             }
-            self.linear_i_phase.bitxor_assign(inner_bits_indicator);
+            self.linear_i_phase.bitxor_assign(branch_mask);
         }
         if l & 2 == 2 {
-            self.linear_sign_phase.bitxor_assign(inner_bits_indicator);
+            self.linear_sign_phase.bitxor_assign(branch_mask);
         }
     }
 
-    pub fn with_capacity(qubit_count: usize, outcome_count: usize, random_outcome_count: usize) -> Self {
+    pub fn with_capacity(qubit_count: usize, outcome_count: usize, branch_bit_count: usize) -> Self {
         const MIN_CAPACITY: usize = CLIFFORD_BIT_ALIGNMENT;
         let outcome_capacity = outcome_count.max(MIN_CAPACITY);
-        let random_capacity = random_outcome_count.max(MIN_CAPACITY);
+        let branch_capacity = branch_bit_count.max(MIN_CAPACITY);
 
         PhasedOutcomeCompleteSimulation {
             phased_clifford: PhasedCliffordUnitary::identity(qubit_count),
-            sign_matrix: AlignedBitMatrix::zeros(qubit_count, random_capacity),
-            quadratic_phase_matrix: AlignedBitMatrix::zeros(random_capacity, random_capacity),
-            outcome_matrix: AlignedBitMatrix::zeros(outcome_capacity, random_capacity),
+            sign_matrix: AlignedBitMatrix::zeros(qubit_count, branch_capacity),
+            quadratic_phase_matrix: AlignedBitMatrix::zeros(branch_capacity, branch_capacity),
+            outcome_matrix: AlignedBitMatrix::zeros(outcome_capacity, branch_capacity),
             outcome_shift: AlignedBitVec::zeros(outcome_capacity),
-            linear_i_phase: AlignedBitVec::zeros(random_capacity),
-            linear_sign_phase: AlignedBitVec::zeros(random_capacity),
-            random_outcome_indicator: Vec::with_capacity(outcome_count),
-            symbolic_angle_indicator: Vec::with_capacity(random_outcome_count),
-            symbolic_angle_use_count: Vec::with_capacity(random_outcome_count),
-            random_bit_count: 0,
+            linear_i_phase: AlignedBitVec::zeros(branch_capacity),
+            linear_sign_phase: AlignedBitVec::zeros(branch_capacity),
+            outcome_introduces_branch_bit: Vec::with_capacity(outcome_count),
+            symbolic_angle_indicator: Vec::with_capacity(branch_bit_count),
+            symbolic_angle_use_count: Vec::with_capacity(outcome_count),
+            branch_bit_count: 0,
             qubit_count,
         }
     }
@@ -400,8 +401,8 @@ impl PhasedOutcomeCompleteSimulation {
             // a = A^T b', with the new random bit appended: a_with_zero and a_with_one = a ⊕ {0,1}.
             let a_with_zero = row_sum(&self.sign_matrix, preimage.z_bits().support());
             let mut a_with_one = a_with_zero.clone();
-            a_with_one.assign_index(self.random_bit_count, true);
-            self.allocate_random_bit();
+            let location = self.allocate_branch_bit_with_provenance(false);
+            a_with_one.assign_index(location.branch_bit_index, true);
 
             // B <- B + (a ⊕ 0)(a ⊕ 1)^T.
             for row in a_with_zero.support() {
@@ -414,14 +415,14 @@ impl PhasedOutcomeCompleteSimulation {
             }
 
             // Apply P' conditioned on the random bits indicated by (a ⊕ 1).
-            self.apply_pauli_conditioned_on_inner_random_bits(hint, &a_with_one);
+            self.apply_pauli_conditioned_on_branch_bits(hint, &a_with_one);
         }
     }
 
     fn measure_deterministic<Bits: PauliBits, Phase: PhaseExponent>(&mut self, preimage: &PauliUnitary<Bits, Phase>) {
         self.ensure_outcome_capacity(false);
         let outcome_matrix_row = row_sum(&self.sign_matrix, preimage.z_bits().support());
-        let outcome_position = self.random_outcome_indicator.len();
+        let outcome_position = self.outcome_introduces_branch_bit.len();
         self.outcome_matrix
             .row_mut(outcome_position)
             .assign(&outcome_matrix_row);
@@ -429,26 +430,40 @@ impl PhasedOutcomeCompleteSimulation {
         if preimage.xz_phase_exponent().value() == 2 {
             self.outcome_shift.assign_index(outcome_position, true);
         }
-        self.random_outcome_indicator.push(false);
+        self.outcome_introduces_branch_bit.push(false);
         self.symbolic_angle_use_count.push(None);
     }
 
-    /// Get the number of random (non-deterministic) measurement outcomes.
+    /// Get the number of independent branch coordinates.
+    #[must_use]
+    pub fn branch_bit_count(&self) -> usize {
+        self.branch_bit_count
+    }
+
+    /// Deprecated alias for [`Self::branch_bit_count`].
+    #[deprecated(note = "use branch_bit_count")]
     #[must_use]
     pub fn random_outcome_count(&self) -> usize {
-        self.random_bit_count
+        self.branch_bit_count()
     }
 
-    /// Get indicators for which outcomes are random.
+    /// Get one indicator per public outcome: true if it introduces a branch coordinate.
+    #[must_use]
+    pub fn outcome_introduces_branch_bit(&self) -> &[bool] {
+        &self.outcome_introduces_branch_bit
+    }
+
+    /// Deprecated alias for [`Self::outcome_introduces_branch_bit`].
+    #[deprecated(note = "use outcome_introduces_branch_bit")]
     #[must_use]
     pub fn random_outcome_indicator(&self) -> &[bool] {
-        &self.random_outcome_indicator
+        self.outcome_introduces_branch_bit()
     }
 
-    /// Get indicators for which random bits are symbolic rotation angles.
+    /// Get indicators for which branch bits are symbolic rotation angles.
     ///
-    /// The returned slice is indexed by random-bit index (`0..random_outcome_count()`). Entry `k` is
-    /// `true` iff random bit `k` was allocated via [`Simulation::allocate_symbolic_angle`] (a virtual
+    /// The returned slice is indexed by branch-bit index (`0..branch_bit_count()`). Entry `k` is
+    /// `true` iff branch bit `k` was allocated via [`Simulation::allocate_symbolic_angle`] (a virtual
     /// rotation parameter) rather than [`Simulation::allocate_random_bit`] or a genuine measurement.
     #[must_use]
     pub fn symbolic_angle_indicator(&self) -> &[bool] {
@@ -484,27 +499,30 @@ impl PhasedOutcomeCompleteSimulation {
         self.symbolic_angle_use_count.iter().position(|count| *count == Some(0))
     }
 
-    fn allocate_random_bit_with_provenance(&mut self, is_symbolic_angle: bool) -> usize {
+    fn allocate_branch_bit_with_provenance(&mut self, is_symbolic_angle: bool) -> BranchBitLocation {
         self.ensure_outcome_capacity(true);
-        let outcome_pos = self.random_outcome_indicator.len();
+        let location = BranchBitLocation {
+            outcome_id: self.outcome_count(),
+            branch_bit_index: self.branch_bit_count,
+        };
         self.outcome_matrix
-            .row_mut(outcome_pos)
-            .assign_index(self.random_bit_count, true);
-        self.random_outcome_indicator.push(true);
+            .row_mut(location.outcome_id)
+            .assign_index(location.branch_bit_index, true);
+        self.outcome_introduces_branch_bit.push(true);
         self.symbolic_angle_indicator.push(is_symbolic_angle);
         self.symbolic_angle_use_count.push(is_symbolic_angle.then_some(0));
-        self.random_bit_count += 1;
-        outcome_pos
+        self.branch_bit_count += 1;
+        location
     }
 }
 
 impl Simulation for PhasedOutcomeCompleteSimulation {
     fn allocate_random_bit(&mut self) -> usize {
-        self.allocate_random_bit_with_provenance(false)
+        self.allocate_branch_bit_with_provenance(false).outcome_id
     }
 
     fn allocate_symbolic_angle(&mut self) -> usize {
-        self.allocate_random_bit_with_provenance(true)
+        self.allocate_branch_bit_with_provenance(true).outcome_id
     }
 
     fn clifford(&mut self, _clifford: &crate::Unitary, _support: &[crate::QubitId]) {
@@ -564,14 +582,15 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
             }
         }
         self.ensure_qubit_capacity(observable.max_support());
-        let shift_parity = outcomes.iter().fold(false, |accumulated, &outcome| {
-            accumulated ^ self.outcome_shift.index(outcome)
-        });
-        if shift_parity == parity {
+        let control = OutcomeParity::new(&self.outcome_matrix, &self.outcome_shift, outcomes);
+        if control.constant == parity {
             self.pauli(observable);
+            let mut inverse = observable.clone();
+            inverse.invert();
+            self.apply_pauli_conditioned_on_branch_bits(&inverse, &control.branch_mask);
+        } else {
+            self.apply_pauli_conditioned_on_branch_bits(observable, &control.branch_mask);
         }
-        let inner_bits_indicator = row_sum(&self.outcome_matrix, outcomes);
-        self.apply_pauli_conditioned_on_inner_random_bits(observable, &inner_bits_indicator);
     }
 
     fn is_stabilizer(&self, observable: &SparsePauli) -> bool {
@@ -589,13 +608,8 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
         if preimage.x_bits().is_zero() && preimage.xz_phase_exponent().is_even() {
             let sign_parity_indicator = row_sum(&self.sign_matrix, preimage.z_bits().support());
             let shift = preimage.xz_phase_exponent().value() / 2 == 1;
-            let expected_parity_indicator = row_sum(&self.outcome_matrix, outcomes.iter().copied());
-            let expected_shift = outcomes
-                .iter()
-                .copied()
-                .map(|o| self.outcome_shift.index(o))
-                .fold(false, |acc, v| acc ^ v);
-            (sign_parity_indicator == expected_parity_indicator) && (shift == expected_shift)
+            let expected = OutcomeParity::new(&self.outcome_matrix, &self.outcome_shift, outcomes);
+            (sign_parity_indicator == expected.branch_mask) && (shift == expected.constant)
         } else {
             false
         }
@@ -624,14 +638,14 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
     }
 
     fn outcome_count(&self) -> usize {
-        self.random_outcome_indicator.len()
+        self.outcome_introduces_branch_bit.len()
     }
 
-    fn with_capacity(qubit_count: usize, outcome_count: usize, random_outcome_count: usize) -> Self
+    fn with_capacity(qubit_count: usize, outcome_count: usize, branch_bit_count: usize) -> Self
     where
         Self: Sized,
     {
-        PhasedOutcomeCompleteSimulation::with_capacity(qubit_count, outcome_count, random_outcome_count)
+        PhasedOutcomeCompleteSimulation::with_capacity(qubit_count, outcome_count, branch_bit_count)
     }
 
     fn qubit_capacity(&self) -> usize {
@@ -655,28 +669,28 @@ impl Simulation for PhasedOutcomeCompleteSimulation {
         }
     }
 
-    fn reserve_outcomes(&mut self, new_outcome_capacity: usize, new_random_outcome_capacity: usize) {
+    fn reserve_outcomes(&mut self, new_outcome_capacity: usize, new_branch_bit_capacity: usize) {
         assert!(
-            new_outcome_capacity >= new_random_outcome_capacity,
+            new_outcome_capacity >= new_branch_bit_capacity,
             "outcome capacity must be at least random outcome capacity"
         );
         let new_outcome_capacity = new_outcome_capacity.max(self.outcome_capacity());
-        let new_random_outcome_capacity = new_random_outcome_capacity.max(self.random_outcome_capacity());
+        let new_branch_bit_capacity = new_branch_bit_capacity.max(self.branch_bit_capacity());
 
         self.outcome_matrix
-            .resize(new_outcome_capacity, new_random_outcome_capacity);
+            .resize(new_outcome_capacity, new_branch_bit_capacity);
         self.sign_matrix
-            .resize(self.sign_matrix.row_count(), new_random_outcome_capacity);
+            .resize(self.sign_matrix.row_count(), new_branch_bit_capacity);
         self.quadratic_phase_matrix
-            .resize(new_random_outcome_capacity, new_random_outcome_capacity);
+            .resize(new_branch_bit_capacity, new_branch_bit_capacity);
         if self.outcome_shift.len() < new_outcome_capacity {
             self.outcome_shift.resize(new_outcome_capacity);
         }
-        if self.linear_i_phase.len() < new_random_outcome_capacity {
-            self.linear_i_phase.resize(new_random_outcome_capacity);
+        if self.linear_i_phase.len() < new_branch_bit_capacity {
+            self.linear_i_phase.resize(new_branch_bit_capacity);
         }
-        if self.linear_sign_phase.len() < new_random_outcome_capacity {
-            self.linear_sign_phase.resize(new_random_outcome_capacity);
+        if self.linear_sign_phase.len() < new_branch_bit_capacity {
+            self.linear_sign_phase.resize(new_branch_bit_capacity);
         }
     }
 }
@@ -711,5 +725,56 @@ impl PhasedOutcomeCompleteSimulation {
         self.phased_clifford.left_mul_pauli_exp(&negated2);
         self.phased_clifford.left_mul_pauli_exp(&product);
         self.phased_clifford.left_mul_global_phase(1);
+    }
+}
+
+/// Evaluates the `ζ₈ = e^{iπ/4}` exponent of the F₂ phase form `i^⟨p, r⟩ (-1)^⟨B r + s, r⟩` for a
+/// branch-bit assignment `r`.
+///
+/// The coefficients are read through accessor closures so the phased simulator and its lowered
+/// [`crate::action`] `PhaseData` — which store `p`, `s`, `B` and `r` in different (aligned vs.
+/// unaligned) representations — share a single implementation. `branch_bit`, `linear_i` (`p`) and
+/// `linear_sign` (`s`) are indexed by column and `quadratic` reads `B[(row, column)]`, all over
+/// `0..branch_count`.
+pub(crate) fn phase_form_exponent(
+    branch_count: usize,
+    branch_bit: impl Fn(usize) -> bool,
+    linear_i: impl Fn(usize) -> bool,
+    linear_sign: impl Fn(usize) -> bool,
+    quadratic: impl Fn(usize, usize) -> bool,
+) -> u8 {
+    let mut linear_i_parity = false;
+    let mut sign = false;
+    for column in 0..branch_count {
+        if !branch_bit(column) {
+            continue;
+        }
+        linear_i_parity ^= linear_i(column);
+        sign ^= linear_sign(column);
+        for row in 0..branch_count {
+            if branch_bit(row) && quadratic(row, column) {
+                sign = !sign;
+            }
+        }
+    }
+    (2 * u8::from(linear_i_parity) + 4 * u8::from(sign)) % 8
+}
+
+#[cfg(test)]
+mod capacity_tests {
+    use super::*;
+
+    #[test]
+    fn symbolic_angle_uses_reserve_public_outcomes_not_branch_bits() {
+        let mut simulation = PhasedOutcomeCompleteSimulation::with_capacity(1, 513, 1);
+        let capacity = simulation.symbolic_angle_use_count.capacity();
+        assert!(capacity >= 513);
+        for outcome in 0..512 {
+            assert_eq!(simulation.measure(&SparsePauli::z(0, 1)), outcome);
+        }
+        assert_eq!(simulation.allocate_symbolic_angle(), 512);
+        assert_eq!(simulation.branch_bit_count(), 1);
+        assert_eq!(simulation.unused_symbolic_angle(), Some(512));
+        assert_eq!(simulation.symbolic_angle_use_count.capacity(), capacity);
     }
 }

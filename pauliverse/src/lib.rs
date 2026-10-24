@@ -37,7 +37,7 @@
 //! use paulimer::{UnitaryOp, SparsePauli};
 //!
 //! // Create a simple Bell state simulation
-//! let mut sim = OutcomeSpecificSimulation::new_with_random_outcomes(2);
+//! let mut sim = OutcomeSpecificSimulation::new_with_random_samples(2);
 //!
 //! // Apply gates
 //! sim.unitary_op(UnitaryOp::Hadamard, &[0]);
@@ -62,7 +62,7 @@
 //! | [`FaultySimulation`] | Noisy simulation with error correction | Efficient frame-based noise propagation |
 //!
 //! **When to use outcome-complete over outcome-specific**: If you need many samples and the
-//! circuit has `n_random` random measurements, outcome-complete saves a factor of `n_random` by computing
+//! circuit has `branch_count` random measurements, outcome-complete saves a factor of `branch_count` by computing
 //! the outcome distribution once, then sampling efficiently without re-running the circuit.
 //! Outcome-complete simulation is also ideal for circuit characterizations, like verification or outcome codes.
 //!
@@ -281,8 +281,8 @@ pub trait Simulation: Default {
     /// # Arguments
     /// * `qubit_count` - Number of qubits to simulate
     /// * `outcome_count` - Expected number of measurement outcomes
-    /// * `random_outcome_count` - Expected number of random outcomes
-    fn with_capacity(qubit_count: usize, outcome_count: usize, random_outcome_count: usize) -> Self
+    /// * `branch_bit_count` - Expected number of independent branch coordinates, including symbolic-angle choices
+    fn with_capacity(qubit_count: usize, outcome_count: usize, branch_bit_count: usize) -> Self
     where
         Self: Sized;
 
@@ -301,12 +301,19 @@ pub trait Simulation: Default {
     fn outcome_capacity(&self) -> usize;
 
     /// Get the current random outcome capacity.
+    #[deprecated(note = "use branch_bit_capacity")]
     fn random_outcome_capacity(&self) -> usize;
+
+    /// Get the capacity for independent branch coordinates.
+    #[allow(deprecated)]
+    fn branch_bit_capacity(&self) -> usize {
+        self.random_outcome_capacity()
+    }
 
     /// Reserve capacity for additional outcomes.
     ///
     /// # Arguments
     /// * `new_outcome_capacity` - Total outcome capacity
-    /// * `new_random_outcome_capacity` - Random outcome capacity
-    fn reserve_outcomes(&mut self, new_outcome_capacity: usize, new_random_outcome_capacity: usize);
+    /// * `new_branch_bit_capacity` - Capacity for independent branch coordinates, including symbolic-angle choices
+    fn reserve_outcomes(&mut self, new_outcome_capacity: usize, new_branch_bit_capacity: usize);
 }

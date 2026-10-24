@@ -9,8 +9,8 @@ Fast stabilizer simulators.
 pauliverse provides multiple stabilizer simulation implementations optimized for different use cases:
 
 - **`OutcomeSpecificSimulation`**: Traditional stabilizer simulation that draws random measurement outcomes as needed. Best for Monte Carlo sampling when the number of shots is much smaller than the number of random measurements.
-- **`OutcomeCompleteSimulation`**: Tracks all 2^n_random outcome branches simultaneously. Best for analyzing entire circuits, or when shots >> 2^n_random.
-- **`PhasedOutcomeCompleteSimulation`**: Like `OutcomeCompleteSimulation`, but also tracks the exact global phase of the encoded state. Best for exact equality checking of non-stabilizer circuits. Its `PhasedCircuitAction` (via `pauliverse::action::phased_action_of`) compares two circuits with `is_equivalent` (up to a common global phase) or `is_equivalent_with_global_phase` (also pinning the recorded `ζ₈` global phase, which the §4.3 auxiliary-qubit separation of arXiv:2603.24717 recovers against a fixed convention).
+- **`OutcomeCompleteSimulation`**: Tracks all `2^branch_bit_count` outcome branches simultaneously. Branch bits are independent binary choices, not public outcome IDs.
+- **`PhasedOutcomeCompleteSimulation`**: Tracks encoder and branch phases for symbolic-angle circuit analysis. `PhasedCircuitAction.is_equivalent` retains relative phases within each physical-outcome sector. `is_equivalent_with_global_phase` also compares the encoder's convention-defined `ζ₈` phase, not an absolute operator phase. Dense tests do not establish a general proof of equivalence checking.
 - **`OutcomeFreeSimulation`**: Tracks stabilizer modulo measurement outcomes. Best for circuit verification and logical operator analysis.
 - **`FaultySimulation`**: Extends OutcomeCompleteSimulation with frame-based noise propagation. Best for estimating logical error rates under Pauli noise models.
 
@@ -38,7 +38,7 @@ let mut outcome_counts = [0, 0];
 
 for _ in 0..1000 {
     // Initialize fresh simulation for each shot
-    let mut sim = OutcomeSpecificSimulation::new_with_random_outcomes(2);
+    let mut sim = OutcomeSpecificSimulation::new_with_random_samples(2);
     
     // Create Bell pair: |00⟩ + |11⟩
     sim.unitary_op(UnitaryOp::Hadamard, &[0]);
@@ -92,11 +92,11 @@ outcome = sim.measure(pauli_z)
 |-----------|----------|---------------|
 | `OutcomeSpecificSimulation` | Monte Carlo sampling with many shots | Minimal overhead per shot, simple API |
 | `OutcomeCompleteSimulation` | Exact distributions, circuit verification | Simulates once, sample many times efficiently |
-| `PhasedOutcomeCompleteSimulation` | Exact equality checking of non-stabilizer circuits | Tracks the exact global phase, not just up to phase |
+| `PhasedOutcomeCompleteSimulation` | Phase-aware symbolic-angle circuit analysis | Tracks encoder and branch phases |
 | `OutcomeFreeSimulation` | State verification, logical operators | Tracks stabilizers without measurement records |
 | `FaultySimulation` | Logical error rates, decoder testing | Frame-based noise propagation |
 
-All simulators have O(n_gates × n_qubits²) worst-case complexity per simulation, though actual performance depends on circuit structure.
+The phased simulator's reference-amplitude updates use cubic echelon reductions in the qubit count. Overall cost also depends on branch count and circuit structure.
 
 ## Performance
 
@@ -137,7 +137,7 @@ Key resources:
 - [OutcomeSpecificSimulation](src/outcome_specific_simulation.rs) - Traditional simulation with random outcomes
 - [OutcomeCompleteSimulation](src/outcome_complete_simulation.rs) - All-branches simulation for exact analysis
 - [PhasedOutcomeCompleteSimulation](src/phased_outcome_complete_simulation.rs) - All-branches simulation tracking the exact global phase
-- [Circuit actions](src/action.rs) - `PhasedCircuitAction` for phase-aware and global-phase circuit equivalence checking
+- [Phased circuit actions](src/action/phased.rs) - `PhasedCircuitAction` for phase-aware comparisons with an optional convention-defined global-phase comparison
 - [FaultySimulation](src/faulty_simulation.rs) - Noisy simulation with frame propagation
 
 ## Contributing
