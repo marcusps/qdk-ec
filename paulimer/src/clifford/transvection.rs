@@ -9,7 +9,7 @@
 //!
 //! where `⟨·,·⟩` is the symplectic (commutation) form. This module follows the transvection
 //! framework of [arXiv:2102.11380](https://arxiv.org/abs/2102.11380) (Pllaha, Volanto & Tirkkonen,
-//! *Decomposition of Clifford Gates*): every Clifford is a product of transvections, and no
+//! *Decomposition of Clifford Gates*): every symplectic action is a product of transvections, and no
 //! decomposition is shorter than the residue rank `r = rank(I + F) = 2n − dim Fix(F)`, where `F` is
 //! the symplectic action and `Fix(F)` is the space of Pauli operators fixed by conjugation.
 //!
@@ -52,8 +52,9 @@ use crate::{Pauli, PauliBinaryOps, PauliMutable, SparsePauli, anti_commutes_with
 ///
 /// # Panics
 ///
-/// Panics if the reduction exceeds its linear termination bound. A valid Clifford cannot trigger
-/// this, so a panic here reports a defect in the reduction rather than an invalid input.
+/// The input must be a valid Clifford, as reported by `is_valid`.
+/// An invalid tableau such as `CliffordUnitary::zero(1)` can exceed the linear termination bound and panic.
+/// For a valid input, a panic reports a defect in the reduction.
 ///
 /// # Examples
 ///
@@ -155,7 +156,7 @@ pub fn clifford_fixed_space(clifford: &CliffordUnitary) -> Vec<SparsePauli> {
 }
 
 /// The `2n` standard basis Pauli operators `X₀, …, X_{n−1}, Z₀, …, Z_{n−1}`.
-fn symplectic_basis(qubit_count: usize) -> impl Iterator<Item = SparsePauli> {
+pub(super) fn symplectic_basis(qubit_count: usize) -> impl Iterator<Item = SparsePauli> {
     (0..qubit_count)
         .map(move |qubit| SparsePauli::x(qubit, qubit_count))
         .chain((0..qubit_count).map(move |qubit| SparsePauli::z(qubit, qubit_count)))
@@ -214,7 +215,7 @@ fn residue_vector(pauli: &SparsePauli, image: &DensePauli) -> SparsePauli {
 /// Sets the phase so that `pauli` is the positive Hermitian representative of its symplectic
 /// vector. The `xyz` phase exponent equals the `xz` exponent minus the `Y` weight, so assigning
 /// the `Y` weight as the `xz` exponent leaves the `xyz` exponent at zero.
-fn assign_positive_hermitian_phase(pauli: &mut SparsePauli) {
+pub(super) fn assign_positive_hermitian_phase(pauli: &mut SparsePauli) {
     pauli.assign_phase_exp(u8::try_from(pauli.y_weight() % 4).expect("phase exponent fits in u8"));
 }
 
