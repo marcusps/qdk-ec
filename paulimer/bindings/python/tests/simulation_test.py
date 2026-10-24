@@ -1,8 +1,8 @@
 from pathlib import Path
 
 import pytest
-
 from binar import BitMatrix, BitVector
+
 from paulimer import (
     CliffordUnitary,
     OutcomeCompleteSimulation,
