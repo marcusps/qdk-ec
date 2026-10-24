@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `branch_bit_count`, `branch_bit_capacity`, and `outcome_introduces_branch_bit` distinguish internal branch coordinates from public outcome IDs.
+- `OutcomeSpecificSimulation` constructors with `samples` in their names distinguish the sample source from recorded outcomes. The zero source does not change deterministic outcomes.
+
+### Deprecated
+- Use the branch coordinate accessors instead of `random_outcome_count`, `random_outcome_capacity`, `random_outcome_indicator`, and Python `random_bit_count`. The old names remain available.
+- Use the sample-source constructors instead of their `outcomes` aliases. Existing capacity keyword arguments and Rust `Simulation` implementations remain supported.
+
+### Fixed
+- `Simulation::allocate_random_bit` now returns the public outcome ID in all pauliverse simulators.
+- `OutcomeCompleteSimulation::is_stabilizer` no longer ignores the observable's sign, so it now distinguishes `+P` from `-P` and rejects the non-Hermitian `±iP`.
+- `is_stabilizer_with_conditional_sign` now rejects observables with an imaginary phase in outcome-complete and outcome-specific simulation.
+
+## binar [0.1.8], paulimer [0.2.9], pauliverse [0.1.7] - 2026-10-05
+
+### Changed
+- Cut per-measurement overheads in pauliverse simulators 
+
 ## binar [0.1.7], paulimer [0.2.8], pauliverse [0.1.6] - 2026-10-01
 
 ### Added
@@ -22,11 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FramePropagator.inject_measurement_flip(shot, outcome)` toggles a recorded
 	outcome delta without changing qubit frames. Available in Rust and Python;
 	supports padded records and propagates through subsequent classical feedback.
-
-### Fixed
-- `Simulation::allocate_random_bit` now returns the public outcome ID in all pauliverse simulators.
-- `OutcomeCompleteSimulation::is_stabilizer` no longer ignores the observable's sign, so it now distinguishes `+P` from `-P` and rejects the non-Hermitian `±iP`.
-- `is_stabilizer_with_conditional_sign` now rejects observables with an imaginary phase.
 
 ## binar [0.1.6], paulimer [0.2.6], pauliverse [0.1.4] - 2026-09-29
 

@@ -31,7 +31,7 @@
 //! use paulimer::{UnitaryOp, SparsePauli};
 //!
 //! // Create a simple Bell state simulation
-//! let mut sim = OutcomeSpecificSimulation::new_with_random_outcomes(2);
+//! let mut sim = OutcomeSpecificSimulation::new_with_random_samples(2);
 //!
 //! // Apply gates
 //! sim.unitary_op(UnitaryOp::Hadamard, &[0]);
@@ -241,8 +241,8 @@ pub trait Simulation: Default {
     /// # Arguments
     /// * `qubit_count` - Number of qubits to simulate
     /// * `outcome_count` - Expected number of measurement outcomes
-    /// * `random_outcome_count` - Expected number of random outcomes
-    fn with_capacity(qubit_count: usize, outcome_count: usize, random_outcome_count: usize) -> Self
+    /// * `branch_bit_count` - Expected number of independent binary branch coordinates
+    fn with_capacity(qubit_count: usize, outcome_count: usize, branch_bit_count: usize) -> Self
     where
         Self: Sized;
 
@@ -260,13 +260,20 @@ pub trait Simulation: Default {
     /// Get the current outcome capacity.
     fn outcome_capacity(&self) -> usize;
 
-    /// Get the current random outcome capacity.
+    /// Get the capacity for independent binary branch coordinates.
+    #[allow(deprecated)]
+    fn branch_bit_capacity(&self) -> usize {
+        self.random_outcome_capacity()
+    }
+
+    /// Get the capacity for independent binary branch coordinates.
+    #[deprecated(note = "use branch_bit_capacity")]
     fn random_outcome_capacity(&self) -> usize;
 
     /// Reserve capacity for additional outcomes.
     ///
     /// # Arguments
     /// * `new_outcome_capacity` - Total outcome capacity
-    /// * `new_random_outcome_capacity` - Random outcome capacity
-    fn reserve_outcomes(&mut self, new_outcome_capacity: usize, new_random_outcome_capacity: usize);
+    /// * `new_branch_bit_capacity` - Branch coordinate capacity
+    fn reserve_outcomes(&mut self, new_outcome_capacity: usize, new_branch_bit_capacity: usize);
 }
