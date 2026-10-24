@@ -81,8 +81,8 @@ theorem exists_pair_eq_one
     (nondegenerate : form.Nondegenerate)
     (dimension_positive : 0 < Module.finrank F2 V) :
     ∃ first second : V, form first second = 1 := by
-  letI : Nontrivial V := Module.finrank_pos_iff.mp dimension_positive
-  obtain ⟨first, first_nonzero⟩ := exists_ne (0 : V)
+  obtain ⟨first, first_nonzero⟩ :=
+    Module.finrank_pos_iff_exists_ne_zero.mp dimension_positive
   have exists_second : ∃ second, form first second ≠ 0 := by
     by_contra none
     push Not at none

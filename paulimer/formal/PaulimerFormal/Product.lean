@@ -81,7 +81,17 @@ theorem residueMatrix_product_cons {m : ℕ} (center : PhaseVector m)
 /-- The matrix whose rows are the centers in list order. -/
 def centerMatrix {m : ℕ} (centers : List (PhaseVector m)) :
     Matrix (Fin centers.length) (PhaseIndex m) F2 :=
-  fun row => centers.get row
+  Matrix.of fun row => centers.get row
+
+@[simp]
+theorem centerMatrix_cons_zero {m : ℕ} (center : PhaseVector m)
+    (centers : List (PhaseVector m)) :
+    centerMatrix (center :: centers) 0 = center := rfl
+
+@[simp]
+theorem centerMatrix_cons_succ {m : ℕ} (center : PhaseVector m)
+    (centers : List (PhaseVector m)) (row : Fin centers.length) :
+    centerMatrix (center :: centers) row.succ = centerMatrix centers row := rfl
 
 /-- Coefficients of the centers accumulated while replaying a vector. -/
 def replayCoefficients {m : ℕ} :
@@ -100,7 +110,7 @@ theorem vecMul_centerMatrix_cons {m : ℕ} (scalar : F2)
         (centerMatrix (center :: centers)) =
       scalar • center + Matrix.vecMul coefficients (centerMatrix centers) := by
   ext column
-  simp [Matrix.vecMul, dotProduct, centerMatrix, Fin.sum_univ_succ]
+  simp [Matrix.vecMul, dotProduct, Fin.sum_univ_succ]
 
 theorem replay_eq_add_vecMul_centerMatrix {m : ℕ}
     (centers : List (PhaseVector m)) (vector : PhaseVector m) :
@@ -119,16 +129,21 @@ theorem replay_eq_add_vecMul_centerMatrix {m : ℕ}
         rowAction_transvection]
       abel
 
-/-- The unit-upper coefficient matrix of all increasing interaction paths. -/
-def pathMatrix {m : ℕ} :
+/-- Entries of the unit-upper coefficient matrix of increasing interaction paths. -/
+def pathEntries {m : ℕ} :
     (centers : List (PhaseVector m)) →
-      Matrix (Fin centers.length) (Fin centers.length) F2
+      Fin centers.length → Fin centers.length → F2
   | [], row => Fin.elim0 row
   | center :: centers, row =>
       Fin.cases
         (Fin.cons 1 (replayCoefficients centers center))
-        (fun tailRow => Fin.cons 0 (pathMatrix centers tailRow))
+        (fun tailRow => Fin.cons 0 (pathEntries centers tailRow))
         row
+
+/-- The unit-upper coefficient matrix of all increasing interaction paths. -/
+def pathMatrix {m : ℕ} (centers : List (PhaseVector m)) :
+    Matrix (Fin centers.length) (Fin centers.length) F2 :=
+  Matrix.of (pathEntries centers)
 
 @[simp]
 theorem pathMatrix_cons_zero_zero {m : ℕ} (center : PhaseVector m)
@@ -189,7 +204,7 @@ theorem pathMatrix_blockTriangular {m : ℕ}
 
 theorem pathMatrix_det {m : ℕ} (centers : List (PhaseVector m)) :
     (pathMatrix centers).det = 1 := by
-  rw [Matrix.det_of_upperTriangular
+  rw [Matrix.det_of_isUpperTriangular
     (pathMatrix_blockTriangular centers)]
   simp [pathMatrix_diagonal]
 
@@ -199,16 +214,21 @@ theorem pathMatrix_isUnit {m : ℕ}
   rw [Matrix.isUnit_iff_isUnit_det, pathMatrix_det]
   exact isUnit_one
 
-/-- The direct unit-upper matrix of pairings between ordered centers. -/
-def pairingUpper {m : ℕ} :
+/-- Entries of the direct unit-upper pairing matrix for ordered centers. -/
+def pairingUpperEntries {m : ℕ} :
     (centers : List (PhaseVector m)) →
-      Matrix (Fin centers.length) (Fin centers.length) F2
+      Fin centers.length → Fin centers.length → F2
   | [], row => Fin.elim0 row
   | center :: centers, row =>
       Fin.cases
         (Fin.cons 1 (fun column => pairing center (centers.get column)))
-        (fun tailRow => Fin.cons 0 (pairingUpper centers tailRow))
+        (fun tailRow => Fin.cons 0 (pairingUpperEntries centers tailRow))
         row
+
+/-- The direct unit-upper matrix of pairings between ordered centers. -/
+def pairingUpper {m : ℕ} (centers : List (PhaseVector m)) :
+    Matrix (Fin centers.length) (Fin centers.length) F2 :=
+  Matrix.of (pairingUpperEntries centers)
 
 @[simp]
 theorem pairingUpper_cons_zero_zero {m : ℕ} (center : PhaseVector m)
@@ -247,8 +267,8 @@ theorem pairingUpper_apply {m : ℕ} (centers : List (PhaseVector m))
       · intro column
         refine Fin.cases ?_ (fun tailColumn => ?_) column
         · simp
-        · rw [if_neg (Fin.succ_ne_zero tailColumn).symm,
-            if_pos (Fin.succ_pos tailColumn)]
+        · rw [ite_eq_right (Fin.succ_ne_zero tailColumn).symm,
+            ite_eq_left (Fin.succ_pos tailColumn)]
           rfl
       · intro column
         refine Fin.cases ?_ (fun tailColumn => ?_) column
@@ -311,7 +331,7 @@ theorem pathMatrix_mul_pairingUpper {m : ℕ}
               (replayCoefficients_vecMul_pairingUpper centers center)
               tailColumn
           rw [Matrix.one_apply,
-            if_neg (Fin.succ_ne_zero tailColumn).symm]
+            ite_eq_right (Fin.succ_ne_zero tailColumn).symm]
           simpa [Matrix.mul_apply, Matrix.vecMul_apply_eq_sum,
             Fin.sum_univ_succ] using
               congrArg
@@ -386,7 +406,15 @@ def pairingUpperFin {m n : ℕ} (centers : Fin n → PhaseVector m) :
 @[simp]
 theorem centerMatrixFin_eq {m n : ℕ}
     (centers : Fin n → PhaseVector m) :
-    centerMatrixFin centers = centers := by
+    centerMatrixFin centers = Matrix.of centers := by
+  ext row column
+  simp [centerMatrixFin, ofFnIndexEquiv, Matrix.reindex_apply,
+    centerMatrix]
+
+@[simp]
+theorem centerMatrixFin_entries {m n : ℕ}
+    (centers : Fin n → PhaseVector m) :
+    Matrix.of.symm (centerMatrixFin centers) = centers := by
   ext row column
   simp [centerMatrixFin, ofFnIndexEquiv, Matrix.reindex_apply,
     centerMatrix]
@@ -435,7 +463,7 @@ theorem centerSpan_le_cons {m : ℕ} (center : PhaseVector m)
     centerSpan centers ≤ centerSpan (center :: centers) := by
   apply Submodule.span_mono
   intro vector member
-  simp only [List.coe_toFinset, Set.mem_setOf_eq] at member ⊢
+  simp only [List.coe_toFinset, Set.mem_ofPred_eq] at member ⊢
   exact List.mem_cons_of_mem center member
 
 theorem replay_add_initial_mem_centerSpan {m : ℕ}
@@ -499,7 +527,6 @@ theorem residueRank_product_le_length {m : ℕ}
     (residueSpace_product_le_centerSpan centers)).trans
       (finrank_centerSpan_le_length centers)
 
-@[simp]
 theorem centerMatrix_apply {m : ℕ} (centers : List (PhaseVector m))
     (row : Fin centers.length) :
     centerMatrix centers row = centers.get row := rfl
@@ -523,7 +550,7 @@ theorem residueMatrix_product_eq_centerMatrix {m : ℕ}
         replay_eq_add_vecMul_centerMatrix]
       ext row column
       simp [Matrix.mul_apply, Matrix.vecMulVec_apply,
-        Matrix.vecMul_apply_eq_sum, centerMatrix, pathMatrix,
+        Matrix.vecMul_apply_eq_sum, pathMatrix, pathEntries,
         Fin.sum_univ_succ]
       simp_rw [add_mul]
       rw [Finset.sum_add_distrib]
@@ -543,6 +570,16 @@ theorem range_centerMatrix {m : ℕ}
     (centers : List (PhaseVector m)) :
     Set.range (centerMatrix centers) =
       (centers.toFinset : Set (PhaseVector m)) := by
+  change Set.range (Matrix.of.symm (centerMatrix centers)) = _
+  ext vector
+  simpa [centerMatrix, eq_comm] using
+    (List.exists_mem_iff_get
+      (l := centers) (p := fun item => item = vector)).symm
+
+theorem range_centerMatrix_entries {m : ℕ}
+    (centers : List (PhaseVector m)) :
+    Set.range (Matrix.of.symm (centerMatrix centers)) =
+      (centers.toFinset : Set (PhaseVector m)) := by
   ext vector
   simpa [centerMatrix, eq_comm] using
     (List.exists_mem_iff_get
@@ -552,8 +589,10 @@ theorem centerMatrix_linearIndependent_iff {m : ℕ}
     (centers : List (PhaseVector m)) :
     LinearIndependent F2 (centerMatrix centers) ↔
       centers.length ≤ Module.finrank F2 (centerSpan centers) := by
+  change LinearIndependent F2
+    (Matrix.of.symm (centerMatrix centers)) ↔ _
   rw [linearIndependent_iff_card_le_finrank_span,
-    Fintype.card_fin, Set.finrank, range_centerMatrix]
+    Fintype.card_fin, Set.finrank, range_centerMatrix_entries]
   rfl
 
 theorem residueRank_product_eq_length_of_linearIndependent {m : ℕ}
@@ -572,9 +611,7 @@ theorem residueRank_product_eq_length_of_linearIndependent {m : ℕ}
   rw [Matrix.rank_mul_eq_right_of_isUnit_det
     (pathMatrix centers) (centerMatrix centers)
     (by rw [pathMatrix_det]; exact isUnit_one)]
-  change Matrix.rank (fun row : Fin centers.length => centers.get row) =
-    centers.length
-  simpa only [Fintype.card_fin] using independent.rank_matrix
+  simpa only [centerMatrix, Fintype.card_fin] using independent.rank_matrix
 
 theorem centerMatrix_linearIndependent_of_rank_eq_length {m : ℕ}
     (target : SymplecticAction m) (centers : List (PhaseVector m))
@@ -582,8 +619,10 @@ theorem centerMatrix_linearIndependent_of_rank_eq_length {m : ℕ}
     (rank_eq_length : residueRank (target : ActionMatrix m) =
       centers.length) :
     LinearIndependent F2 (centerMatrix centers) := by
+  change LinearIndependent F2
+    (Matrix.of.symm (centerMatrix centers))
   rw [linearIndependent_iff_card_le_finrank_span]
-  rw [Fintype.card_fin, Set.finrank, range_centerMatrix]
+  rw [Fintype.card_fin, Set.finrank, range_centerMatrix_entries]
   change centers.length ≤ Module.finrank F2 (centerSpan centers)
   rw [← rank_eq_length]
   apply Submodule.finrank_mono

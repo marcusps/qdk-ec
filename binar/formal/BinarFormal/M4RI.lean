@@ -89,7 +89,7 @@ theorem grayCode_invGray (g : Nat) : grayCode (invGray g) = g := by
     · have hlt : g >>> 1 < g := by omega
       have hIH := ih (g >>> 1) hlt
       unfold invGray
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
       show grayCode (g ^^^ invGray (g >>> 1)) = g
       unfold grayCode
       rw [Nat.shiftRight_xor_distrib]
@@ -114,7 +114,7 @@ theorem invGray_lt_two_pow {bits : Nat} : ∀ {g : Nat}, g < 2 ^ bits → invGra
     rcases Nat.eq_zero_or_pos g with hg0 | hgpos
     · subst hg0
       unfold invGray
-      rw [if_pos rfl]
+      rw [ite_eq_left rfl]
       exact Nat.two_pow_pos bits
     · have hlt : g >>> 1 < g := by omega
       have hb : g >>> 1 < 2 ^ bits := by
@@ -122,7 +122,7 @@ theorem invGray_lt_two_pow {bits : Nat} : ∀ {g : Nat}, g < 2 ^ bits → invGra
         omega
       have hIH := ih (g >>> 1) hlt hb
       unfold invGray
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
       exact Nat.xor_lt_two_pow hg hIH
 
 theorem grayCode_succ_xor (p : Nat) :
@@ -462,7 +462,7 @@ theorem extractPattern_testBit (left : PackedMatrix m k) (colStart innerBits out
   rw [transpose8x64_getLsbD _ byteIdx row j hrow hj8]
   have hbj : 8 * byteIdx + j = outputRow % 64 := by simp only [hbyteIdx, hj]; omega
   by_cases hri : row < innerBits
-  · rw [if_pos hri, hbj]
+  · rw [ite_eq_left hri, hbj]
     have hb64 : outputRow % 64 < 64 := Nat.mod_lt _ (by norm_num)
     rw [readTile_getLsbD left.transpose ((colStart + row) / 64) (outputRow / 64)
       ((colStart + row) % 64) (outputRow % 64) hb64]
@@ -470,12 +470,12 @@ theorem extractPattern_testBit (left : PackedMatrix m k) (colStart innerBits out
     have heq2 : outputRow / 64 * 64 + outputRow % 64 = outputRow := by omega
     rw [heq1, heq2, decide_eq_true hri, Bool.true_and]
     by_cases hk : colStart + row < k
-    · rw [dif_pos hk, transpose_get left ⟨colStart + row, hk⟩ outputRow houtRow]
-    · rw [dif_neg hk]
+    · rw [dite_eq_left hk, transpose_get left ⟨colStart + row, hk⟩ outputRow houtRow]
+    · rw [dite_eq_right hk]
       symm
       show (left.rows ⟨outputRow, houtRow⟩).get (colStart + row) = false
       exact (left.rows ⟨outputRow, houtRow⟩).zero_padding (colStart + row) (by omega)
-  · rw [if_neg hri, BitVec.getLsbD_zero, decide_eq_false hri, Bool.false_and]
+  · rw [ite_eq_right hri, BitVec.getLsbD_zero, decide_eq_false hri, Bool.false_and]
 
 theorem lt_two_pow_of_testBit_ge {x n : Nat} (h : ∀ i, n ≤ i → x.testBit i = false) :
     x < 2 ^ n := by
@@ -619,7 +619,7 @@ theorem decode_m4riMul (left : PackedMatrix m k) (right : PackedMatrix k n) :
           intro i _
           have : (rowsTotal right i.val).get j.val = right.get i j.val := by
             unfold rowsTotal
-            rw [dif_pos i.isLt]
+            rw [dite_eq_left i.isLt]
             rfl
           rw [this]
           rfl

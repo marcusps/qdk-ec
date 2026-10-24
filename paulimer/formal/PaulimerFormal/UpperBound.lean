@@ -426,13 +426,14 @@ theorem isBorderedTriangularization_of_family
       IsBorderedFamily (Matrix.toBilin' core) vectors relation) :
     IsBorderedTriangularization core vectors relation := by
   classical
-  let coefficients : Matrix (Fin k) (Fin n) F2 := vectors
+  let coefficients : Matrix (Fin k) (Fin n) F2 := Matrix.of vectors
   change IsBorderedTriangularization core coefficients relation
   have congruence_apply (row column : Fin k) :
       (coefficients * core * Matrix.transpose coefficients) row column =
         Matrix.toBilin' core (vectors row) (vectors column) := by
     rw [Matrix.toBilin'_apply', Matrix.dotProduct_mulVec]
-    simp [coefficients, Matrix.mul_apply, Matrix.vecMul, dotProduct]
+    simp [coefficients, Matrix.mul_apply, Matrix.transpose_apply,
+      Matrix.vecMul, dotProduct]
   refine ⟨?_, ?_, bordered.2.2.1, ?_⟩
   · have matrix_eq :
         coefficients * core * Matrix.transpose coefficients +
@@ -447,7 +448,7 @@ theorem isBorderedTriangularization_of_family
   · ext column
     have coordinate_eq :=
       congrFun bordered.2.1 column
-    simpa [Matrix.mulVec, dotProduct, Matrix.transpose_apply,
+    simpa [coefficients, Matrix.mulVec, dotProduct, Matrix.transpose_apply,
       smul_eq_mul, mul_comm] using coordinate_eq
   · rw [Matrix.mulVec_injective_iff,
       linearIndependent_iff_card_eq_finrank_span,

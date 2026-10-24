@@ -85,17 +85,17 @@ def ofBoolFn (n : Nat) (f : Nat → Bool) : PackedVec n where
   zero_padding := by
     intro i hi
     rcases Nat.lt_or_ge i (capacity n) with hic | hic
-    · rw [BitVec.getLsbD_ofFnLE, dif_pos hic]
+    · rw [BitVec.getLsbD_ofFnLE, dite_eq_left hic]
       simp only []
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
     · exact BitVec.getLsbD_of_ge _ i hic
 
 @[simp] theorem get_ofBoolFn (n : Nat) (f : Nat → Bool) (i : Nat) (hi : i < n) :
     (ofBoolFn n f).get i = f i := by
   unfold ofBoolFn get
-  rw [BitVec.getLsbD_ofFnLE, dif_pos (hi.trans_le (le_capacity n))]
+  rw [BitVec.getLsbD_ofFnLE, dite_eq_left (hi.trans_le (le_capacity n))]
   simp only []
-  rw [if_pos hi]
+  rw [ite_eq_left hi]
 
 /-- Whether every logical bit of `v` is `false`, mirroring `Bitwise::is_zero`. -/
 def isZero (v : PackedVec n) : Bool := v.storage == 0#(capacity n)
@@ -155,7 +155,7 @@ def setTotal (v : PackedVec n) (i : Nat) (b : Bool) : PackedVec n :=
 theorem get_setTotal_self (v : PackedVec n) (i : Nat) (hi : i < n) (b : Bool) :
     (v.setTotal i b).get i = b := by
   unfold setTotal
-  rw [dif_pos hi, get_set_self]
+  rw [dite_eq_left hi, get_set_self]
 
 theorem get_setTotal_ne (v : PackedVec n) (i : Nat) (b : Bool) {j : Nat} (hij : i ≠ j) :
     (v.setTotal i b).get j = v.get j := by
@@ -204,7 +204,7 @@ def mulVec (M : PackedMatrix m n) (v : PackedVec n) : PackedVec m :=
 
 theorem get_mulVec (M : PackedMatrix m n) (v : PackedVec n) (i : Nat) (hi : i < m) :
     (M.mulVec v).get i = (M.rows ⟨i, hi⟩).dot v := by
-  rw [mulVec, PackedVec.get_ofBoolFn m _ i hi, dif_pos hi]
+  rw [mulVec, PackedVec.get_ofBoolFn m _ i hi, dite_eq_left hi]
 
 /-- `mulVec` refines Mathlib's `Matrix.mulVec`. -/
 theorem decode_mulVec (M : PackedMatrix m n) (v : PackedVec n) :
@@ -223,7 +223,7 @@ def rightMultiply (M : PackedMatrix m n) (v : PackedVec m) : PackedVec n :=
 
 theorem get_rightMultiply (M : PackedMatrix m n) (v : PackedVec m) (j : Nat) (hj : j < n) :
     (M.rightMultiply v).get j = v.dot (M.transpose.rows ⟨j, hj⟩) := by
-  rw [rightMultiply, PackedVec.get_ofBoolFn n _ j hj, dif_pos hj]
+  rw [rightMultiply, PackedVec.get_ofBoolFn n _ j hj, dite_eq_left hj]
 
 /-- `rightMultiply` refines Mathlib's `Matrix.vecMul`. -/
 theorem decode_rightMultiply (M : PackedMatrix m n) (v : PackedVec m) :
@@ -267,7 +267,7 @@ def columnVec (M : PackedMatrix m n) (col : Nat) : PackedVec m :=
 theorem get_columnVec (M : PackedMatrix m n) (col : Nat) (hcol : col < n) (row : Fin m) :
     (columnVec M col).get row.val = M.get row col := by
   unfold columnVec
-  rw [dif_pos hcol]
+  rw [dite_eq_left hcol]
   exact transpose_get M ⟨col, hcol⟩ row.val row.isLt
 
 /-- Row `row` of a packed matrix as a length-`n` packed vector (totalized: out-of-range
@@ -279,7 +279,7 @@ def rowVec (M : PackedMatrix m n) (row : Nat) : PackedVec n :=
 theorem get_rowVec (M : PackedMatrix m n) (row : Nat) (hrow : row < m) (col : Nat) :
     (rowVec M row).get col = M.get ⟨row, hrow⟩ col := by
   unfold rowVec
-  rw [dif_pos hrow]
+  rw [dite_eq_left hrow]
   rfl
 
 /-! ## `solve_rref_system`: back-substitution
@@ -321,14 +321,14 @@ theorem solveRrefStep_of_true (rr : PackedMatrix m n) (pivots : List Nat) (idx :
     solveRrefStep rr pivots idx state =
       (state.1.xor (columnVec rr (pivots[idx]'h)), state.2.setTotal (pivots[idx]'h) true) := by
   unfold solveRrefStep
-  rw [dif_pos h, if_pos hc]
+  rw [dite_eq_left h, ite_eq_left hc]
 
 theorem solveRrefStep_of_false (rr : PackedMatrix m n) (pivots : List Nat) (idx : Nat)
     (state : PackedVec m × PackedVec n) (h : idx < pivots.length)
     (hc : state.1.get idx = false) :
     solveRrefStep rr pivots idx state = state := by
   unfold solveRrefStep
-  rw [dif_pos h, if_neg (by simp [hc])]
+  rw [dite_eq_left h, ite_eq_right (by simp [hc])]
 
 /-- Fold `solveRrefStep` over an index list, mirroring the `for row_index in ...` loop body
 applied in sequence. -/
@@ -592,7 +592,7 @@ theorem solveRrefSystem_eq_some_iff (rr : PackedMatrix m n) (pivots : List Nat)
     unfold solveRrefSystem at heq
     rw [← hfinal_def] at heq
     by_cases hcond : final.1.isZero = true
-    · rw [if_pos hcond] at heq
+    · rw [ite_eq_left hcond] at heq
       have hxeq : final.2 = x := Option.some.inj heq
       refine ⟨?_, ?_⟩
       · funext row
@@ -605,14 +605,14 @@ theorem solveRrefSystem_eq_some_iff (rr : PackedMatrix m n) (pivots : List Nat)
       · intro c hc hcp
         rw [← hxeq]
         exact hsol_free c hc hcp
-    · rw [if_neg hcond] at heq
+    · rw [ite_eq_right hcond] at heq
       exact absurd heq (by simp)
   · rintro ⟨heqn, hxfree⟩
     have hsolvable : ∀ r : Fin m, pivots.length ≤ r.val → target.get r.val = false := by
       intro r hr
       have hthis := congrFun heqn r
       rw [mulVec_apply_of_free_zero rr pivots hrref x hxfree r,
-        dif_neg (show ¬(r.val < pivots.length) by omega), PackedVec.decode_get] at hthis
+        dite_eq_right (show ¬(r.val < pivots.length) by omega), PackedVec.decode_get] at hthis
       exact (Bool.toF2_injective (Bool.toF2_false.trans hthis)).symm
     have hcond : final.1.isZero = true := hisZero_iff.mpr hsolvable
     have hget_eq : ∀ c, c < n → x.get c = final.2.get c := by
@@ -621,7 +621,7 @@ theorem solveRrefSystem_eq_some_iff (rr : PackedMatrix m n) (pivots : List Nat)
       · obtain ⟨k, hk, hkeq⟩ := List.getElem_of_mem hpiv
         have hkm : k < m := hk.trans_le hlen
         have hthis := congrFun heqn ⟨k, hkm⟩
-        rw [mulVec_apply_of_free_zero rr pivots hrref x hxfree ⟨k, hkm⟩, dif_pos hk,
+        rw [mulVec_apply_of_free_zero rr pivots hrref x hxfree ⟨k, hkm⟩, dite_eq_left hk,
           PackedVec.decode_get] at hthis
         rw [← hkeq, hsol_pivot k hk]
         exact Bool.toF2_injective hthis
@@ -631,7 +631,7 @@ theorem solveRrefSystem_eq_some_iff (rr : PackedMatrix m n) (pivots : List Nat)
       rw [PackedVec.decode_get, PackedVec.decode_get, hget_eq i.val i.isLt]
     have hxeq : final.2 = x := (ext_of_decode hdecode_eq).symm
     show (if final.1.isZero then some final.2 else none) = some x
-    rw [if_pos hcond, hxeq]
+    rw [ite_eq_left hcond, hxeq]
 
 /-- Any candidate solution's contribution vanishes past `rr`'s last pivot row, with no
 constraint on the candidate at all: `IsRREF.rows_zero` makes the entire row zero, so every
@@ -676,7 +676,7 @@ theorem solveRrefSystem_isSolvable_iff (rr : PackedMatrix m n) (pivots : List Na
   · rintro ⟨x, hx, hxfree⟩ r hr
     have hthis := congrFun hx r
     rw [mulVec_apply_of_free_zero rr pivots hrref x hxfree r,
-      dif_neg (show ¬(r.val < pivots.length) by omega), PackedVec.decode_get] at hthis
+      dite_eq_right (show ¬(r.val < pivots.length) by omega), PackedVec.decode_get] at hthis
     exact (Bool.toF2_injective (Bool.toF2_false.trans hthis)).symm
 
 /-- **Completeness of `none`**: `solveRrefSystem` reports `none` exactly when `target` is
@@ -747,14 +747,14 @@ theorem transposeSolveRrefStep_of_true (rr : PackedMatrix m n) (pivots : List Na
     transposeSolveRrefStep rr pivots idx state =
       (state.1.xor (rowVec rr idx), state.2.setTotal idx true) := by
   unfold transposeSolveRrefStep
-  rw [dif_pos h, if_pos hc]
+  rw [dite_eq_left h, ite_eq_left hc]
 
 theorem transposeSolveRrefStep_of_false (rr : PackedMatrix m n) (pivots : List Nat) (idx : Nat)
     (state : PackedVec n × PackedVec m) (h : idx < pivots.length)
     (hc : state.1.get (pivots[idx]'h) = false) :
     transposeSolveRrefStep rr pivots idx state = state := by
   unfold transposeSolveRrefStep
-  rw [dif_pos h, if_neg (by simp [hc])]
+  rw [dite_eq_left h, ite_eq_right (by simp [hc])]
 
 /-- Fold `transposeSolveRrefStep` over an index list, mirroring
 `pivots.iter().enumerate()` applied in sequence. -/
@@ -1029,10 +1029,10 @@ theorem transposeSolveRrefSystem_eq_some_iff (rr : PackedMatrix m n) (pivots : L
     unfold transposeSolveRrefSystem at heq
     rw [← hfinal_def] at heq
     by_cases hcond : final.1.isZero = true
-    · rw [if_pos hcond] at heq
+    · rw [ite_eq_left hcond] at heq
       have hxeq : final.2 = x := Option.some.inj heq
       exact ⟨hxeq ▸ hisZero_iff.mp hcond, hxeq ▸ hzero_tail⟩
-    · rw [if_neg hcond] at heq
+    · rw [ite_eq_right hcond] at heq
       exact absurd heq (by simp)
   · rintro ⟨heqn, hxfree⟩
     have hget_eq : ∀ k, k < m → x.get k = final.2.get k := by
@@ -1051,7 +1051,7 @@ theorem transposeSolveRrefSystem_eq_some_iff (rr : PackedMatrix m n) (pivots : L
     have hxeq : final.2 = x := (ext_of_decode hdecode_eq).symm
     have hcond : final.1.isZero = true := hisZero_iff.mpr (by rw [hxeq]; exact heqn)
     show (if final.1.isZero then some final.2 else none) = some x
-    rw [if_pos hcond, hxeq]
+    rw [ite_eq_left hcond, hxeq]
 
 /-- **Solvability by the canonical vector iff solvability by any vector**: every entry of
 `x` past `pivots.length` never influences `rr.decode.transpose.mulVec x.decode`
@@ -1288,7 +1288,7 @@ def kernelVec (rr : PackedMatrix m n) (pivots : List Nat) (c : Nat) : PackedVec 
 /-- `kernelVec`'s own driving free column always reads `true`. -/
 theorem get_kernelVec_self (rr : PackedMatrix m n) (pivots : List Nat) (c : Nat) (hc : c < n) :
     (kernelVec rr pivots c).get c = true := by
-  rw [kernelVec, get_ofBoolFn n _ c hc, if_pos rfl]
+  rw [kernelVec, get_ofBoolFn n _ c hc, ite_eq_left rfl]
 
 /-- `kernelVec`'s value at a pivot column reads off `rr` at that pivot's row, since
 `pivots.idxOf` recovers the row index of any column actually appearing in `pivots`. -/
@@ -1296,7 +1296,7 @@ theorem get_kernelVec_pivot {rr : PackedMatrix m n} {pivots : List Nat} (hpn : p
     (c : Nat) (i : Nat) (hi : i < pivots.length) (hne : pivots[i]'hi ≠ c)
     (hcol_lt : pivots[i]'hi < n) :
     (kernelVec rr pivots c).get (pivots[i]'hi) = getTotal rr i c := by
-  rw [kernelVec, get_ofBoolFn n _ _ hcol_lt, if_neg hne]
+  rw [kernelVec, get_ofBoolFn n _ _ hcol_lt, ite_eq_right hne]
   have hidx : pivots.idxOf (pivots[i]'hi) = i := by
     have hmem : pivots[i]'hi ∈ pivots := List.getElem_mem hi
     have hlt : pivots.idxOf (pivots[i]'hi) < pivots.length := List.idxOf_lt_length_iff.mpr hmem
@@ -1321,7 +1321,7 @@ theorem get_kernelVec_free_ne {rr : PackedMatrix m n} {pivots : List Nat}
     (hrref : IsRREF rr pivots) (c : Nat) (hc : c < n)
     (j : Nat) (hjn : j < n) (hjfree : j ∉ pivots) (hjne : j ≠ c) :
     (kernelVec rr pivots c).get j = false := by
-  rw [kernelVec, get_ofBoolFn n _ j hjn, if_neg hjne]
+  rw [kernelVec, get_ofBoolFn n _ j hjn, ite_eq_right hjne]
   have hge : pivots.length ≤ pivots.idxOf j := by
     by_contra hlt
     push Not at hlt
@@ -1373,7 +1373,7 @@ theorem kernelVec_mem_ker {rr : PackedMatrix m n} {pivots : List Nat}
   rw [Pi.add_apply, mulVec_apply_of_free_zero rr pivots hrref
     ((kernelVec rr pivots c).setTotal c false) hy'free row]
   by_cases hrow : row.val < pivots.length
-  · rw [dif_pos hrow]
+  · rw [dite_eq_left hrow]
     have hcol_lt : pivots[row.val]'hrow < n := hrref.lt_n _ (List.getElem_mem hrow)
     have hne : pivots[row.val]'hrow ≠ c := fun h => hcfree (h ▸ List.getElem_mem hrow)
     rw [get_setTotal_ne _ c false (Ne.symm hne)]
@@ -1381,14 +1381,14 @@ theorem kernelVec_mem_ker {rr : PackedMatrix m n} {pivots : List Nat}
     rw [get_kernelVec_pivot hpn c row.val hrow hne hcol_lt]
     have hgt : getTotal rr row.val c = rr.get row c := by
       unfold getTotal
-      rw [dif_pos row.isLt]
+      rw [dite_eq_left row.isLt]
     rw [hgt]
     show Bool.toF2 (rr.get row c) + (MulOpposite.op (1 : ZMod 2) • rr.decode.col ⟨c, hc⟩) row = 0
     rw [Pi.smul_apply, Matrix.col_apply]
     simp only [MulOpposite.op_one, one_smul]
     rw [PackedMatrix.decode_get]
     exact (show ∀ x : ZMod 2, x + x = 0 by decide) _
-  · rw [dif_neg hrow]
+  · rw [dite_eq_right hrow]
     have hge : pivots.length ≤ row.val := by omega
     have hrzero : rr.get row c = false := hrref.rows_zero row hge c hc
     show (0 : ZMod 2) + (MulOpposite.op (1 : ZMod 2) • rr.decode.col ⟨c, hc⟩) row = 0
@@ -1639,8 +1639,8 @@ theorem echelonized_eq_one_of_full_rank (A : PackedMatrix n n)
   rw [hpe] at hpu
   rw [Matrix.one_apply, PackedMatrix.decode_get]
   by_cases hcase : row.val = col.val
-  · rw [if_pos (Fin.ext hcase), hpu.mpr hcase, Bool.toF2_true]
-  · rw [if_neg (fun h => hcase (congrArg Fin.val h))]
+  · rw [ite_eq_left (Fin.ext hcase), hpu.mpr hcase, Bool.toF2_true]
+  · rw [ite_eq_right (fun h => hcase (congrArg Fin.val h))]
     have hfalse : (EchelonForm.new A).matrix.get row col.1 = false := by
       by_contra hne
       rw [Bool.not_eq_false] at hne

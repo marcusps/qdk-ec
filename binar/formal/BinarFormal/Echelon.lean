@@ -175,9 +175,9 @@ theorem PackedMatrix.get_xorRow {m n : Nat} (M : PackedMatrix m n) (dst src : Fi
   show (Function.update M.rows dst ((M.rows dst).xor (M.rows src)) t).get c = _
   by_cases ht : t = dst
   · subst ht
-    rw [Function.update_self, if_pos rfl, PackedVec.get_xor]
+    rw [Function.update_self, ite_eq_left rfl, PackedVec.get_xor]
     rfl
-  · rw [Function.update_of_ne ht, if_neg ht]
+  · rw [Function.update_of_ne ht, ite_eq_right ht]
     rfl
 
 /-! ## `pivot_of`: nested row/column search
@@ -206,10 +206,10 @@ theorem rowSearchAux_some {M : PackedMatrix m n} {col r0 fuel r : Nat}
   | succ fuel ih =>
     unfold rowSearchAux at h
     rcases hb : getTotal M r0 col with _ | _ <;> rw [hb] at h
-    · simp only [cond_false] at h
+    · simp only [Bool.cond_false] at h
       obtain ⟨hle, hget⟩ := ih h
       exact ⟨by omega, hget⟩
-    · simp only [cond_true, Option.some.injEq] at h
+    · simp only [Bool.cond_true, Option.some.injEq] at h
       exact ⟨by omega, h ▸ hb⟩
 
 theorem rowSearchAux_none {M : PackedMatrix m n} {col r0 fuel : Nat}
@@ -220,7 +220,7 @@ theorem rowSearchAux_none {M : PackedMatrix m n} {col r0 fuel : Nat}
   | succ fuel ih =>
     unfold rowSearchAux at h
     rcases hb : getTotal M r0 col with _ | _ <;> rw [hb] at h
-    · simp only [cond_false] at h
+    · simp only [Bool.cond_false] at h
       intro r hr1 hr2
       rcases eq_or_lt_of_le hr1 with heq | hlt
       · exact heq ▸ hb
@@ -443,7 +443,7 @@ theorem xorIfColumn_TA_eq_M {S : EchelonForm m n} {A : Matrix (Fin m) (Fin n) F2
   unfold xorIfColumn
   rcases S.matrix.get row col with _ | _
   · simpa using h
-  · simp only [cond_true]
+  · simp only [Bool.cond_true]
     rw [decode_xorRow_eq_transvection_mul, decode_xorRow_eq_transvection_mul, Matrix.mul_assoc, h]
 
 /-- `xorIfColumn` preserves `T * Uᵀ = 1`, in Rust's exact `transform_inv_t` orientation:
@@ -458,7 +458,7 @@ theorem xorIfColumn_TUt_eq_one {S : EchelonForm m n} (pivotRow : Fin m) (col : N
   unfold xorIfColumn
   rcases S.matrix.get row col with _ | _
   · simpa using h
-  · simp only [cond_true]
+  · simp only [Bool.cond_true]
     rw [decode_xorRow_eq_transvection_mul, decode_xorRow_eq_transvection_mul, Matrix.transpose_mul,
       Matrix.transvection_transpose, Matrix.mul_assoc, ← Matrix.mul_assoc S.transform.decode, h,
       Matrix.one_mul, Matrix.transvection_mul_transvection_same row pivotRow hne]
@@ -535,7 +535,7 @@ theorem xorIfColumn_matrix_get {S : EchelonForm m n} (pivotRow : Fin m) (col : N
   unfold xorIfColumn
   rcases S.matrix.get target col with _ | _
   · simp
-  · simp only [cond_true, and_true]
+  · simp only [Bool.cond_true, and_true]
     exact PackedMatrix.get_xorRow S.matrix target pivotRow t c
 
 /-- `reduceFrom` never modifies `pivotRow`'s own row (`xorIfColumn` always skips it). -/
@@ -560,7 +560,7 @@ theorem reduceFrom_pivotRow_get {S : EchelonForm m n} (pivotRow : Fin m) (col ro
             (reduceFrom S pivotRow col row fuel).matrix.get (⟨row + fuel, hb⟩ : Fin m) col
               = true) :=
           fun ⟨he, _⟩ => hnep (congrArg Fin.val he).symm
-        rw [if_neg hne, ih]
+        rw [ite_eq_right hne, ih]
     · exact ih
 
 /-- `reduceFrom` never modifies a row outside the touched range `[row, row + fuel)`. -/
@@ -587,7 +587,7 @@ theorem reduceFrom_outside_get {S : EchelonForm m n} (pivotRow : Fin m) (col row
           fun ⟨he, _⟩ => by
             have hv : t.val = row + fuel := by rw [he]
             omega
-        rw [if_neg hne, ih (by omega)]
+        rw [ite_eq_right hne, ih (by omega)]
     · exact ih (by omega)
 
 /-- `reduceFrom`'s effect on a row strictly inside the touched range and different from
@@ -610,7 +610,7 @@ theorem reduceFrom_inside_get {S : EchelonForm m n} (pivotRow : Fin m) (col row 
     by_cases htv : t.val = row + fuel
     · have hb : row + fuel < m := htv ▸ t.isLt
       have hnep : row + fuel ≠ pivotRow.val := fun he => ht3 (Fin.ext (htv.trans he))
-      rw [dif_pos hb, if_neg hnep, xorIfColumn_matrix_get]
+      rw [dite_eq_left hb, ite_eq_right hnep, xorIfColumn_matrix_get]
       have ht : t = (⟨row + fuel, hb⟩ : Fin m) := Fin.ext htv
       rw [← ht]
       have hcol : (reduceFrom S pivotRow col row fuel).matrix.get t col = S.matrix.get t col :=
@@ -631,7 +631,7 @@ theorem reduceFrom_inside_get {S : EchelonForm m n} (pivotRow : Fin m) (col row 
               (reduceFrom S pivotRow col row fuel).matrix.get (⟨row + fuel, hb⟩ : Fin m) col
                 = true) :=
             fun ⟨he, _⟩ => htv (congrArg Fin.val he)
-          rw [if_neg hne]
+          rw [ite_eq_right hne]
           exact ih ht2'
       · exact ih ht2'
 
@@ -765,7 +765,7 @@ theorem applyPivot_invariant {original : PackedMatrix m n} {S : EchelonForm m n}
     · simp only [not_lt] at hcs
       have hgt := hzero c hcs hc r.val hr r.isLt
       unfold getTotal at hgt
-      rwa [dif_pos r.isLt] at hgt
+      rwa [dite_eq_left r.isLt] at hgt
   -- After the swap, every row at or after `rowIndex` is still zero below `pivotCol`.
   have hS1_ge_zero : ∀ (row : Fin m), rowIndex.val ≤ row.val → ∀ c, c < pivotCol →
       S1.matrix.get row c = false := by
@@ -942,7 +942,7 @@ theorem echelonAux_invariant {original : PackedMatrix m n} :
             else S
           else S
         else S) := rfl
-      rw [heq, if_pos hfc, dif_pos hr, dif_pos hfr]
+      rw [heq, ite_eq_left hfc, dite_eq_left hr, dite_eq_left hfr]
       show EchelonInvariant original
         (echelonAux
           (applyPivot S ⟨rowIndex, hr⟩ ⟨(pivotOf S.matrix rowIndex (searchCol S)).1, hfr⟩
@@ -960,7 +960,7 @@ theorem echelonAux_invariant {original : PackedMatrix m n} :
         have hset' : S.matrix.get ⟨(pivotOf S.matrix rowIndex (searchCol S)).1, hfr⟩
             (pivotOf S.matrix rowIndex (searchCol S)).2 = true := by
           unfold getTotal at hset
-          rwa [dif_pos hfr] at hset
+          rwa [dite_eq_left hfr] at hset
         exact applyPivot_invariant hinv ⟨rowIndex, hr⟩ ⟨(pivotOf S.matrix rowIndex (searchCol S)).1, hfr⟩
           (pivotOf S.matrix rowIndex (searchCol S)).2 hlen
           (pivotOf_col_ge S.matrix rowIndex (searchCol S)) hfc hpivrow hset'
@@ -991,7 +991,7 @@ theorem echelonAux_invariant {original : PackedMatrix m n} :
               else S
             else S
           else S) = S
-        rw [if_neg hfc]
+        rw [ite_eq_right hfc]
       rw [heq2]
       exact hinv
 
@@ -1048,7 +1048,7 @@ theorem echelonAux_search_gap :
             else S
           else S
         else S) := rfl
-      rw [heq, if_pos hfc, dif_pos hr, dif_pos hfr]
+      rw [heq, ite_eq_left hfc, dite_eq_left hr, dite_eq_left hfr]
       have hnewlen : rowIndex + 1 =
           (applyPivot S ⟨rowIndex, hr⟩ ⟨(pivotOf S.matrix rowIndex (searchCol S)).1, hfr⟩
             (pivotOf S.matrix rowIndex (searchCol S)).2).pivots.length := by
@@ -1079,7 +1079,7 @@ theorem echelonAux_search_gap :
               else S
             else S
           else S) = S
-        rw [if_neg hfc]
+        rw [ite_eq_right hfc]
       rw [heq2]
       refine Or.inr (fun c hc1 hc2 r hr1 hr2 => ?_)
       have hcol : c < (pivotOf S.matrix rowIndex (searchCol S)).2 := by omega
@@ -1119,7 +1119,7 @@ theorem echelonAux_pivots_length_le :
             else S
           else S
         else S) := rfl
-      rw [heq, if_pos hfc, dif_pos hr, dif_pos hfr]
+      rw [heq, ite_eq_left hfc, dite_eq_left hr, dite_eq_left hfr]
       show
         (let S' := applyPivot S ⟨rowIndex, hr⟩ ⟨(pivotOf S.matrix rowIndex (searchCol S)).1, hfr⟩
           (pivotOf S.matrix rowIndex (searchCol S)).2
@@ -1151,7 +1151,7 @@ theorem echelonAux_pivots_length_le :
               else S
             else S
           else S) = S
-        rw [if_neg hfc]
+        rw [ite_eq_right hfc]
       rw [heq2]
       show S.pivots.length ≤ m
       omega
@@ -1203,7 +1203,7 @@ theorem EchelonForm.new_rows_zero (M : PackedMatrix m n) :
     · simp only [not_lt] at hcs
       have := hgap col hcs hcol row.val hrow row.isLt
       unfold getTotal at this
-      rwa [dif_pos row.isLt] at this
+      rwa [dite_eq_left row.isLt] at this
 
 /-- Precise reduced-row-echelon-form predicate, matching Rust's documented `echelonize`
 postcondition: `pivots` is a strictly increasing, in-range list of column indices, each
@@ -1318,11 +1318,11 @@ theorem EchelonForm.new_pivots_length_eq_rank (M : PackedMatrix m n) :
     · have hval : i.val = j.1 := by rw [hij]
       have hget : (EchelonForm.new M).matrix.get (Fin.castLE hrm i) (pivotColFn j).val = true :=
         hpu.mpr hval
-      rw [if_pos hij, hget, Bool.toF2_true]
+      rw [ite_eq_left hij, hget, Bool.toF2_true]
     · have hne : i.val ≠ j.1 := fun h => hij (Fin.eq_of_val_eq h)
       have hget : (EchelonForm.new M).matrix.get (Fin.castLE hrm i) (pivotColFn j).val = false :=
         Bool.eq_false_iff.mpr (fun h => hne (hpu.mp h))
-      rw [if_neg hij, hget, Bool.toF2_false]
+      rw [ite_eq_right hij, hget, Bool.toF2_false]
   have hr_le_Munit : r ≤ Munit.rank := by
     simp [hone, Matrix.rank_one, Fintype.card_fin]
   have hr_le_Mrows : r ≤ Mrows.rank := by

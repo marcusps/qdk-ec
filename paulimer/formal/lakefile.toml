@@ -12,7 +12,11 @@ warningAsError = true
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.32.2"
+rev = "5ed2965256430c3649e86755f9576b54eca72435"
+
+[[require]]
+name = "binarFormal"
+path = "../../binar/formal"
 
 [[lean_lib]]
 name = "PaulimerFormal"

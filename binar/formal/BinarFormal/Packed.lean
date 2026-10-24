@@ -127,7 +127,7 @@ theorem getLsbD_setBit {x : BitVec w} {i : Nat} (hi : i < w) (b : Bool) (j : Nat
   rcases Nat.lt_or_ge j w with hj | hj
   · unfold setBit
     cases b <;>
-      simp only [cond_true, cond_false, BitVec.getLsbD_or, BitVec.getLsbD_and,
+      simp only [Bool.cond_true, Bool.cond_false, BitVec.getLsbD_or, BitVec.getLsbD_and,
         BitVec.getLsbD_not, BitVec.getLsbD_twoPow, hi, hj] <;>
       split_ifs with hji <;> simp_all
   · have hxj : x.getLsbD j = false := BitVec.getLsbD_of_ge x j hj
@@ -138,11 +138,11 @@ theorem getLsbD_setBit {x : BitVec w} {i : Nat} (hi : i < w) (b : Bool) (j : Nat
 
 @[simp] theorem getLsbD_setBit_self {x : BitVec w} {i : Nat} (hi : i < w) (b : Bool) :
     (setBit x i b).getLsbD i = b := by
-  rw [getLsbD_setBit hi b i, if_pos rfl]
+  rw [getLsbD_setBit hi b i, ite_eq_left rfl]
 
 theorem getLsbD_setBit_ne {x : BitVec w} {i : Nat} (hi : i < w) {j : Nat} (h : i ≠ j)
     (b : Bool) : (setBit x i b).getLsbD j = x.getLsbD j := by
-  rw [getLsbD_setBit hi b j, if_neg h]
+  rw [getLsbD_setBit hi b j, ite_eq_right h]
 
 /-- XOR-fold of the low `k` bits of `x`, i.e. their parity. A direct structural recursion
 on the bit count, used to connect packed dot/parity operations to `Finset` sums. -/

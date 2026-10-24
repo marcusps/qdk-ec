@@ -568,7 +568,7 @@ theorem CorePresentation.coreCongruence_add_transpose
     (presentation : CorePresentation target n)
     (basisChange : Matrix (Fin n) (Fin n) F2) :
     let centers : Fin n → PhaseVector m :=
-      basisChange * presentation.basis
+      Matrix.of.symm (basisChange * presentation.basis)
     basisChange * presentation.core *
           Matrix.transpose basisChange +
         Matrix.transpose
@@ -609,7 +609,7 @@ theorem CorePresentation.coreCongruence_eq_pairing_of_lower
         (basisChange * presentation.core *
           Matrix.transpose basisChange)) :
     let centers : Fin n → PhaseVector m :=
-      basisChange * presentation.basis
+      Matrix.of.symm (basisChange * presentation.basis)
     basisChange * presentation.core *
         Matrix.transpose basisChange =
       Matrix.transpose (pairingUpperFin centers) := by
@@ -617,31 +617,38 @@ theorem CorePresentation.coreCongruence_eq_pairing_of_lower
   apply isUnitLowerTriangular_ext
     lower
     (pairingUpperFin_transpose_isUnitLowerTriangular
-      (basisChange * presentation.basis))
+      (Matrix.of.symm (basisChange * presentation.basis)))
   calc
     basisChange * presentation.core *
           Matrix.transpose basisChange +
         Matrix.transpose
           (basisChange * presentation.core *
             Matrix.transpose basisChange) =
-      centerMatrixFin (basisChange * presentation.basis) * omega m *
+      centerMatrixFin
+          (Matrix.of.symm (basisChange * presentation.basis)) * omega m *
         Matrix.transpose
           (centerMatrixFin
-            (basisChange * presentation.basis)) :=
+            (Matrix.of.symm
+              (basisChange * presentation.basis))) :=
       presentation.coreCongruence_add_transpose basisChange
-    _ = pairingUpperFin (basisChange * presentation.basis) +
+    _ = pairingUpperFin
+          (Matrix.of.symm (basisChange * presentation.basis)) +
         Matrix.transpose
           (pairingUpperFin
-            (basisChange * presentation.basis)) :=
+            (Matrix.of.symm
+              (basisChange * presentation.basis))) :=
       (pairingUpperFin_add_transpose
-        (basisChange * presentation.basis)).symm
+        (Matrix.of.symm
+          (basisChange * presentation.basis))).symm
     _ = Matrix.transpose
           (pairingUpperFin
-            (basisChange * presentation.basis)) +
+            (Matrix.of.symm
+              (basisChange * presentation.basis))) +
         Matrix.transpose
           (Matrix.transpose
             (pairingUpperFin
-              (basisChange * presentation.basis))) := by
+              (Matrix.of.symm
+                (basisChange * presentation.basis)))) := by
       rw [Matrix.transpose_transpose, add_comm]
 
 theorem CorePresentation.exists_unit_basisChange_of_factorization
@@ -667,14 +674,19 @@ theorem CorePresentation.exists_unit_basisChange_of_factorization
     have reindexed := listIndependent.comp
       (ofFnIndexEquiv centers).symm
       (ofFnIndexEquiv centers).symm.injective
+    change LinearIndependent F2
+      (Matrix.of.symm (centerMatrix (List.ofFn centers)) ∘
+        (ofFnIndexEquiv centers).symm) at reindexed
     have reindexed_eq :
-        centerMatrix (List.ofFn centers) ∘
+        Matrix.of.symm (centerMatrix (List.ofFn centers)) ∘
             (ofFnIndexEquiv centers).symm =
           centers := by
       ext index column
       simp [centerMatrix, ofFnIndexEquiv]
     rw [reindexed_eq] at reindexed
-    rw [centerMatrixFin_eq]
+    change LinearIndependent F2
+      (Matrix.of.symm (centerMatrixFin centers))
+    rw [centerMatrixFin_entries]
     exact reindexed
   have residue_eq_centerSpan :=
     residueSpace_eq_centerSpan_of_rank_eq_length
@@ -686,6 +698,7 @@ theorem CorePresentation.exists_unit_basisChange_of_factorization
     refine Submodule.span_le.mpr ?_
     rintro vector ⟨index, rfl⟩
     rw [centerMatrixFin_eq, residue_eq_centerSpan]
+    change centers index ∈ centerSpan (List.ofFn centers)
     apply mem_centerSpan_of_mem
     simp
   obtain ⟨basisChange, basisChange_eq⟩ :=
@@ -773,7 +786,8 @@ theorem CorePresentation.factorization_of_triangularizer
       IsUnitLowerTriangular
         (basisChange * presentation.core * Matrix.transpose basisChange)) :
     IsFactorization target (List.ofFn (basisChange * presentation.basis)) := by
-  let centers : Fin n → PhaseVector m := basisChange * presentation.basis
+  let centers : Fin n → PhaseVector m :=
+    Matrix.of.symm (basisChange * presentation.basis)
   have core_eq :
       basisChange * presentation.core * Matrix.transpose basisChange =
         Matrix.transpose (pairingUpperFin centers) := by
@@ -786,7 +800,7 @@ theorem CorePresentation.factorization_of_triangularizer
     (productTransvections (List.ofFn centers))
   rw [residueMatrix_product_ofFn_eq, presentation.residue_eq,
     coefficient_eq, centerMatrixFin_eq]
-  simp [centers, Matrix.transpose_mul, Matrix.mul_assoc]
+  simp [centers, Matrix.mul_assoc]
 
 theorem CorePresentation.exists_factorization_iff_isTriangularizable
     {m n : ℕ} {target : SymplecticAction m}

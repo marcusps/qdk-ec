@@ -49,8 +49,21 @@ row reducer or triangularizer. Positive Hermitian normalization, the greedy
 algorithm and its `4m + 2` guard, Python GIL behavior, and resource bounds
 remain outside the formalization.
 
-The project pins Lean **4.32.2** and mathlib
-`905b95818eb32af7874a58b427f50c1711a5e96c`:
+`PaulimerFormal.BinarBridge` imports the sibling `BinarFormal` project and
+records the shared `X`-then-`Z` coordinate convention. Its main refinement
+theorems show that Binar's verified packed operations decode to Paulimer's
+matrix semantics:
+
+- `decodeActionMatrix_transpose`
+- `decodePhaseVector_mulVec`
+- `decodePhaseVector_rightMultiply`
+
+This is a semantic bridge to Binar's executable Lean model. It does not by
+itself prove that the compiled Rust packed representation matches that model.
+
+The project pins Lean **4.34.0** and mathlib
+`5ed2965256430c3649e86755f9576b54eca72435`. The local BinarFormal dependency
+uses the same pins:
 
 ```bash
 lake build

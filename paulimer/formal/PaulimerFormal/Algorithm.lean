@@ -195,7 +195,6 @@ theorem minimalDecomposition_spec
           · simp [reindexed, length_eq]
           · intro index leftBound rightBound
             simp [reindexed, finCongr]
-            rfl
         rwa [list_eq]
       · right
         simp [rank]

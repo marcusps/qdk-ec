@@ -142,7 +142,7 @@ theorem swapBlocks_getLsbD (blockSize : Nat) (hB : 0 < blockSize) (mask : BitVec
   · by_cases hcase2 : c % (2 * blockSize) < blockSize
     · have hstep : stageStep blockSize (r, c) = (r, c) := by simp [stageStep, hcase1, hcase2]
       rw [hstep]
-      simp only [swapBlocks, hcase1, if_true, swapBlockRow]
+      simp only [swapBlocks, hcase1, ite_true, swapBlockRow]
       by_cases hcb : c < blockSize
       · simp [hc, hcb]
       · have hcb' : blockSize ≤ c := by omega
@@ -157,7 +157,7 @@ theorem swapBlocks_getLsbD (blockSize : Nat) (hB : 0 < blockSize) (mask : BitVec
     · have hstep : stageStep blockSize (r, c) = (r + blockSize, c - blockSize) := by
         simp [stageStep, hcase1, hcase2]
       rw [hstep]
-      simp only [swapBlocks, hcase1, if_true, swapBlockRow]
+      simp only [swapBlocks, hcase1, ite_true, swapBlockRow]
       have hcge : blockSize ≤ c % (2 * blockSize) := Nat.le_of_not_lt hcase2
       have hcb2 : ¬ c < blockSize := by
         intro hlt
@@ -180,7 +180,7 @@ theorem swapBlocks_getLsbD (blockSize : Nat) (hB : 0 < blockSize) (mask : BitVec
     · have hstep : stageStep blockSize (r, c) = (r - blockSize, c + blockSize) := by
         simp [stageStep, hcase1, hcase2]
       rw [hstep, Nat.add_comm c blockSize]
-      simp only [swapBlocks, hcase1, if_false, swapBlockRow]
+      simp only [swapBlocks, hcase1, ite_false, swapBlockRow]
       have hrge : blockSize ≤ r := by
         have := Nat.mod_le r (2 * blockSize)
         omega
@@ -197,7 +197,7 @@ theorem swapBlocks_getLsbD (blockSize : Nat) (hB : 0 < blockSize) (mask : BitVec
     · have hstep : stageStep blockSize (r, c) = (r, c) := by
         simp [stageStep, hcase1, hcase2]
       rw [hstep]
-      simp only [swapBlocks, hcase1, if_false, swapBlockRow]
+      simp only [swapBlocks, hcase1, ite_false, swapBlockRow]
       have hrge : blockSize ≤ r := by
         have := Nat.mod_le r (2 * blockSize)
         omega
@@ -602,7 +602,7 @@ theorem transposeRowStorage_zero_padding (M : PackedMatrix m n) (R : Nat) :
       transpose64x64_getLsbD (readTile M (j / 64) (R / 64)) ⟨R % 64, by omega⟩ ⟨j % 64, by omega⟩,
       readTile_getLsbD M (j / 64) (R / 64) (j % 64) (R % 64) (by omega)]
     have hdm : j / 64 * 64 + j % 64 = j := by omega
-    rw [dif_neg (by omega)]
+    rw [dite_eq_right (by omega)]
   · exact BitVec.getLsbD_of_ge _ j hjc
 
 end BinarFormal.Transpose
@@ -630,7 +630,7 @@ theorem transpose_get (M : PackedMatrix m n) (R : Fin n) (C : Nat) (hC : C < m) 
       ⟨C % 64, by omega⟩,
     readTile_getLsbD M (C / 64) (R.val / 64) (C % 64) (R.val % 64) (by omega)]
   have hdm : C / 64 * 64 + C % 64 = C := by omega
-  rw [dif_pos (by omega)]
+  rw [dite_eq_left (by omega)]
   congr 2
   omega
 

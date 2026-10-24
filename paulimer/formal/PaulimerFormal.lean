@@ -1,4 +1,5 @@
 import PaulimerFormal.Symplectic
+import PaulimerFormal.BinarBridge
 import PaulimerFormal.Product
 import PaulimerFormal.Minimality
 import PaulimerFormal.UpperBound

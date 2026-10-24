@@ -26,7 +26,7 @@ theorem borderedEqPairing
       IsBorderedTriangularization presentation.core
         coefficients relation) :
     let centers : Fin k → PhaseVector m :=
-      coefficients * presentation.basis
+      Matrix.of.symm (coefficients * presentation.basis)
     coefficients * presentation.core *
           Matrix.transpose coefficients +
         Matrix.vecMulVec relation relation =
@@ -41,7 +41,7 @@ theorem borderedEqPairing
   apply isUnitLowerTriangular_ext
     bordered.1
     (pairingUpperFin_transpose_isUnitLowerTriangular
-      (coefficients * presentation.basis))
+      (Matrix.of.symm (coefficients * presentation.basis)))
   calc
     (coefficients * presentation.core *
           Matrix.transpose coefficients +
@@ -59,27 +59,22 @@ theorem borderedEqPairing
             Matrix.mul_add, Matrix.add_mul, Matrix.mul_assoc]
           abel_nf
           rw [two_smul, relation_twice, zero_add]
-    _ = centerMatrixFin
-          (coefficients * presentation.basis) * omega m *
+    _ = centerMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) * omega m *
         Matrix.transpose
-          (centerMatrixFin
-            (coefficients * presentation.basis)) := by
+          (centerMatrixFin (Matrix.of.symm (coefficients * presentation.basis))) := by
       rw [presentation.core_add_transpose, centerMatrixFin_eq]
       simp [Matrix.transpose_mul, Matrix.mul_assoc]
-    _ = pairingUpperFin
-          (coefficients * presentation.basis) +
+    _ = pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis)) +
         Matrix.transpose
-          (pairingUpperFin
-            (coefficients * presentation.basis)) :=
+          (pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis))) :=
       (pairingUpperFin_add_transpose
-        (coefficients * presentation.basis)).symm
+        (Matrix.of.symm
+          (coefficients * presentation.basis))).symm
     _ = Matrix.transpose
-          (pairingUpperFin
-            (coefficients * presentation.basis)) +
+          (pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis))) +
         Matrix.transpose
           (Matrix.transpose
-            (pairingUpperFin
-              (coefficients * presentation.basis))) := by
+            (pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis)))) := by
       rw [Matrix.transpose_transpose, add_comm]
 
 theorem borderedCoefficientEq
@@ -91,7 +86,7 @@ theorem borderedCoefficientEq
       IsBorderedTriangularization presentation.core
         coefficients relation) :
     let centers : Fin k → PhaseVector m :=
-      coefficients * presentation.basis
+      Matrix.of.symm (coefficients * presentation.basis)
     presentation.coefficient =
       Matrix.transpose coefficients * pathMatrixFin centers *
         coefficients := by
@@ -101,12 +96,11 @@ theorem borderedCoefficientEq
             Matrix.transpose coefficients +
           Matrix.vecMulVec relation relation =
         Matrix.transpose
-          (pairingUpperFin
-            (coefficients * presentation.basis)) := by
+          (pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis))) := by
     simpa using
       borderedEqPairing presentation coefficients relation bordered
   have pairing_eq :
-      pairingUpperFin (coefficients * presentation.basis) =
+      pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis)) =
         coefficients * Matrix.transpose presentation.core *
             Matrix.transpose coefficients +
           Matrix.vecMulVec relation relation := by
@@ -119,23 +113,23 @@ theorem borderedCoefficientEq
     rw [← Matrix.mulVec_mulVec, bordered.2.1]
     simp
   have pairing_mul_relation :
-      pairingUpperFin (coefficients * presentation.basis) *ᵥ
+      pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis)) *ᵥ
         relation = relation := by
     rw [pairing_eq, Matrix.add_mulVec, core_part_mul_relation,
       Matrix.vecMulVec_mulVec, bordered.2.2.1]
     simp
   have path_mul_relation :
-      pathMatrixFin (coefficients * presentation.basis) *ᵥ
+      pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *ᵥ
         relation = relation := by
     calc
-      pathMatrixFin (coefficients * presentation.basis) *ᵥ
+      pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *ᵥ
           relation =
-        pathMatrixFin (coefficients * presentation.basis) *ᵥ
-          (pairingUpperFin (coefficients * presentation.basis) *ᵥ
+        pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *ᵥ
+          (pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis)) *ᵥ
             relation) := by
             rw [pairing_mul_relation]
-      _ = (pathMatrixFin (coefficients * presentation.basis) *
-          pairingUpperFin (coefficients * presentation.basis)) *ᵥ
+      _ = (pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
+          pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis))) *ᵥ
             relation := by
             rw [Matrix.mulVec_mulVec]
       _ = relation := by
@@ -150,44 +144,44 @@ theorem borderedCoefficientEq
   have core_transpose_congruence :
       coefficients * Matrix.transpose presentation.core *
           Matrix.transpose coefficients =
-        pairingUpperFin (coefficients * presentation.basis) +
+        pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis)) +
           Matrix.vecMulVec relation relation := by
     rw [pairing_eq]
     abel_nf
     rw [two_smul, relation_twice, add_zero]
   have candidate_times_core_times_coefficients :
       (Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
             coefficients * Matrix.transpose presentation.core) *
           Matrix.transpose coefficients =
         (1 : Matrix (Fin n) (Fin n) F2) *
           Matrix.transpose coefficients := by
     calc
       (Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
             coefficients * Matrix.transpose presentation.core) *
           Matrix.transpose coefficients =
         Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
           (coefficients * Matrix.transpose presentation.core *
             Matrix.transpose coefficients) := by
               simp [Matrix.mul_assoc]
       _ = Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
-          (pairingUpperFin (coefficients * presentation.basis) +
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
+          (pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis)) +
             Matrix.vecMulVec relation relation) := by
               rw [core_transpose_congruence]
       _ = Matrix.transpose coefficients *
-            (pathMatrixFin (coefficients * presentation.basis) *
-              pairingUpperFin (coefficients * presentation.basis)) +
+            (pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
+              pairingUpperFin (Matrix.of.symm (coefficients * presentation.basis))) +
           Matrix.transpose coefficients *
-            (pathMatrixFin (coefficients * presentation.basis) *
+            (pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
               Matrix.vecMulVec relation relation) := by
               simp [Matrix.mul_add, Matrix.mul_assoc]
       _ = Matrix.transpose coefficients *
             (1 : Matrix (Fin k) (Fin k) F2) +
           Matrix.transpose coefficients *
-            (pathMatrixFin (coefficients * presentation.basis) *
+            (pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
               Matrix.vecMulVec relation relation) := by
               rw [pathMatrixFin_mul_pairingUpperFin]
       _ = Matrix.transpose coefficients *
@@ -209,14 +203,14 @@ theorem borderedCoefficientEq
     simpa only [Matrix.vecMul_transpose] using equal
   have candidate_times_core :
       (Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
             coefficients) *
           Matrix.transpose presentation.core =
         1 := by
     exact mul_right_cancel_of_vecMul_injective
       (Matrix.transpose coefficients)
       ((Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
             coefficients) * Matrix.transpose presentation.core)
       1
       transpose_coefficients_vecMul_injective
@@ -224,20 +218,20 @@ theorem borderedCoefficientEq
   symm
   calc
     Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
         coefficients =
       (Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
         coefficients) * 1 := by
           simp
     _ = (Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
         coefficients) *
         (Matrix.transpose presentation.core *
           presentation.coefficient) := by
             rw [presentation.core_transpose_mul_coefficient]
     _ = ((Matrix.transpose coefficients *
-          pathMatrixFin (coefficients * presentation.basis) *
+          pathMatrixFin (Matrix.of.symm (coefficients * presentation.basis)) *
         coefficients) *
           Matrix.transpose presentation.core) *
         presentation.coefficient := by simp [Matrix.mul_assoc]
@@ -254,10 +248,10 @@ theorem factorizationOfBordered
         coefficients relation) :
     IsFactorization target
       (List.ofFn
-        (coefficients * presentation.basis :
-          Fin k → PhaseVector m)) := by
+        (Matrix.of.symm
+          (coefficients * presentation.basis))) := by
   let centers : Fin k → PhaseVector m :=
-    coefficients * presentation.basis
+    Matrix.of.symm (coefficients * presentation.basis)
   have coefficient_eq :
       presentation.coefficient =
         Matrix.transpose coefficients * pathMatrixFin centers *
@@ -268,6 +262,6 @@ theorem factorizationOfBordered
     (productTransvections (List.ofFn centers))
   rw [residueMatrix_product_ofFn_eq, presentation.residue_eq,
     coefficient_eq, centerMatrixFin_eq]
-  simp [centers, Matrix.transpose_mul, Matrix.mul_assoc]
+  simp [centers, Matrix.mul_assoc]
 
 end PaulimerFormal

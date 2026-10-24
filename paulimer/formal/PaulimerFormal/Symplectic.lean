@@ -126,10 +126,13 @@ theorem exists_mul_eq_of_span_rows_le {l m n : Type*}
     apply (Submodule.mem_span_range_iff_exists_fun F2).mp
     exact containment (Submodule.subset_span (Set.mem_range_self row))
   choose coefficients coefficient_eq using coefficient_exists
-  refine ⟨coefficients, ?_⟩
+  let coefficientMatrix : Matrix l m F2 := coefficients
+  refine ⟨coefficientMatrix, ?_⟩
   ext row column
   have entry_eq := congrFun (coefficient_eq row) column
-  simpa [Matrix.mul_apply] using entry_eq
+  change (∑ index, coefficientMatrix row index * right index column) =
+    left row column
+  simpa [coefficientMatrix] using entry_eq
 
 theorem one_add_eq_omega_mul_residueMatrix {m : ℕ}
     (action : ActionMatrix m) :
