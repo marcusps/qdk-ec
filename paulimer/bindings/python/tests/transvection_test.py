@@ -125,7 +125,7 @@ def _random_clifford(draw, max_qubits=5):
             name = draw(st.sampled_from(_TWO_QUBIT_GATES))
             first = draw(st.integers(min_value=0, max_value=qubit_count - 1))
             second = draw(
-                st.integers(min_value=0, max_value=qubit_count - 1).filter(lambda q: q != first)
+                st.integers(min_value=0, max_value=qubit_count - 1).filter(lambda q, first=first: q != first)
             )
             clifford.left_mul(getattr(UnitaryOpcode, name), [first, second])
         else:

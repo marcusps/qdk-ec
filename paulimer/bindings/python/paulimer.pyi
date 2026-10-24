@@ -1,14 +1,14 @@
 from enum import IntEnum
 from typing import (
-    Literal,
-    final,
-    Optional,
     Any,
     Iterable,
+    Literal,
+    Optional,
     Protocol,
     Sequence,
-    overload,
+    final,
 )
+
 from binar import BitMatrix, BitVector
 
 PauliCharacter = Literal["I", "X", "Y", "Z"]
