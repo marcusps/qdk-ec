@@ -1,9 +1,35 @@
+mod dense_oracle;
 use dense_oracle::{Dense, close, gate_matrix, pauli_arrays, statevector};
 use paulimer::clifford::PhasedCliffordUnitary;
 use paulimer::pauli::Pauli;
 use paulimer::{DensePauli, UnitaryOp};
 use proptest::collection::vec;
 use proptest::prelude::*;
+
+#[test]
+fn usize_amplitude_zero_extends_at_platform_width() {
+    let width = usize::BITS as usize;
+    for qubit_count in [width - 1, width, width + 1, width * 2 + 1] {
+        let mut clifford = PhasedCliffordUnitary::identity(qubit_count);
+        clifford.left_mul(UnitaryOp::X, &[0]);
+        assert_eq!(clifford.state_amplitude_phase_exponent_usize(1), Some(0));
+        assert_eq!(clifford.state_amplitude_phase_exponent_usize(0), None);
+        if qubit_count >= width {
+            clifford.left_mul(UnitaryOp::X, &[width - 1]);
+            assert_eq!(
+                clifford.state_amplitude_phase_exponent_usize(1 | (1usize << (width - 1))),
+                Some(0)
+            );
+        }
+        if qubit_count > width {
+            clifford.left_mul(UnitaryOp::X, &[width]);
+            assert_eq!(
+                clifford.state_amplitude_phase_exponent_usize(1 | (1usize << (width - 1))),
+                None
+            );
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 enum Gate {

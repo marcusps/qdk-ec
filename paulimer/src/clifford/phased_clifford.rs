@@ -16,7 +16,7 @@
 //! that amplitude. Every amplitude of the stabilizer state `C|0…0⟩` has the same magnitude, so the
 //! magnitude is recovered from the rank of the stabilizer tableau and only the phase needs to be
 //! propagated. Each elementary left-multiplication updates the underlying [`CliffordUnitary`] with
-//! the existing tableau code and updates the reference amplitude in `O(n²)` time.
+//! the existing tableau code and updates the reference amplitude using `O(n³)` echelon reductions.
 
 use super::{Clifford, CliffordMutable, CliffordUnitary};
 use crate::UnitaryOp;
@@ -98,6 +98,7 @@ impl PhasedCliffordUnitary {
     }
 
     /// Returns the underlying phaseless [`CliffordUnitary`].
+    #[must_use]
     pub fn clifford(&self) -> &CliffordUnitary {
         &self.clifford
     }
@@ -130,7 +131,7 @@ impl PhasedCliffordUnitary {
     #[must_use]
     pub fn state_amplitude_phase_exponent_usize(&self, value: usize) -> Option<u8> {
         let mut basis = AlignedBitVec::zeros(self.num_qubits());
-        for qubit in 0..self.num_qubits() {
+        for qubit in 0..self.num_qubits().min(usize::BITS as usize) {
             basis.assign_index(qubit, (value >> qubit) & 1 == 1);
         }
         self.state_amplitude_phase_exponent(&basis)

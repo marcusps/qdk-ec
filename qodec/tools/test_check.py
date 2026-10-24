@@ -33,7 +33,7 @@ class CheckRunnerTests(unittest.TestCase):
     def test_native_build_tools_use_shared_pins(self):
         root = checks.ROOT.parent
         self.assertEqual((root / "requirements-build.txt").read_text().splitlines(), [
-            "maturin==1.15.0", 'ziglang==0.12.1; sys_platform == "linux"',
+            "maturin==1.15.0", "uv==0.11.32", 'ziglang==0.14.1; sys_platform == "linux"',
         ])
         for filename in (".ado/stages/build.yaml", ".ado/templates/build-wheels-steps.yaml",
                          ".ado/templates/build-python-bindings-steps.yaml", ".github/workflows/build.yaml",
@@ -80,7 +80,7 @@ class CheckRunnerTests(unittest.TestCase):
         stages = pipeline["extends"]["parameters"]["stages"]
         build = next(stage for stage in stages if stage["template"] == "stages/build.yaml@self")
         publisher = next(stage for stage in stages if stage["template"] == "stages/publish_python.yaml@self")
-        self.assertEqual(build["parameters"]["buildAndTest"], "${{ or(parameters.buildAndTest, parameters.publishQodecPython) }}")
+        self.assertEqual(build["parameters"]["buildAndTest"], "${{ or(parameters.buildAndTest, parameters.publishDeqagramPython, parameters.publishQodecPython) }}")
         self.assertEqual(publisher["parameters"]["publishQodecPython"], "${{ parameters.publishQodecPython }}")
         self.assertFalse(any(stage["parameters"].get("packageName") == "qodec" for stage in stages))
         template = yaml.safe_load((checks.ROOT.parent / ".ado/stages/publish_python.yaml").read_text())
@@ -100,11 +100,14 @@ class CheckRunnerTests(unittest.TestCase):
         job = jobs[0]
         steps = job["steps"]
         commands = [step.get("bash", step.get("pwsh", "")) for step in steps]
-        builds = [command for command in commands if "--out target/qodec-wheels" in command]
+        builds = [command for command in commands if "--out \"target/qodec-wheels/$version\"" in command]
         self.assertEqual(len(builds), 2)
         for command in builds:
             self.assertIn("--manifest-path qodec/bindings/python/Cargo.toml", command)
-            self.assertLess(command.index("maturin build"), command.index("python qodec/tools/check_wheel.py target/qodec-wheels"))
+            self.assertIn("--interpreter", command)
+            for version in ("3.11", "3.14t", "3.15.0b4", "3.15.0b4+freethreaded"):
+                self.assertIn(version, command)
+            self.assertLess(command.index("maturin build"), command.index("qodec/tools/check_wheel.py"))
         source = next(step for step in steps if step.get("displayName") == "Build qodec source distribution")
         self.assertIn("eq(variables['arch'], 'x86_64')", source["condition"])
         self.assertIn("eq(variables['Agent.OS'], 'Linux')", source["condition"])
@@ -114,8 +117,11 @@ class CheckRunnerTests(unittest.TestCase):
     def test_release_collection_requires_complete_qodec_artifacts(self):
         template = yaml.safe_load((checks.ROOT.parent / ".ado/stages/publish_python.yaml").read_text())
         steps = template["stages"][0]["jobs"][0]["steps"]
-        script = next(step["script"] for step in steps if step["displayName"] == "Collect qodec wheels")
-        cases = ("complete", "missing wheel", "extra wheel", "duplicate wheel", "missing sdist", "extra sdist")
+        validation = next(step["bash"] for step in steps if step["displayName"] == "Validate all three native ABI families")
+        script = validation + "\n" + next(step["script"] for step in steps if step["displayName"] == "Collect qodec wheels")
+        for package in ("Binar", "Paulimer", "Deqagram", "Qodec"):
+            script = script.replace("${{ parameters.publish" + package + "Python }}", str(package == "Qodec"))
+        cases = ("complete", "missing wheel", "extra wheel", "duplicate wheel", "missing sdist", "extra sdist", "no platforms")
         for case in cases:
             with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -127,17 +133,19 @@ class CheckRunnerTests(unittest.TestCase):
                     self.assertEqual({path.name for path in (root / "target/wheels").iterdir()}, expected)
 
     def make_release_artifacts(self, root, case):
-        (root / "target/wheels").mkdir(parents=True)
+        (root / "target/wheels").mkdir(parents=True, exist_ok=True)
         expected = set()
+        if case == "no platforms":
+            return expected
         for platform in ("linux_x86_64", "windows_aarch64"):
             directory = root / "artifacts" / platform
             directory.mkdir(parents=True)
-            wheel = f"qodec-0.1.0-cp311-abi3-{platform}.whl"
-            if case == "duplicate wheel":
-                wheel = "qodec-0.1.0-cp311-abi3-linux_x86_64.whl"
-            if not (case == "missing wheel" and platform == "windows_aarch64"):
-                (directory / wheel).write_text("fixture")
-                expected.add(wheel)
+            for tag in ("cp311-abi3", "cp314-cp314t", "cp315-abi3.abi3t"):
+                wheel_platform = "linux_x86_64" if case == "duplicate wheel" else platform
+                wheel = f"qodec-0.1.0-{tag}-{wheel_platform}.whl"
+                if not (case == "missing wheel" and platform == "windows_aarch64" and tag == "cp315-abi3.abi3t"):
+                    (directory / wheel).write_text("fixture")
+                    expected.add(wheel)
             (directory / f"binar-0.1.0-cp311-abi3-{platform}.whl").write_text("not selected")
         source = root / "artifacts/linux_x86_64"
         if case != "missing sdist":
@@ -303,11 +311,42 @@ class CheckRunnerTests(unittest.TestCase):
         original = inherited.copy()
         selected = checks.selected_environment("/chosen/bin/python", Path("/chosen"), Path("/base"), inherited)
         self.assertEqual(inherited, original)
-        self.assertEqual(selected["VIRTUAL_ENV"], "/chosen")
+        self.assertEqual(Path(selected["VIRTUAL_ENV"]), Path("/chosen"))
         self.assertNotIn("CONDA_PREFIX", selected)
         self.assertEqual(selected["CC"], "cc")
         self.assertTrue(selected["PATH"].endswith("/compiler tools"))
         self.assertEqual(selected["PYO3_PYTHON"], "/chosen/bin/python")
+
+    def test_coverage_toolchain_changes_only_the_coverage_step(self):
+        default = checks.steps_for("all", sys.executable)
+        selected = checks.steps_for("all", sys.executable, coverage_toolchain="stable")
+        changes = [(before, after) for before, after in zip(default, selected) if before != after]
+        self.assertEqual(len(changes), 1)
+        before, after = changes[0]
+        self.assertEqual(after.command, ("rustup", "run", "stable", *before.command))
+        self.assertEqual(after.cwd, before.cwd)
+        self.assertEqual(after.extra_env, {})
+
+    def test_coverage_rejects_utc_before_running_tests(self):
+        result = subprocess.CompletedProcess([], 0, stdout="rustc 1.97.1\nx86_64-utc-builder-path: amd64/r2c2.dll\n")
+        with patch.object(checks.subprocess, "run", return_value=result):
+            message = checks.coverage_compiler_error({}, None)
+        self.assertIn("ignores -Cinstrument-coverage", message)
+        self.assertIn("--coverage-toolchain", message)
+
+    def test_coverage_inspects_the_explicit_toolchain(self):
+        environment = {"PATH": "/tools"}
+        result = subprocess.CompletedProcess([], 0, stdout="rustc 1.98.1\nLLVM version: 22.1.8\n")
+        with patch.object(checks.subprocess, "run", return_value=result) as run:
+            self.assertIsNone(checks.coverage_compiler_error(environment, "stable"))
+        run.assert_called_once_with(("rustup", "run", "stable", "rustc", "-vV"), cwd=checks.ROOT,
+                                    env=environment, text=True, capture_output=True, check=False)
+        self.assertEqual(environment, {"PATH": "/tools"})
+
+    def test_coverage_reports_unavailable_toolchains(self):
+        result = subprocess.CompletedProcess([], 1, stderr="toolchain not installed")
+        with patch.object(checks.subprocess, "run", return_value=result):
+            self.assertIn("toolchain not installed", checks.coverage_compiler_error({}, "missing"))
 
     def test_conda_selection(self):
         with tempfile.TemporaryDirectory() as directory:

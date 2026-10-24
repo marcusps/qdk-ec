@@ -8,7 +8,7 @@ use pauliverse::outcome_free_simulation::OutcomeFreeSimulation;
 use pauliverse::outcome_specific_simulation::OutcomeSpecificSimulation;
 use pauliverse::phased_outcome_complete_simulation::PhasedOutcomeCompleteSimulation;
 use pauliverse::Simulation;
-use pyo3::exceptions::{PyNotImplementedError, PyValueError};
+use pyo3::exceptions::{PyDeprecationWarning, PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
 
 use crate::enums::PyUnitaryOp;
@@ -46,9 +46,9 @@ pub struct PyPhasedOutcomeCompleteSimulation {
 /// An opaque handle to a symbolic angle `α` of a parameterised circuit.
 ///
 /// A symbolic angle is the free parameter of a Pauli exponent `e^{iα P}`. Obtain one from
-/// [`PhasedOutcomeCompleteSimulation.allocate_symbolic_angle`] (or a batch from
+/// `PhasedOutcomeCompleteSimulation.allocate_symbolic_angle` (or a batch from
 /// `allocate_symbolic_angles`) and pass it to `apply_symbolic_pauli_exp`. The handle is opaque:
-/// its only observable feature is its [`index`], the angle's subscript `k` in `α_k`, fixed by the
+/// its only observable feature is its `index`, the angle's subscript `k` in `α_k`, fixed by the
 /// order in which angles are allocated. When two circuits are compared with `phased_action`, angles
 /// with the same `index` are required to correspond, so describing both circuits in terms of the
 /// `k`-th angle is what makes the comparison meaningful -- regardless of how the rest of each
@@ -83,6 +83,18 @@ impl PySymbolicAngle {
     pub fn __hash__(&self) -> u64 {
         self.outcome as u64
     }
+}
+
+fn warn_renamed(py: Python<'_>, old_name: &str, new_name: &str) -> PyResult<()> {
+    py.import("warnings")?.call_method1(
+        "warn",
+        (
+            format!("{old_name} is deprecated. Use {new_name} instead."),
+            py.get_type::<PyDeprecationWarning>(),
+            1,
+        ),
+    )?;
+    Ok(())
 }
 
 macro_rules! impl_simulation {
@@ -121,20 +133,14 @@ macro_rules! impl_simulation {
 
             #[getter]
             #[must_use]
-            pub fn random_outcome_count(&self) -> usize {
-                self.deref().random_outcome_count()
+            pub fn branch_bit_count(&self) -> usize {
+                self.deref().branch_bit_count()
             }
 
             #[getter]
             #[must_use]
-            pub fn random_outcome_capacity(&self) -> usize {
-                self.deref().random_outcome_capacity()
-            }
-
-            #[getter]
-            #[must_use]
-            pub fn random_bit_count(&self) -> usize {
-                self.deref().random_outcome_count()
+            pub fn branch_bit_capacity(&self) -> usize {
+                self.deref().branch_bit_capacity()
             }
 
             #[allow(clippy::needless_pass_by_value)]
@@ -200,6 +206,7 @@ macro_rules! impl_simulation {
                 Simulation::reserve_qubits(self.deref_mut(), new_qubit_capacity);
             }
 
+            /// Reserve capacity. The keyword name remains compatible with earlier releases.
             pub fn reserve_outcomes(&mut self, new_outcome_capacity: usize, new_random_outcome_capacity: usize) {
                 Simulation::reserve_outcomes(self.deref_mut(), new_outcome_capacity, new_random_outcome_capacity);
             }
@@ -219,6 +226,7 @@ macro_rules! impl_simulation {
                 }
             }
 
+            /// Construct a simulation. The keyword names remain compatible with earlier releases.
             #[staticmethod]
             #[pyo3(signature=(num_qubits, num_outcomes, num_random_outcomes))]
             pub fn with_capacity(num_qubits: usize, num_outcomes: usize, num_random_outcomes: usize) -> Self {
@@ -226,8 +234,53 @@ macro_rules! impl_simulation {
             }
 
             #[getter]
-            pub fn random_outcome_indicator(&self) -> BitVec {
-                self.deref().random_outcome_indicator().iter().copied().collect::<BitVec>()
+            pub fn outcome_introduces_branch_bit(&self) -> BitVec {
+                self.deref().outcome_introduces_branch_bit().iter().copied().collect::<BitVec>()
+            }
+
+
+            /// Deprecated alias for `branch_bit_count`.
+            ///
+            /// # Errors
+            ///
+            /// Returns an error if Python rejects the deprecation warning.
+            #[getter]
+            pub fn random_outcome_count(&self, py: Python<'_>) -> PyResult<usize> {
+                warn_renamed(py, "random_outcome_count", "branch_bit_count")?;
+                Ok(self.deref().branch_bit_count())
+            }
+
+            /// Deprecated alias for `branch_bit_count`.
+            ///
+            /// # Errors
+            ///
+            /// Returns an error if Python rejects the deprecation warning.
+            #[getter]
+            pub fn random_bit_count(&self, py: Python<'_>) -> PyResult<usize> {
+                warn_renamed(py, "random_bit_count", "branch_bit_count")?;
+                Ok(self.deref().branch_bit_count())
+            }
+
+            /// Deprecated alias for `branch_bit_capacity`.
+            ///
+            /// # Errors
+            ///
+            /// Returns an error if Python rejects the deprecation warning.
+            #[getter]
+            pub fn random_outcome_capacity(&self, py: Python<'_>) -> PyResult<usize> {
+                warn_renamed(py, "random_outcome_capacity", "branch_bit_capacity")?;
+                Ok(self.deref().branch_bit_capacity())
+            }
+
+            /// Deprecated alias for `outcome_introduces_branch_bit`.
+            ///
+            /// # Errors
+            ///
+            /// Returns an error if Python rejects the deprecation warning.
+            #[getter]
+            pub fn random_outcome_indicator(&self, py: Python<'_>) -> PyResult<BitVec> {
+                warn_renamed(py, "random_outcome_indicator", "outcome_introduces_branch_bit")?;
+                Ok(self.outcome_introduces_branch_bit())
             }
 
             $($inside)*
@@ -291,14 +344,43 @@ impl_simulation!(
 
         #[staticmethod]
         #[pyo3(signature=(num_qubits))]
-        pub fn with_zero_outcomes(num_qubits: usize) -> Self {
-            OutcomeSpecificSimulation::new_with_zero_outcomes(num_qubits).into()
+        pub fn with_zero_samples(num_qubits: usize) -> Self {
+            OutcomeSpecificSimulation::new_with_zero_samples(num_qubits).into()
         }
 
         #[staticmethod]
         #[pyo3(signature=(num_qubits, seed = 0))]
-        pub fn new_with_seeded_random_outcomes(num_qubits: usize, seed: u64) -> Self {
-            OutcomeSpecificSimulation::new_with_seeded_random_outcomes(num_qubits, seed).into()
+        pub fn with_seeded_random_samples(num_qubits: usize, seed: u64) -> Self {
+            OutcomeSpecificSimulation::new_with_seeded_random_samples(num_qubits, seed).into()
+        }
+
+        #[staticmethod]
+        #[pyo3(signature=(num_qubits))]
+        pub fn with_random_samples(num_qubits: usize) -> Self {
+            OutcomeSpecificSimulation::new_with_random_samples(num_qubits).into()
+        }
+
+        /// Deprecated alias for `with_zero_samples`.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if Python rejects the deprecation warning.
+        #[staticmethod]
+        pub fn with_zero_outcomes(py: Python<'_>, num_qubits: usize) -> PyResult<Self> {
+            warn_renamed(py, "with_zero_outcomes", "with_zero_samples")?;
+            Ok(Self::with_zero_samples(num_qubits))
+        }
+
+        /// Deprecated alias for `with_seeded_random_samples`.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if Python rejects the deprecation warning.
+        #[staticmethod]
+        #[pyo3(signature=(num_qubits, seed=0))]
+        pub fn new_with_seeded_random_outcomes(py: Python<'_>, num_qubits: usize, seed: u64) -> PyResult<Self> {
+            warn_renamed(py, "new_with_seeded_random_outcomes", "with_seeded_random_samples")?;
+            Ok(Self::with_seeded_random_samples(num_qubits, seed))
         }
 });
 
@@ -351,11 +433,11 @@ impl_simulation!(
 
         /// Allocate a fresh symbolic angle `α`.
         ///
-        /// Returns an opaque [`SymbolicAngle`] handle; pass it to [`apply_symbolic_pauli_exp`] to
+        /// Returns an opaque `SymbolicAngle` handle; pass it to `apply_symbolic_pauli_exp` to
         /// apply `e^{iα P}`. Angles are numbered by allocation order (the returned handle's
         /// `index`), and when two circuits are compared with `phased_action` the angle with a given
         /// `index` in one must correspond to the same `index` in the other. To allocate several at
-        /// once, use [`allocate_symbolic_angles`].
+        /// once, use `allocate_symbolic_angles`.
         pub fn allocate_symbolic_angle(&mut self) -> PySymbolicAngle {
             let index = self.inner.symbolic_angle_indicator().iter().filter(|&&is_angle| is_angle).count();
             let outcome = self.inner.allocate_symbolic_angle();
@@ -364,7 +446,7 @@ impl_simulation!(
 
         /// Allocate `count` fresh symbolic angles `α_0, ..., α_{count-1}` at once.
         ///
-        /// Returns the [`SymbolicAngle`] handles in order, so `angles[k]` is `α_k`. Allocating all of
+        /// Returns the `SymbolicAngle` handles in order, so `angles[k]` is `α_k`. Allocating all of
         /// a circuit's angles up front and then referring to them by index keeps the correspondence
         /// between two circuits explicit and independent of how either circuit is otherwise written.
         pub fn allocate_symbolic_angles(&mut self, count: usize) -> Vec<PySymbolicAngle> {
@@ -387,8 +469,8 @@ impl_simulation!(
 
         /// Apply a symbolic Pauli exponent `e^{iα P}` parameterised by `angle`.
         ///
-        /// `angle` must be a [`SymbolicAngle`] obtained from [`allocate_symbolic_angle`] or
-        /// [`allocate_symbolic_angles`]. This is the high-level way to add a free-angle exponent
+        /// `angle` must be a `SymbolicAngle` obtained from `allocate_symbolic_angle` or
+        /// `allocate_symbolic_angles`. This is the high-level way to add a free-angle exponent
         /// `e^{iα P}` for an arbitrary Pauli `P`. The same `angle` may parameterise several exponents
         /// to model a shared `α`, and angles with matching `index` in two circuits are what make those
         /// circuits' exponents correspond when their phased actions are compared.

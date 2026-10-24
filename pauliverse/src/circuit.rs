@@ -346,6 +346,7 @@ impl CircuitBuilder {
     }
 
     /// Get the recorded circuit.
+    #[must_use]
     pub fn circuit(&self) -> &Circuit {
         &self.circuit
     }
@@ -486,7 +487,7 @@ impl Simulation for CircuitBuilder {
         self.outcome_count
     }
 
-    fn with_capacity(_qubit_count: usize, outcome_count: usize, _random_outcome_count: usize) -> Self {
+    fn with_capacity(_qubit_count: usize, outcome_count: usize, _branch_bit_count: usize) -> Self {
         CircuitBuilder::with_capacity(outcome_count)
     }
 
@@ -506,7 +507,7 @@ impl Simulation for CircuitBuilder {
         self.outcome_count
     }
 
-    fn reserve_outcomes(&mut self, _new_outcome_capacity: usize, _new_random_outcome_capacity: usize) {
+    fn reserve_outcomes(&mut self, _new_outcome_capacity: usize, _new_branch_bit_capacity: usize) {
         // No-op: CircuitBuilder doesn't pre-allocate outcome storage
     }
 }
