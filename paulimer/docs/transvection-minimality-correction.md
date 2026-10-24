@@ -241,7 +241,7 @@ decomposer reproduces exactly this behaviour:
 residue rank r         = 3          # 2*qubit_count - len(fixed_space())
 fixed-space dimension = 1          # = 2m - r
 to_transvections       len = 4
-to_transvections_minimal len = 4    # = r + 1, not r
+len(to_transvections_minimal()[0]) = 4    # = r + 1, not r
 ```
 
 **The phenomenon is common, not isolated.** An exhaustive census of
@@ -292,7 +292,7 @@ So a panic on a valid input does not show that only an implementation detail is 
 
 ### Implementation and evidence
 
-Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
+Implementation ([`transvection_exact.rs`](../src/clifford/transvection_exact.rs)):
 
 - **Triangularization by complete search.** `congruence_triangularize` performs an exhaustive
   backtracking search for $\mathbf Q$: at each node it enumerates all $\psi$-non-isotropic pivots,
@@ -307,6 +307,20 @@ Implementation ([`transvection.rs`](../src/clifford/transvection.rs)):
   The update $\mathbf F\mathbf T_{\mathbf w}$ must have a triangularizable residue core at the same rank.
   If the search finds one, the decomposer recurses on that update and appends $\mathbf T_{\mathbf w}$.
   The search panics if no candidate succeeds.
+
+The public Rust result is `TransvectionDecomposition { transvections, pauli_correction }`.
+Python returns `(transvections, pauli_correction)`.
+Apply each rotation in list order with `left_mul_pauli_exp`, then apply the final Pauli with `left_mul_pauli`.
+This reproduces the signed tableau, not global phase.
+The minimum counts only rotations for the unsigned action. It excludes the final Pauli and is not a minimum signed gate count.
+The greedy API remains an unsigned list in [`transvection.rs`](../src/clifford/transvection.rs).
+
+For target $C=P R$, compare the preimages of each output $X_j$ and $Z_j$ under $C$ and the replay $R$.
+Since $C^\dagger X_j C=R^\dagger(P X_j P)R$, an $X_j$ sign difference gives the $Z_j$ bit of $P$.
+A $Z_j$ sign difference gives its $X_j$ bit.
+The binary preimages agree, so comparing their xz phases cancels the common Y contribution.
+The correction uses the positive Hermitian phase, including when its support contains Y.
+Tests cover all 24 one-qubit and 11,520 two-qubit signed tableaus, plus random signed rotations on up to four qubits.
 
 The evidence for this criterion has two parts.
 
@@ -367,7 +381,8 @@ Each two-qubit block applies the transvections $X_0$, $X_1$, $X_0X_1$, and $Z_0$
 For several blocks, apply the same sequence on disjoint qubit pairs.
 
 These measurements use the release Python extension on the same Linux host, after alternating pruning.
-The elapsed times cover `to_transvections_minimal()`.
+The elapsed times cover the earlier rotation-only `to_transvections_minimal()` implementation.
+They exclude the final Pauli correction in the current API.
 They precede the bordered construction.
 The [construction note](bordered-transvection-construction.md) records the later comparison.
 

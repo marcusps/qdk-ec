@@ -84,7 +84,12 @@ After the lift through $V$, the code requires exactly $r+1$ nonzero vectors of l
 It multiplies their transvection matrices in order, starting from the identity.
 It accepts the candidate only when that product equals the complete input action matrix.
 The Pauli conversion uses the existing positive Hermitian representative.
-As with the other decomposers, the result does not reproduce Pauli-image signs or global phase.
+This candidate check compares only the unsigned action.
+After either the constructed path or the retained search, the public API computes a final Pauli from the selected rotations.
+Apply the rotations with `left_mul_pauli_exp`, then the correction with `left_mul_pauli`, to reproduce all tableau signs.
+The unsigned minimum excludes this final Pauli. No global phase is reconstructed.
+The implementation is in [`transvection_exact.rs`](../src/clifford/transvection_exact.rs).
+Its bordered diagnostics are in [`transvection_bordered_tests.rs`](../src/clifford/transvection_bordered_tests.rs).
 
 The successful path returns the full factorization.
 It does not extract a fix vector and repeat the congruence search on an updated core.
@@ -236,7 +241,8 @@ Neither build contains timing instrumentation for the tables below.
 Each process runs on CPU 6 with `taskset -c 6`.
 Before each batch, that CPU was at least 98 percent idle during a one-second sample.
 No builds or other local validation runs overlap these measurements.
-Each elapsed time covers one `to_transvections_minimal()` call with `time.perf_counter_ns()`.
+Each elapsed time covers one earlier rotation-only `to_transvections_minimal()` call with `time.perf_counter_ns()`.
+These measurements exclude the final Pauli correction in the current API.
 Input construction and replay occur outside the timed call.
 Each completed case has one untimed warmup.
 The tables report medians and sample counts for each build.

@@ -312,22 +312,22 @@ impl PyCliffordUnitary {
             .collect())
     }
 
-    /// Decomposes this Clifford into a *minimal* ordered product of Clifford transvections (pi/4
-    /// Pauli exponents), reproducing its symplectic action with the fewest possible factors.
+    /// Returns a minimum unsigned rotation list and a final Pauli correction.
     ///
-    /// Returns Hermitian Pauli operators ``[P_1, ..., P_k]`` such that applying ``exp(i pi/4
-    /// P_1)``, then ``exp(i pi/4 P_2)``, ..., then ``exp(i pi/4 P_k)`` reproduces the conjugation
-    /// action of this Clifford, with ``k`` equal to the minimal transvection count (``r`` or
-    /// ``r + 1``, where ``r`` is the rank of the residue matrix). Pauli-image signs are not
-    /// reproduced. No tableau-level decomposition reproduces the global phase, because a tableau
-    /// does not record it. See :meth:`to_transvections` for the greedy O(n)-factor decomposition,
-    /// which can use more factors.
+    /// Returns ``(transvections, pauli_correction)`` with positive Hermitian Paulis.
+    /// Apply each generator in list order to identity with ``left_mul_pauli_exp``.
+    /// Apply the correction last with ``left_mul_pauli``, not ``left_mul_pauli_exp``.
+    /// The result equals this signed Clifford tableau. Identity means no correction is needed.
+    /// Global phase is not reconstructed because the tableau does not record it.
+    /// The rotation count is the unsigned minimum (``r`` or ``r + 1`` for residue rank ``r``).
+    /// It excludes the final Pauli and is not a minimum signed gate count.
+    /// :meth:`to_transvections` remains an unsigned greedy list and can use more rotations.
     ///
     /// The call can run for a long time on structured high-rank inputs, because the exact search
     /// can be exponential in the residue rank, in both running time and memoization space.
     /// Alternating restrictions return without a span scan, but Callan class-A sums can still be
     /// impractical. See ``docs/transvection-minimality-correction.md`` for measured limits.
-    /// The rank-plus-one case first tries a bordered construction and checks its exact action.
+    /// The rank-plus-one case first tries a bordered construction and checks its exact unsigned (symplectic) action.
     /// A failed candidate uses the retained exhaustive search.
     /// See ``docs/bordered-transvection-construction.md`` for the algorithm and measured coverage.
     /// The binding releases the GIL while the Rust search runs, so other Python threads keep running.
@@ -336,16 +336,16 @@ impl PyCliffordUnitary {
     /// # Errors
     ///
     /// Returns a `ValueError` if the Clifford tableau is invalid.
-    fn to_transvections_minimal(&self, py: Python<'_>) -> PyResult<Vec<PySparsePauli>> {
+    fn to_transvections_minimal(&self, py: Python<'_>) -> PyResult<(Vec<PySparsePauli>, PySparsePauli)> {
         if !self.inner.is_valid() {
             return Err(PyValueError::new_err("the Clifford tableau is invalid"));
         }
         let clifford = self.inner.clone();
-        Ok(py
-            .detach(move || clifford_to_transvections_minimal(&clifford))
-            .into_iter()
-            .map(PySparsePauli::from)
-            .collect())
+        let result = py.detach(move || clifford_to_transvections_minimal(&clifford));
+        Ok((
+            result.transvections.into_iter().map(PySparsePauli::from).collect(),
+            result.pauli_correction.into(),
+        ))
     }
 
     /// Returns generators of this Clifford's fixed space, the Paulis fixed up to sign under conjugation.
