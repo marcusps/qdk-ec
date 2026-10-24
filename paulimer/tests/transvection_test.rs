@@ -323,6 +323,9 @@ proptest! {
 }
 
 use paulimer::clifford::clifford_to_transvections_minimal;
+
+#[path = "support/transvection_signed_replay.rs"]
+mod signed_replay;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
@@ -367,7 +370,7 @@ fn encode(matrix: &ActionMatrix) -> u32 {
 
 fn assert_valid_minimal_decomposition(clifford: &CliffordUnitary) {
     let qubit_count = clifford.num_qubits();
-    let transvections = clifford_to_transvections_minimal(clifford);
+    let transvections = clifford_to_transvections_minimal(clifford).transvections;
 
     let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
     assert!(rebuilt.is_valid());
@@ -400,7 +403,7 @@ fn minimal_identity_decomposes_to_no_transvections() {
     for qubit_count in 0..5 {
         let no_factors: Vec<SparsePauli> = Vec::new();
         assert_eq!(
-            clifford_to_transvections_minimal(&CliffordUnitary::identity(qubit_count)),
+            clifford_to_transvections_minimal(&CliffordUnitary::identity(qubit_count)).transvections,
             no_factors,
             "the identity needs no transvections"
         );
@@ -412,12 +415,12 @@ fn minimal_single_qubit_gates() {
     let mut s_gate = CliffordUnitary::identity(1);
     s_gate.left_mul_root_z(0);
     assert_valid_minimal_decomposition(&s_gate);
-    assert_eq!(clifford_to_transvections_minimal(&s_gate).len(), 1);
+    assert_eq!(clifford_to_transvections_minimal(&s_gate).transvections.len(), 1);
 
     let mut hadamard = CliffordUnitary::identity(1);
     hadamard.left_mul_hadamard(0);
     assert_valid_minimal_decomposition(&hadamard);
-    assert_eq!(clifford_to_transvections_minimal(&hadamard).len(), 1);
+    assert_eq!(clifford_to_transvections_minimal(&hadamard).transvections.len(), 1);
 }
 
 #[test]
@@ -426,7 +429,7 @@ fn minimal_swap_needs_r_plus_one() {
     swap.left_mul_swap(0, 1);
     assert_valid_minimal_decomposition(&swap);
     assert_eq!(residue_rank(&swap), 2);
-    assert_eq!(clifford_to_transvections_minimal(&swap).len(), 3);
+    assert_eq!(clifford_to_transvections_minimal(&swap).transvections.len(), 3);
 }
 
 #[test]
@@ -452,7 +455,7 @@ fn minimal_callan_class_a_needs_r_plus_one() {
     assert!(action[0][2], "⟨X₀, X₀F⟩ = 1, so F is non-hyperbolic");
     assert_eq!(residue_rank(&clifford), 3);
     assert_eq!(enumerate_symplectic_group(2)[&encode(&action)].0, 4);
-    assert_eq!(clifford_to_transvections_minimal(&clifford).len(), 4);
+    assert_eq!(clifford_to_transvections_minimal(&clifford).transvections.len(), 4);
 }
 
 #[test]
@@ -466,7 +469,7 @@ fn minimal_swap_layer_of_32_qubits_finishes() {
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let worker = std::thread::spawn(move || {
         sender
-            .send(clifford_to_transvections_minimal(&clifford))
+            .send(clifford_to_transvections_minimal(&clifford).transvections)
             .expect("the test must receive the decomposition");
     });
     let factors = receiver
@@ -562,7 +565,7 @@ fn minimal_matches_brute_force_oracle_on_every_one_and_two_qubit_action() {
         );
 
         for (minimum, clifford) in group.values() {
-            let decomposed = clifford_to_transvections_minimal(clifford);
+            let decomposed = clifford_to_transvections_minimal(clifford).transvections;
             let rebuilt = symplectic_action_from_transvections(&decomposed, qubit_count);
             assert!(rebuilt.is_valid());
             assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
@@ -685,7 +688,7 @@ fn minimal_matches_brute_force_oracle_on_every_three_qubit_action() {
         }
         assert_eq!(pack_action(&clifford), packed);
 
-        let decomposed = clifford_to_transvections_minimal(&clifford);
+        let decomposed = clifford_to_transvections_minimal(&clifford).transvections;
         assert_eq!(decomposed.len(), minimum, "length must equal the brute-force minimum");
         let rebuilt = symplectic_action_from_transvections(&decomposed, 3);
         assert!(rebuilt.is_valid(), "replayed factors must form a valid tableau");
@@ -735,7 +738,7 @@ proptest! {
     #[test]
     fn minimal_reproduces_symplectic_action((qubit_count, gates) in scenario()) {
         let clifford = clifford_from_gates(qubit_count, &gates);
-        let transvections = clifford_to_transvections_minimal(&clifford);
+        let transvections = clifford_to_transvections_minimal(&clifford).transvections;
         let rebuilt = symplectic_action_from_transvections(&transvections, qubit_count);
         prop_assert_eq!(rebuilt.symplectic_matrix(), clifford.symplectic_matrix());
     }
@@ -743,7 +746,7 @@ proptest! {
     #[test]
     fn minimal_is_r_or_r_plus_one_and_at_most_greedy((qubit_count, gates) in scenario()) {
         let clifford = clifford_from_gates(qubit_count, &gates);
-        let minimal = clifford_to_transvections_minimal(&clifford).len();
+        let minimal = clifford_to_transvections_minimal(&clifford).transvections.len();
         let greedy = clifford_to_transvections(&clifford).len();
         let residue = residue_rank(&clifford);
         prop_assert!(minimal == residue || minimal == residue + 1, "got {minimal}, r = {residue}");
