@@ -16,10 +16,27 @@ symbolic X, Y, and Z generators are also proved equal to Physlib's
 corresponding matrices.
 
 These Pauli results verify the canonical mathematics, not yet Paulimer's
-dense or sparse Rust representations. Their refinement to executable packed
-models and compiled Rust remains separate work. The concrete one-qubit bridge
-does not yet connect the symbolic Hermiticity or complex-conjugation
-definitions to matrix conjugate transpose or entrywise conjugation.
+dense or sparse compiled Rust representations. `PauliRepresentations` adds
+executable Lean models for both storage strategies: dense coordinates reuse
+BinarFormal's verified packed XOR and dot product, while sparse coordinates
+use finite supports, symmetric difference, and intersection parity. Direct
+refinement theorems cover packed and sparse multiplication and inversion,
+phase updates, packed support queries, sparse weights, order-two testing,
+packed offset assignment, and sparse-to-sparse injective remapping.
+Support-covered condense/remap semantic models additionally round-trip and
+preserve multiplication and inversion. Condensing explicitly requires every
+nonidentity coordinate to occur in the ordered support map.
+
+Constructors, dense/sparse or projective conversions, sparse offset assignment,
+support-covered condensing, and dense-to-sparse remapping are executable
+semantic specifications implemented by decode and repack, rather than proofs
+of the corresponding Rust loops. The models store phases in `ZMod 4`, matching
+every exposed mathematical observation in Rust. Separate `ZMod 256` lemmas
+verify wrapping addition, negation, and Rust's exact
+`4 - (raw % 4)` complex-conjugation update after reduction modulo four. These
+results do not verify compiled Rust memory or trait implementations. The
+concrete one-qubit bridge does not yet connect symbolic Hermiticity or
+complex conjugation to matrix conjugate transpose or entrywise conjugation.
 
 The theorem concerns the Clifford's binary symplectic action. Pauli-image signs
 and global phase are outside its scope. It proves the action-level
