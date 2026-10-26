@@ -1343,9 +1343,7 @@ class PhasedOutcomeCompleteSimulation:
         correspond when their phased actions are compared.
 
         Raises:
-            ValueError: If ``angle`` was not allocated by this simulation. Without that check a
-                handle from another simulation would address an unrelated outcome here, and the
-                wrong conditional operation would be applied without any error.
+            ValueError: If the handle comes from another simulation, even when its index matches.
         """
         ...
 

@@ -1,4 +1,5 @@
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 use binar::{BitMatrix, BitVec};
 use paulimer::clifford::CliffordUnitary;
@@ -36,11 +37,23 @@ pub struct PyOutcomeFreeSimulation {
     inner: OutcomeFreeSimulation,
 }
 
-#[derive(derive_more::Deref, derive_more::DerefMut, derive_more::From)]
+#[derive(derive_more::Deref, derive_more::DerefMut)]
 #[must_use]
 #[pyclass(name = "PhasedOutcomeCompleteSimulation", module = "paulimer")]
 pub struct PyPhasedOutcomeCompleteSimulation {
+    #[deref]
+    #[deref_mut]
     inner: PhasedOutcomeCompleteSimulation,
+    angle_owner: Arc<()>,
+}
+
+impl From<PhasedOutcomeCompleteSimulation> for PyPhasedOutcomeCompleteSimulation {
+    fn from(inner: PhasedOutcomeCompleteSimulation) -> Self {
+        Self {
+            inner,
+            angle_owner: Arc::new(()),
+        }
+    }
 }
 
 /// An opaque handle to a symbolic angle `α` of a parameterised circuit.
@@ -61,6 +74,7 @@ pub struct PyPhasedOutcomeCompleteSimulation {
 pub struct PySymbolicAngle {
     outcome: usize,
     index: usize,
+    owner: Arc<()>,
 }
 
 #[pymethods]
@@ -460,7 +474,11 @@ impl_simulation!(
         pub fn allocate_symbolic_angle(&mut self) -> PySymbolicAngle {
             let index = self.inner.symbolic_angle_indicator().iter().filter(|&&is_angle| is_angle).count();
             let outcome = self.inner.allocate_symbolic_angle();
-            PySymbolicAngle { outcome, index }
+            PySymbolicAngle {
+                outcome,
+                index,
+                owner: Arc::clone(&self.angle_owner),
+            }
         }
 
         /// Allocate `count` fresh symbolic angles `α_0, ..., α_{count-1}` at once.
@@ -496,6 +514,7 @@ impl_simulation!(
                     let angle = PySymbolicAngle {
                         outcome,
                         index: angle_index,
+                        owner: Arc::clone(&self.angle_owner),
                     };
                     angle_index += 1;
                     Some(angle)
@@ -516,24 +535,14 @@ impl_simulation!(
         ///
         /// # Errors
         ///
-        /// Returns a `ValueError` if `angle` was not allocated by this simulation. Without that
-        /// check a handle from another simulation would address an unrelated outcome here, and the
-        /// wrong conditional operation would be applied without any error.
+        /// Returns a `ValueError` if `angle` comes from another simulation.
         #[allow(clippy::needless_pass_by_value)]
         pub fn apply_symbolic_pauli_exp(
             &mut self,
             observable: &PySparsePauli,
             angle: &PySymbolicAngle,
         ) -> PyResult<()> {
-            let allocated = self.symbolic_angles();
-            let outcome = allocated.get(angle.index).map(|local| local.outcome).ok_or_else(|| {
-                PyValueError::new_err(format!(
-                    "symbolic angle {} was not allocated by this simulation, which has {} angles",
-                    angle.index,
-                    allocated.len()
-                ))
-            })?;
-            if outcome != angle.outcome {
+            if !Arc::ptr_eq(&self.angle_owner, &angle.owner) {
                 return Err(PyValueError::new_err(format!(
                     "symbolic angle {} belongs to another simulation",
                     angle.index
