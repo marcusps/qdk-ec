@@ -62,6 +62,41 @@ by BinarFormal. The formal `exponentAction` names Rust's branchwise update;
 interpreting it as quarter-turn conjugation for suitably normalized Hermitian
 generators remains a separate matrix-level obligation.
 
+`PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
+row of BinarFormal's invertible RREF transform is interpreted as the ordered
+product of the indicated input Paulis. Pivot rows retain the verified binary
+row space, while zero rows are proved to be scalar relations. The phase-parity
+proof uses BinarFormal's inverse transform to show that an odd scalar is
+generated exactly when a zero-row relation has odd phase.
+
+The `-I` criterion is also exact: it is generated exactly when there is a
+phase-two relation, an odd relation, a non-order-two pivot product, or an
+anticommuting pivot pair. This proves the zero-row phase modulus and semantic
+`[0]`, `[0, 2]`, or `[0, 1, 2, 3]` phase classification. It matches Rust's
+`phases()` for groups constructed with `PauliGroup::new`, or with
+`PauliGroup::with_promise` when the optional commutation promise is truthful.
+Rust does not validate that promise, so a false promise can make `phases()`,
+`contains`, and `log2_size` disagree with the represented subgroup.
+
+The normalized pivot products and the scalar relation generator actually
+retained by Rust are then proved to generate exactly the original phase-aware
+subgroup. A redundant `-I` relation is omitted when a normalized pivot square
+or commutator already generates it:
+
+- `relationPhaseModulus_eq_one_iff`
+- `standardPhaseRepresentatives_eq_phaseRepresentatives`
+- `two_mem_scalarPhases_iff_standard_trigger`
+- `standardPauliGroup_eq_generatedPauliGroup`
+- `standardBinaryRank_eq_finrank_projectiveSpan`
+- `standardLog2Size_eq_semantic_ranks`
+
+The formal standard group omits Rust's identity-only sentinels for empty output,
+including empty input and nonempty all-identity input, because they do not
+change the generated subgroup. The current results verify standardization,
+scalar phases, binary rank, and the structural rank sum used by `log2_size`
+under the truthful-promise condition above. Executable membership,
+factorization, and element-enumeration refinements remain separate obligations.
+
 The theorem concerns the Clifford's binary symplectic action. Pauli-image signs
 and global phase are outside its scope. It proves the action-level
 specification underlying the Rust algorithm, not the compiled Rust or Python
