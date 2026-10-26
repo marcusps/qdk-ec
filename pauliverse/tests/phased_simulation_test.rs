@@ -121,6 +121,7 @@ mod dense {
         ControlledPauli(String, String),
         ConditionalPauli(String, Vec<usize>, bool),
         Measure(String),
+        MeasureHinted(String, String),
     }
 
     fn random_hermitian_pauli(rng: &mut impl RngExt, qubit_count: usize) -> String {
@@ -262,6 +263,9 @@ mod dense {
                 Op::Measure(pauli) => {
                     sim.measure(&pauli.parse().unwrap());
                 }
+                Op::MeasureHinted(observable, hint) => {
+                    sim.measure_with_hint(&observable.parse().unwrap(), &hint.parse().unwrap());
+                }
             }
         }
         sim
@@ -300,7 +304,7 @@ mod dense {
                         dense.apply_pauli(&x_bits, &z_bits, phase);
                     }
                 }
-                Op::Measure(pauli) => {
+                Op::Measure(pauli) | Op::MeasureHinted(pauli, _) => {
                     let (x_bits, z_bits, phase) = pauli_arrays(&pauli.parse::<DensePauli>().unwrap(), qubit_count);
                     dense.project(&x_bits, &z_bits, phase, outcome_bits[measurement_index]);
                     measurement_index += 1;
@@ -367,6 +371,7 @@ mod dense {
                 Op::ControlledPauli(first_pauli, second_pauli) => format!("CPauli({first_pauli},{second_pauli})"),
                 Op::ConditionalPauli(pauli, outcomes, parity) => format!("CondPauli({pauli},{outcomes:?},{parity})"),
                 Op::Measure(pauli) => format!("Measure({pauli})"),
+                Op::MeasureHinted(observable, hint) => format!("MeasureHinted({observable}, {hint})"),
             })
             .collect::<Vec<_>>()
             .join(" | ")
@@ -538,6 +543,34 @@ mod dense {
             ],
             3,
         );
+    }
+
+    #[test]
+    fn measure_with_hint_matches_dense_state_for_both_hint_signs() {
+        for hint_sign in ["", "-"] {
+            let hinted =
+                |observable: &str, hint: &str| Op::MeasureHinted(observable.into(), format!("{hint_sign}{hint}"));
+            verify(&[hinted("X", "Z")], 1);
+            verify(&[hinted("Y", "Z")], 1);
+            verify(&[hinted("-X", "Z")], 1);
+            verify(
+                &[
+                    Op::Gate(UnitaryOp::Hadamard, vec![0]),
+                    Op::Measure("Z".into()),
+                    hinted("X", "Z"),
+                ],
+                1,
+            );
+            verify(
+                &[
+                    Op::Gate(UnitaryOp::Hadamard, vec![0]),
+                    Op::Gate(UnitaryOp::ControlledX, vec![0, 1]),
+                    Op::Measure("XI".into()),
+                    hinted("ZI", "XX"),
+                ],
+                2,
+            );
+        }
     }
 
     #[test]

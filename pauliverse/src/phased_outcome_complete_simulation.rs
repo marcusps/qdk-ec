@@ -360,9 +360,11 @@ impl PhasedOutcomeCompleteSimulation {
     /// Measures a Pauli observable using an anti-commuting hint operator, tracking the exact phase.
     ///
     /// Implements case 5 of Algorithm 4.2. Given an anti-commuting hint `P'` with preimage
-    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← e^{iπ/4 (i P' P)} R`, the quadratic
-    /// and linear `-1` phases absorb the outcome-dependent stabiliser sign, and the `(-1)^α` sign
-    /// relabels the reported outcome (`m = r ⊕ α`) via `outcome_shift` rather than a global phase.
+    /// `R† P' R = (-1)^α Z^{b'}`, the encoder is updated by `R ← e^{iπ/4 (i P' P)} R` and the
+    /// quadratic and linear `-1` phases absorb the outcome-dependent stabiliser sign. A negative hint
+    /// (`α = 1`) also adds the branch sign `(-1)^⟨a ⊕ 1, r⟩` to the linear `-1` phase `s`. The hint
+    /// sign does not change `outcome_shift`: for either sign the reported outcome is the new random
+    /// bit.
     ///
     /// # Panics
     ///
@@ -384,12 +386,11 @@ impl PhasedOutcomeCompleteSimulation {
             // Ensure capacity for the new random bit before sizing the indicator vectors.
             self.ensure_outcome_capacity(true);
 
-            // R <- (-1)^alpha e^{i pi/4 (i P' P)} R.
-            // i P' P = -i P P', so the rotation Pauli is (observable * hint) with an i^3 = -i phase.
+            // The rotation phase also removes the preimage sign of the hint.
             let alpha = preimage.xz_phase_exponent().value() / 2;
             let mut rotation = observable.clone();
             rotation.mul_assign_right(hint);
-            rotation.add_assign_phase_exp(3);
+            rotation.add_assign_phase_exp(3u8.wrapping_sub(preimage.xz_phase_exponent().raw_value()));
             self.phased_clifford.left_mul_pauli_exp(&rotation);
 
             // a = A^T b', with the new random bit appended: a_with_zero and a_with_one = a ⊕ {0,1}.
@@ -398,19 +399,12 @@ impl PhasedOutcomeCompleteSimulation {
             let location = self.allocate_branch_bit_with_provenance(false);
             a_with_one.assign_index(location.branch_bit_index, true);
 
-            // B <- B + (a ⊕ 0)(a ⊕ 1)^T, s_{n(s)} <- s_{n(s)} + alpha.
+            // B <- B + (a ⊕ 0)(a ⊕ 1)^T.
             for row in a_with_zero.support() {
                 self.quadratic_phase_matrix.row_mut(row).bitxor_assign(&a_with_one);
             }
             if alpha == 1 {
-                self.linear_sign_phase.assign_index(
-                    location.branch_bit_index,
-                    !self.linear_sign_phase.index(location.branch_bit_index),
-                );
-                // (-1)^alpha relabels the reported outcome (m = r ⊕ alpha), not the global phase.
-                let outcome_position = location.outcome_id;
-                self.outcome_shift
-                    .assign_index(outcome_position, !self.outcome_shift.index(outcome_position));
+                self.linear_sign_phase.bitxor_assign(&a_with_one);
             }
 
             // Apply P' conditioned on the random bits indicated by (a ⊕ 1).

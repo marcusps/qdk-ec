@@ -163,8 +163,11 @@ pub trait Simulation: Default {
     /// manually conditioning `P` on the angle bit via [`Self::conditional_pauli`] — it states the
     /// intent (a symbolic rotation) directly and keeps the angle's special provenance explicit.
     ///
-    /// Because the comparison of two circuits matches symbolic angles one-to-one, the same `angle`
-    /// can parameterise several rotations to model a *shared* parameter `α`, and labelling the
+    /// Each angle must parameterise exactly one rotation. A single branch bit cannot represent
+    /// several rotations with a shared angle. This initial simulation layer does not enforce
+    /// that restriction when building an action.
+    ///
+    /// Because the comparison of two circuits matches symbolic angles one-to-one, labelling the
     /// rotations of two circuits with angles allocated in the same order is what makes them
     /// correspond when the circuits are compared for equivalence.
     fn symbolic_pauli_exp(&mut self, observable: &Pauli, angle: OutcomeId) {

@@ -1,4 +1,5 @@
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 use binar::{BitMatrix, BitVec};
 use paulimer::clifford::CliffordUnitary;
@@ -36,11 +37,23 @@ pub struct PyOutcomeFreeSimulation {
     inner: OutcomeFreeSimulation,
 }
 
-#[derive(derive_more::Deref, derive_more::DerefMut, derive_more::From)]
+#[derive(derive_more::Deref, derive_more::DerefMut)]
 #[must_use]
 #[pyclass(name = "PhasedOutcomeCompleteSimulation", module = "paulimer")]
 pub struct PyPhasedOutcomeCompleteSimulation {
+    #[deref]
+    #[deref_mut]
     inner: PhasedOutcomeCompleteSimulation,
+    angle_owner: Arc<()>,
+}
+
+impl From<PhasedOutcomeCompleteSimulation> for PyPhasedOutcomeCompleteSimulation {
+    fn from(inner: PhasedOutcomeCompleteSimulation) -> Self {
+        Self {
+            inner,
+            angle_owner: Arc::new(()),
+        }
+    }
 }
 
 /// An opaque handle to a symbolic angle `α` of a parameterised circuit.
@@ -58,6 +71,7 @@ pub struct PyPhasedOutcomeCompleteSimulation {
 pub struct PySymbolicAngle {
     outcome: usize,
     index: usize,
+    owner: Arc<()>,
 }
 
 #[pymethods]
@@ -425,10 +439,22 @@ impl_simulation!(
             self.inner.linear_sign_phase()
         }
 
+        /// Return the scalar phase exponent for an independent branch assignment.
+        ///
+        /// # Errors
+        ///
+        /// Returns a `ValueError` if `random_bits` has fewer entries than `branch_bit_count`.
+        /// Entries past `branch_bit_count` are ignored.
         #[allow(clippy::needless_pass_by_value)]
-        #[must_use]
-        pub fn output_phase_exponent(&self, random_bits: Vec<bool>) -> u8 {
-            self.inner.output_phase_exponent(&random_bits)
+        pub fn output_phase_exponent(&self, random_bits: Vec<bool>) -> PyResult<u8> {
+            let branch_bit_count = self.inner.branch_bit_count();
+            if random_bits.len() < branch_bit_count {
+                return Err(PyValueError::new_err(format!(
+                    "random_bits has length {}, but the simulation has {branch_bit_count} branch bits",
+                    random_bits.len()
+                )));
+            }
+            Ok(self.inner.output_phase_exponent(&random_bits))
         }
 
         /// Allocate a fresh symbolic angle `α`.
@@ -441,7 +467,11 @@ impl_simulation!(
         pub fn allocate_symbolic_angle(&mut self) -> PySymbolicAngle {
             let index = self.inner.symbolic_angle_indicator().iter().filter(|&&is_angle| is_angle).count();
             let outcome = self.inner.allocate_symbolic_angle();
-            PySymbolicAngle { outcome, index }
+            PySymbolicAngle {
+                outcome,
+                index,
+                owner: Arc::clone(&self.angle_owner),
+            }
         }
 
         /// Allocate `count` fresh symbolic angles `α_0, ..., α_{count-1}` at once.
@@ -457,13 +487,19 @@ impl_simulation!(
         #[getter]
         #[must_use]
         pub fn symbolic_angles(&self) -> Vec<PySymbolicAngle> {
-            self.inner
-                .symbolic_angle_indicator()
+            let symbolic_angles = self.inner.symbolic_angle_indicator();
+            self.inner.outcome_introduces_branch_bit()
                 .iter()
                 .enumerate()
-                .filter(|(_, &is_angle)| is_angle)
+                .filter(|(_, introduces_branch)| **introduces_branch)
+                .zip(symbolic_angles)
+                .filter(|(_, is_angle)| **is_angle)
                 .enumerate()
-                .map(|(index, (outcome, _))| PySymbolicAngle { outcome, index })
+                .map(|(index, ((outcome, _), _))| PySymbolicAngle {
+                    outcome,
+                    index,
+                    owner: Arc::clone(&self.angle_owner),
+                })
                 .collect()
         }
 
@@ -471,12 +507,23 @@ impl_simulation!(
         ///
         /// `angle` must be a `SymbolicAngle` obtained from `allocate_symbolic_angle` or
         /// `allocate_symbolic_angles`. This is the high-level way to add a free-angle exponent
-        /// `e^{iα P}` for an arbitrary Pauli `P`. The same `angle` may parameterise several exponents
-        /// to model a shared `α`, and angles with matching `index` in two circuits are what make those
-        /// circuits' exponents correspond when their phased actions are compared.
+        /// `e^{iα P}` for an arbitrary Pauli `P`. Each angle must parameterise exactly one exponent.
+        /// This initial simulation layer does not enforce that restriction when building an action.
+        /// Angles with matching `index` in two circuits correspond when their phased actions are compared.
+        ///
+        /// # Errors
+        ///
+        /// Returns a `ValueError` if `angle` comes from another simulation.
         #[allow(clippy::needless_pass_by_value)]
-        pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: &PySymbolicAngle) {
+        pub fn apply_symbolic_pauli_exp(&mut self, observable: &PySparsePauli, angle: &PySymbolicAngle) -> PyResult<()> {
+            if !Arc::ptr_eq(&self.angle_owner, &angle.owner) {
+                return Err(PyValueError::new_err(format!(
+                    "symbolic angle {} belongs to another simulation",
+                    angle.index
+                )));
+            }
             self.inner.symbolic_pauli_exp(&observable.inner, angle.outcome);
+            Ok(())
         }
 
         #[allow(clippy::needless_pass_by_value)]

@@ -1279,7 +1279,10 @@ class PhasedOutcomeCompleteSimulation:
 
         Args:
             random_bits: Boolean assignment for each independent branch coordinate (length at least
-                ``branch_bit_count``).
+                ``branch_bit_count``). Extra entries are ignored.
+
+        Raises:
+            ValueError: If the assignment has fewer entries than ``branch_bit_count``.
         """
         ...
 
@@ -1315,9 +1318,12 @@ class PhasedOutcomeCompleteSimulation:
 
         ``angle`` must be a :class:`SymbolicAngle` obtained from :meth:`allocate_symbolic_angle`
         or :meth:`allocate_symbolic_angles`. This is the high-level way to add a free-angle
-        exponent ``e^{i alpha P}`` for an arbitrary Pauli ``P``. The same ``angle`` may parameterise
-        several exponents (a shared ``alpha``), and angles with matching index in two circuits are
-        what make those circuits' exponents correspond when their phased actions are compared.
+        exponent ``e^{i alpha P}`` for an arbitrary Pauli ``P``. Each angle must parameterise exactly
+        one exponent. This initial simulation layer does not enforce that restriction when building
+        an action. Angles with matching indices in two circuits correspond in action comparisons.
+
+        Raises:
+            ValueError: If the handle comes from another simulation, even when its index matches.
         """
         ...
 

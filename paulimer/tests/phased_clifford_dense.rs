@@ -7,6 +7,32 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 
 #[test]
+fn zero_qubit_amplitude_phase_is_zero() {
+    let unitary = PhasedCliffordUnitary::identity(0);
+    let basis = binar::vec::AlignedBitVec::zeros(0);
+    assert_eq!(unitary.state_amplitude_phase_exponent(&basis), Some(0));
+    assert_eq!(unitary.state_amplitude_phase_exponent_usize(0), Some(0));
+}
+
+#[test]
+fn zero_qubit_pauli_exponential_keeps_its_phase() {
+    use binar::vec::AlignedBitVec;
+    let scalar = |phase: u8| DensePauli::from_bits(AlignedBitVec::zeros(0), AlignedBitVec::zeros(0), phase);
+    for (phase, expected) in [(0_u8, 1_u8), (2, 7)] {
+        let mut unitary = PhasedCliffordUnitary::identity(0);
+        unitary.left_mul_pauli_exp(&scalar(phase));
+        assert_eq!(
+            unitary.state_amplitude_phase_exponent(&AlignedBitVec::zeros(0)),
+            Some(expected)
+        );
+    }
+    let mut unitary = PhasedCliffordUnitary::identity(0);
+    unitary.left_mul_pauli_exp(&scalar(0));
+    unitary.left_mul_pauli_exp(&scalar(2));
+    assert_eq!(unitary.state_amplitude_phase_exponent_usize(0), Some(0));
+}
+
+#[test]
 fn usize_amplitude_zero_extends_at_platform_width() {
     let width = usize::BITS as usize;
     for qubit_count in [width - 1, width, width + 1, width * 2 + 1] {
