@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Existing Rust `Simulation` implementations still provide `random_outcome_capacity`, and the new `branch_bit_capacity` method forwards to it. Legacy Python capacity keywords remain accepted.
 
 ### Fixed
+- Zero-qubit phased Cliffords preserve scalar rotation phases and support amplitude queries.
+- Hinted measurements preserve branch phases for both signs of the hint.
+- Python phased simulations reject short branch assignments and symbolic-angle handles from another simulation.
+- Retrieved symbolic-angle handles retain their public outcome IDs after deterministic measurements.
 - `PhasedCliffordUnitary::state_amplitude_phase_exponent_usize` handles registers wider than `usize` without shift overflow.
 - Complemented conditional Paulis preserve the exact phase for imaginary operators.
 - Signed stabilizer queries reject imaginary Paulis and honor negative signs.

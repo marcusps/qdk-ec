@@ -12,6 +12,54 @@ from paulimer import (
 )
 
 
+@pytest.mark.parametrize("receiver_prefix", ["none", "measurement", "angle"])
+def test_symbolic_angle_rejects_foreign_owner(receiver_prefix):
+    donor = PhasedOutcomeCompleteSimulation(1)
+    foreign = donor.allocate_symbolic_angle()
+    receiver = PhasedOutcomeCompleteSimulation(1)
+    if receiver_prefix == "measurement":
+        receiver.measure(SparsePauli("Z_0"))
+    elif receiver_prefix == "angle":
+        local = receiver.allocate_symbolic_angle()
+        assert local.index == foreign.index
+    before = receiver.sign_matrix
+    with pytest.raises(ValueError, match="belongs to another simulation"):
+        receiver.apply_symbolic_pauli_exp(SparsePauli("X_0"), foreign)
+    assert receiver.sign_matrix == before
+
+
+def test_retrieved_angles_preserve_outcome_ids():
+    def simulate(retrieve):
+        simulation = PhasedOutcomeCompleteSimulation(1)
+        simulation.measure(SparsePauli("Z_0"))
+        first = simulation.allocate_symbolic_angle()
+        simulation.measure(SparsePauli("Z_0"))
+        second = simulation.allocate_symbolic_angle()
+        angles = simulation.symbolic_angles if retrieve else [first, second]
+        assert [angle.index for angle in angles] == [0, 1]
+        simulation.apply_symbolic_pauli_exp(SparsePauli("X_0"), angles[0])
+        simulation.apply_symbolic_pauli_exp(SparsePauli("Z_0"), angles[1])
+        return simulation
+
+    original = simulate(False)
+    retrieved = simulate(True)
+    assert original.sign_matrix == retrieved.sign_matrix
+    assert original.outcome_matrix == retrieved.outcome_matrix
+    for assignment in ([False, False], [False, True], [True, False], [True, True]):
+        assert original.output_phase_exponent(assignment) == retrieved.output_phase_exponent(assignment)
+
+
+def test_output_phase_exponent_rejects_short_assignment():
+    simulation = PhasedOutcomeCompleteSimulation(2)
+    assert simulation.output_phase_exponent([]) == 0
+    simulation.measure(SparsePauli("X_0"))
+    simulation.measure(SparsePauli("X_1"))
+    for assignment in ([], [True]):
+        with pytest.raises(ValueError, match="random_bits has length"):
+            simulation.output_phase_exponent(assignment)
+    assert simulation.output_phase_exponent([False, False, True]) == simulation.output_phase_exponent([False, False])
+
+
 def _choi_action(build_gadget, n=1):
     """Phased Choi action of a symbolic-rotation gadget on ``n`` system qubits.
 
@@ -84,7 +132,7 @@ class TestSymbolicAngleIdentity:
 
         receiver = PhasedOutcomeCompleteSimulation(2)
         receiver.allocate_symbolic_angle()
-        with pytest.raises(ValueError, match="was not allocated by this simulation"):
+        with pytest.raises(ValueError, match="belongs to another simulation"):
             receiver.apply_symbolic_pauli_exp(SparsePauli("Z_0"), angles[2])
 
     def test_own_handle_is_accepted(self):
