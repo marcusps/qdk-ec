@@ -38,6 +38,30 @@ results do not verify compiled Rust memory or trait implementations. The
 concrete one-qubit bridge does not yet connect symbolic Hermiticity or
 complex conjugation to matrix conjugate transpose or entrywise conjugation.
 
+`PaulimerFormal.PauliAlgorithms` verifies the fixed-width mathematical core of
+the standalone Pauli algorithms. Its packed X-then-Z matrix encoding decodes to
+the canonical projective rows. The RREF rank profile is completed by standard
+X/Z generators at the non-pivot columns; the result preserves the input prefix,
+always spans the full projective space, and, for independent input, is an
+independent list of length `2m`. A packed rank check succeeds exactly for
+projectively independent input, giving a total model of Rust's independence
+assertion. Packed commutation parity, indexed commuting and anticommuting
+queries, the pairwise commutation check, Pauli-exponent updates, and root-X/Y/Z
+updates all refine their canonical phase-aware semantics.
+
+These fixed-width results correspond to Rust when the supplied
+`qubit_count` is `m` and every input support index is below `m`. Lean's types
+exclude Rust calls with an undersized runtime count, including their possible
+indexing panic, coordinate aliasing, or truncation behavior. The formal
+generated-group equality check exhaustively enumerates the binary row span and
+is proved sound and complete. It is a reference specification, not a proof of
+Rust's implementation, which instead compares the leading rows of two
+echelonized matrices and first derives a runtime qubit count. Proving that
+comparator requires a canonical-RREF uniqueness theorem not currently supplied
+by BinarFormal. The formal `exponentAction` names Rust's branchwise update;
+interpreting it as quarter-turn conjugation for suitably normalized Hermitian
+generators remains a separate matrix-level obligation.
+
 The theorem concerns the Clifford's binary symplectic action. Pauli-image signs
 and global phase are outside its scope. It proves the action-level
 specification underlying the Rust algorithm, not the compiled Rust or Python

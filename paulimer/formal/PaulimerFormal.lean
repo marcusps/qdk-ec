@@ -2,6 +2,7 @@ import PaulimerFormal.Symplectic
 import PaulimerFormal.BinarBridge
 import PaulimerFormal.Pauli
 import PaulimerFormal.PauliRepresentations
+import PaulimerFormal.PauliAlgorithms
 import PaulimerFormal.Product
 import PaulimerFormal.Minimality
 import PaulimerFormal.UpperBound
