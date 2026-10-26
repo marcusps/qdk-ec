@@ -1324,6 +1324,137 @@ fn three_qubit_x_channel_ejection() {
 }
 
 // ================================================================================================
+// Composed alternating Z- and X-diagonal channel ejection.
+//
+// `direct_alternating_zx_diagonal_circuit` applies a sequence of alternating Z-diagonal and
+// X-diagonal multi-qubit symbolic rotation layers directly to `system_qubits`.
+// `ejected_alternating_zx_diagonal_circuit` implements each of those layers through ancilla
+// ejection on a fresh block of `system_qubit_count` ancillas, measuring the ancillas and applying
+// conditional Pauli corrections back onto `system_qubits`.
+// ================================================================================================
+
+fn diagonal_layer_supports(
+    system_qubit_count: usize,
+    rotations_per_layer: usize,
+    layer_index: usize,
+) -> Vec<Vec<usize>> {
+    let mut supports = Vec::with_capacity(rotations_per_layer);
+    for offset in 0..system_qubit_count {
+        if supports.len() == rotations_per_layer {
+            return supports;
+        }
+        supports.push(vec![(offset + layer_index) % system_qubit_count]);
+    }
+    for stride in 1..system_qubit_count {
+        for offset in 0..system_qubit_count {
+            if supports.len() == rotations_per_layer {
+                return supports;
+            }
+            let first = (offset + layer_index) % system_qubit_count;
+            let second = (first + stride) % system_qubit_count;
+            let mut pair = if first < second {
+                vec![first, second]
+            } else {
+                vec![second, first]
+            };
+            pair.dedup();
+            if pair.len() == 2 {
+                supports.push(pair);
+            }
+        }
+    }
+    for first in 0..system_qubit_count {
+        for second in (first + 1)..system_qubit_count {
+            for third in (second + 1)..system_qubit_count {
+                if supports.len() == rotations_per_layer {
+                    return supports;
+                }
+                supports.push(vec![first, second, third]);
+            }
+        }
+    }
+    supports
+}
+
+fn direct_alternating_zx_diagonal_circuit(system_qubit_count: usize, layer_supports: &[Vec<Vec<usize>>]) -> Circuit {
+    let system_qubits: Vec<QubitId> = (0..system_qubit_count).collect();
+    build_circuit(|builder| {
+        for (layer_index, angle_supports) in layer_supports.iter().enumerate() {
+            if layer_index % 2 == 0 {
+                apply_symbolic_z_rotations(builder, angle_supports, &system_qubits);
+            } else {
+                apply_symbolic_x_rotations(builder, angle_supports, &system_qubits);
+            }
+        }
+    })
+}
+
+fn ejected_alternating_zx_diagonal_circuit(system_qubit_count: usize, layer_supports: &[Vec<Vec<usize>>]) -> Circuit {
+    let system_qubits: Vec<QubitId> = (0..system_qubit_count).collect();
+    build_circuit(|builder| {
+        for (layer_index, angle_supports) in layer_supports.iter().enumerate() {
+            let ancilla_start = (layer_index + 1) * system_qubit_count;
+            let ancilla_qubits: Vec<QubitId> = (ancilla_start..ancilla_start + system_qubit_count).collect();
+            if layer_index % 2 == 0 {
+                for (&system_qubit, &ancilla_qubit) in system_qubits.iter().zip(ancilla_qubits.iter()) {
+                    builder.unitary_op(UnitaryOp::ControlledX, &[system_qubit, ancilla_qubit]);
+                }
+                apply_symbolic_z_rotations(builder, angle_supports, &ancilla_qubits);
+                for (&system_qubit, &ancilla_qubit) in system_qubits.iter().zip(ancilla_qubits.iter()) {
+                    let minus_outcome = builder.measure(&sparse(&[x(ancilla_qubit)]));
+                    builder.conditional_pauli(&sparse(&[z(system_qubit)]), &[minus_outcome], true);
+                }
+            } else {
+                for &ancilla_qubit in &ancilla_qubits {
+                    builder.unitary_op(UnitaryOp::Hadamard, &[ancilla_qubit]);
+                }
+                for (&system_qubit, &ancilla_qubit) in system_qubits.iter().zip(ancilla_qubits.iter()) {
+                    builder.unitary_op(UnitaryOp::ControlledX, &[ancilla_qubit, system_qubit]);
+                }
+                apply_symbolic_x_rotations(builder, angle_supports, &ancilla_qubits);
+                for (&system_qubit, &ancilla_qubit) in system_qubits.iter().zip(ancilla_qubits.iter()) {
+                    let one_outcome = builder.measure(&sparse(&[z(ancilla_qubit)]));
+                    builder.conditional_pauli(&sparse(&[x(system_qubit)]), &[one_outcome], true);
+                }
+            }
+        }
+    })
+}
+
+fn check_alternating_zx_diagonal_ejection(system_qubit_count: usize, layer_count: usize, rotations_per_layer: usize) {
+    let system_qubits: Vec<QubitId> = (0..system_qubit_count).collect();
+    let layer_supports: Vec<Vec<Vec<usize>>> = (0..layer_count)
+        .map(|layer_index| diagonal_layer_supports(system_qubit_count, rotations_per_layer, layer_index))
+        .collect();
+
+    let direct_circuit = direct_alternating_zx_diagonal_circuit(system_qubit_count, &layer_supports);
+    let ejected_circuit = ejected_alternating_zx_diagonal_circuit(system_qubit_count, &layer_supports);
+
+    let direct_action =
+        phased_action_of(&direct_circuit, &system_qubits, &system_qubits).expect("direct alternating action");
+    let ejected_action =
+        phased_action_of(&ejected_circuit, &system_qubits, &system_qubits).expect("ejected alternating action");
+
+    assert_eq!(direct_action.is_equivalent(&ejected_action), Ok(()));
+    assert_eq!(ejected_action.is_equivalent(&direct_action), Ok(()));
+}
+
+#[test]
+fn four_qubit_two_layer_alternating_zx_diagonal_ejection() {
+    check_alternating_zx_diagonal_ejection(4, 2, 10);
+}
+
+#[test]
+fn six_qubit_three_layer_alternating_zx_diagonal_ejection() {
+    check_alternating_zx_diagonal_ejection(6, 3, 20);
+}
+
+#[test]
+fn eight_qubit_four_layer_alternating_zx_diagonal_ejection() {
+    check_alternating_zx_diagonal_ejection(8, 4, 25);
+}
+
+// ================================================================================================
 // Section 4.1 of arXiv:2603.24717: verifying parameterized state-preparation circuits.
 //
 // To decide whether two parameterized circuits prepare the same state for *every* rotation angle,
