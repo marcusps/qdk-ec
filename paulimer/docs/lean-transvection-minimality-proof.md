@@ -1250,6 +1250,30 @@ obstructions, optimality of the greedy output on this finite group, and
 higher-qubit counterexamples remain pending. Enumeration is their complete
 finite domain, not a proof of those classifications.
 
+## Four-bit dynamics and the hyperbolic count
+
+[`TwoQubitAction.lean`](../formal/PaulimerFormal/TwoQubitAction.lean)
+refines four-bit XOR action and transvection updates to the existing
+matrix definitions. `vector_image` proves exact row action,
+`matrix_update` proves right multiplication by the corresponding
+transvection, and `update_mem_frames` preserves membership in the complete
+symplectic enumeration.
+
+The finite hyperbolicity checker tests all 16 phase vectors, not only the
+four basis vectors. Its criterion is equivalent to
+`GreedyReduction.IsHyperbolic`; the identity-code comparison is likewise
+proved equivalent to matrix identity. Ordinary kernel reduction counts
+exactly **15 nonidentity hyperbolic actions** in the complete enumeration.
+This does not establish the remaining 210/90 nonhyperbolic classifications.
+
+Action-speaks entry **116** verified `TwoQubitEnumeration.action_spec`,
+replaying 1343 declarations with all applicable checks passing and only
+`propext`, `Classical.choice`, and `Quot.sound`. The complete local-source
+bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
+`01554a4fd115acd335013d03a3cabf96b61b8ab5815545d8fa895fbb298e13de`.
+All constituent hashes match; the full build passed (3106 jobs). Execution
+confirmed the count and all 32 identity/SWAP image and update cases.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

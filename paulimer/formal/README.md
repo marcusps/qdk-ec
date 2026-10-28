@@ -116,6 +116,12 @@ duplicate-freedom proof. Audit 115 passed. The 210/90 exception counts and
 greedy optimality are not consequences of enumeration alone and remain
 pending.
 
+`TwoQubitAction` proves exact four-bit matrix action and transvection
+updates, providing a small executable representation for the remaining
+finite checks. Its hyperbolicity test is equivalent to vanishing pairing
+with every vector's image; kernel reduction counts exactly 15 nonidentity
+hyperbolic actions. Audit 116 passed.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary
