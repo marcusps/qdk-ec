@@ -1,4 +1,4 @@
-import PaulimerFormal.PauliGroupIntersection
+import PaulimerFormal.PauliGroupOrder
 import PaulimerFormal.PauliGroupEnumeration
 import PaulimerFormal.PauliIntersectionCounterexample
 
@@ -12,6 +12,18 @@ def checkIntersection {size : ℕ} (name : String) (first second : List (DensePa
   let actual := PauliGroupEnumeration.elements (output.map DensePauli.ofPauli)
   unless actual.toFinset = expected.toFinset do
     throw (IO.userError s!"{name}: wrong intersection elements")
+  let some compared := PauliGroupOrder.intersect first second
+    | throw (IO.userError s!"{name}: comparison-based intersection unexpectedly failed")
+  let comparedElements := PauliGroupEnumeration.elements (compared.map DensePauli.ofPauli)
+  unless comparedElements.toFinset = expected.toFinset do
+    throw (IO.userError s!"{name}: wrong comparison-based intersection elements")
+  IO.println s!"PASS: {name}"
+  (← IO.getStdout).flush
+
+def checkComparison {size : ℕ} (name : String) (first second : List (DensePauli size))
+    (expected : Option Ordering) : IO Unit := do
+  unless PauliGroupOrder.partialCmp first second = expected do
+    throw (IO.userError s!"{name}: wrong partial comparison")
   IO.println s!"PASS: {name}"
   (← IO.getStdout).flush
 
@@ -31,6 +43,17 @@ def main : IO Unit := do
     [DensePauli.ofPauli (Pauli.scalar 2)] [1, Pauli.scalar 2]
   let singleX := DensePauli.singleX (m := 1) 0
   let singleZ := DensePauli.singleZ (m := 1) 0
+  checkComparison "equal after redundant generators" [singleX] [singleX, singleX] (some .eq)
+  checkComparison "strict subgroup" [singleX] [singleX, singleZ] (some .lt)
+  checkComparison "strict supergroup" [singleX, singleZ] [singleX] (some .gt)
+  checkComparison "incomparable equal ranks" [singleX] [singleZ] none
+  checkComparison "incomparable scalar and binary ranks"
+    [DensePauli.ofPauli (Pauli.scalar 1)] [singleX, singleZ] none
+  checkComparison "commutator-generated scalar inclusion"
+    [DensePauli.ofPauli (Pauli.scalar 2)] [singleX, singleZ] (some .lt)
+  checkComparison "phase-mismatched groups" first second none
+  checkComparison "zero-qubit scalar inclusion" ([] : List (DensePauli 0))
+    [DensePauli.ofPauli (Pauli.scalar 2)] (some .lt)
   checkIntersection "full-rank stacked matrix, disjoint rows" [singleX] [singleZ] [1]
   checkIntersection "noncommuting full projective space" [singleX, singleZ] [singleZ, singleX]
     ([1, singleX.decode, singleZ.decode, singleX.decode * singleZ.decode].flatMap

@@ -422,6 +422,28 @@ has SHA256
 all constituent hashes match. Audit 139 is the earlier, unmaterialized
 snapshot, not the receipt for the current source.
 
+`PauliGroupOrder.operations_spec` proves that concatenating generator lists
+generates the subgroup supremum and verifies Rust's exact partial-comparison
+branches. Phase-count/binary-rank pairs are compared with the joined group's
+pair: `Equal` means semantic subgroup equality, `Less` and `Greater` mean
+strict inclusion in the corresponding direction, and `None` means neither
+group includes the other. The proof uses the actual subgroup cardinality,
+not the insufficient assumption that equal ranks alone imply equal groups.
+
+The same contract verifies intersection including the comparison-driven
+early returns. Nineteen persistent execution cases now cover both full and
+early-exit intersection, all four comparison outcomes, redundant generators,
+incomparable equal-rank groups, crossed scalar/binary ranks, and scalar
+inclusion caused by a commutator. This does not yet verify Rust's separate
+`PartialEq` implementation, which compares canonical generator lists.
+Sparse support discovery and compiled execution also remain outside the model.
+
+Audit **141** passed every check, replaying 1734 declarations with standard
+axioms only. Its complete 33-source bundle, with the finite
+1,000,000-heartbeat prefix, has SHA256
+`dde40d34a470417f195934a8dc647a21b15f145e2e5d0caab356d7ec783a2798`;
+all constituent hashes match. The full 3131-job project build passed.
+
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:
 equal binary preimages with self-inverse rows become exactly equal signed

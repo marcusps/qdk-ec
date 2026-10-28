@@ -16,6 +16,7 @@ import PaulimerFormal.PauliIntersectionLoop
 import PaulimerFormal.IntersectionKernel
 import PaulimerFormal.IntersectionExtraction
 import PaulimerFormal.PauliGroupIntersection
+import PaulimerFormal.PauliGroupOrder
 import PaulimerFormal.Product
 import PaulimerFormal.Minimality
 import PaulimerFormal.UpperBound
