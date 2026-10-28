@@ -215,8 +215,8 @@ The formal standard group omits Rust's identity-only sentinels for empty output,
 including empty input and nonempty all-identity input, because they do not
 change the generated subgroup. The current results verify standardization,
 scalar phases, binary rank, and the structural rank sum used by `log2_size`
-under the truthful-promise condition above. Executable membership,
-factorization, and element-enumeration refinements remain separate obligations.
+under the truthful-promise condition above. Executable membership and
+factorization are covered below; element enumeration remains separate.
 
 `standardization_spec` combines the nine previously blocked standardization
 audit targets without changing their proofs or statements. Source-bundle
@@ -238,8 +238,25 @@ checks, replaying 1278 declarations with standard axioms only.
 The complete 15-source bundle, with the finite 1,000,000-heartbeat prefix,
 has SHA256
 `8c28224ac0756d229ca9bed14fb6c5033f5e34db2b99903a6adb47503dbd4ee4`;
-all constituent hashes match. Executable membership and enumeration
-remain separate refinements.
+all constituent hashes match.
+
+`PauliGroupMembership` implements a fixed-width executable membership
+and indexed-factorization reference: Binar's verified transpose solver
+selects original generators, their ordered phase-aware product determines
+the residual scalar, and a computable phase classification accepts it
+exactly when allowed. `membership_spec` proves success iff subgroup
+membership and exact phase-aware replay of every returned factorization.
+It does not certify Rust's sparse-support handling or a false commutation
+promise. Exhaustive execution covered all 16 one-qubit targets for six
+generator lists (empty, X, duplicate X, scalar i, X/Z, and the full Pauli
+group), plus all four zero-qubit scalar targets for empty input.
+
+Audit **128** passed all checks, replaying 1290 declarations with standard
+axioms only. The complete 15-source bundle, with the finite
+1,000,000-heartbeat prefix, has SHA256
+`2538591acbb8e17bd267774f5eee2f686fbb87d7eece7050bfa0c879075cadc5`;
+all constituent hashes match. Element enumeration remains a separate
+refinement.
 
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:
