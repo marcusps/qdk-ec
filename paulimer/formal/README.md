@@ -69,6 +69,15 @@ action is exactly the binary transvection. Audit 105 verified the combined
 contract, including the Hermitian precondition. This is an algebraic bridge;
 the concrete unitary-matrix and signed-tableau interpretations remain open.
 
+`Clifford` defines phase-preserving Pauli automorphisms as a subgroup of
+Mathlib's `MulAut`. It derives their symplectic binary actions, signed
+image/preimage inverses, and Hermiticity preservation. Composition satisfies
+`F_(A B) = F_B F_A` in row-vector conventions, so left composition by a
+quarter-turn gives the greedy update `F T_v`. The lifted Pauli-exponent
+automorphism projects to that transvection. Audits 106-107 passed.
+Constructing the automorphism from a validated runtime tableau remains open;
+binary identity is not identified with signed identity.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary

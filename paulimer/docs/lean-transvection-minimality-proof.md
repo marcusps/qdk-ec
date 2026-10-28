@@ -1063,6 +1063,40 @@ not yet prove the concrete matrix formula for quarter-turn conjugation or
 the valid-tableau extension and image/preimage conventions required by
 the remaining signed decomposition bridge.
 
+## Clifford actions and binary projection
+
+[`Clifford.lean`](../formal/PaulimerFormal/Clifford.lean) defines a
+`CliffordAction` as a Pauli-group automorphism fixing every scalar phase.
+This is a subgroup of Mathlib's `MulAut`, not an assumed binary matrix
+decorated with phases. Phase preservation makes its projective action
+independent of the chosen Pauli representative. Multiplicativity induces
+an F2-linear map; preservation of commutation then proves the extracted
+matrix is symplectic.
+
+Signed images and preimages are inverse, their binary actions are the
+extracted matrix and its symplectic inverse, and self-inverse rows remain
+self-inverse. Automorphism multiplication is function composition.
+Consequently row-vector matrices satisfy `F_(A B) = F_B F_A`. The
+Pauli-exponent automorphism lifts to this subgroup and has binary action
+`T_v`; left composition therefore produces `F T_v`, as used by the
+verified greedy reduction.
+
+Action-speaks verified `CliffordAction.projection_spec` and
+`CliffordAction.binaryAction_quarterTurn` as entries **106-107**. Each
+replayed 1158 declarations with all applicable checks passing and only
+`propext`, `Classical.choice`, and `Quot.sound`. Their complete local-source
+bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
+`63485469edf95059535e7b6af891017e5901e2405b2165ce12a3c082b0aa92d8`.
+All constituent hashes match, and the full build passed (3100 jobs).
+
+Execution checked seven actions on all 16 one-qubit Paulis, signed
+image/preimage round trips, both binary inverse products, and a
+noncommuting composition-order sentinel. It also checked a double
+X-quarter-turn whose binary action is identity but which sends Z to -Z.
+Thus no argument identifies equal binary actions with equal signed
+actions. Valid-tableau extension, runtime layout correspondence, and
+concrete unitary realization remain distinct obligations.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the
