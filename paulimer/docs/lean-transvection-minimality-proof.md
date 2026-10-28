@@ -400,12 +400,13 @@ unit **lower** triangular. Its pivot satisfies $\beta(p,p)=1$, and the
 recursive subspace is the **right**-orthogonal complement
 $\{y:\beta(p,y)=0\}$, giving zeros above the diagonal. It explores all nonzero
 span vectors, deduplicates equal complements, and memoizes failed subspaces
-by reduced-row-echelon keys. Those implementation details are not modeled in
-Lean. Conditional on a valid returned $Q$,
+by reduced-row-echelon keys. The [executable Lean model](#pr-217-triangularizer-milestone)
+now covers this search and safe pruning using Binar-backed keys; correspondence
+with Rust's separate key reducer remains unproved. Conditional on a valid returned $Q$,
 `CorePresentation.factorization_of_triangularizer` proves replay of the actual
 row formula $QV$; the residue-rank lower bound makes its length $r$ minimal.
 Proving that Rust's success and failure results decide the predicate exactly
-would require verifying this backtracking and memoization.
+still requires connecting that implementation to the verified model.
 
 In particular, entering the fallback is justified only if a Rust `Err`
 implies that the current core has no triangularizer. With that completeness
@@ -559,13 +560,13 @@ The final Pauli is not included in the unsigned minimum rotation count.
 The initial congruence search must be sound **and complete**. A false rejection
 can allow a valid rank-plus-one candidate even when rank factors suffice;
 the final replay check alone cannot establish minimality. The
-[uncached Lean search](#uncached-recursive-search-and-core-bridge) now proves
-this property; Rust's memoization and complement deduplication are not yet
-covered.
+[Lean search](#uncached-recursive-search-and-core-bridge) now proves
+this property, and the [memoized model](#memoization-and-collision-safe-keys)
+preserves its exact result.
 
 The other explicit obligations are faithful residue extraction by
-`row_reduce_with_transform`; safe subspace keys and correct
-memoization/complement deduplication; and the
+`row_reduce_with_transform`; correspondence of Rust's separate key reducer
+with collision-safe keys; and the
 connection from valid Rust tableaux and quarter-turn updates to the binary
 action. The sign proof assumes equal binary **preimages**, whereas candidate
 validation compares **image** action matrices. Transferring between them
@@ -643,9 +644,10 @@ changed. Python tests and the full workspace Rust suite were not run.
 
 ## PR #217 triangularizer milestone
 
-**Partially complete:** the complement, enumeration, uncached recursive
-search, and core-triangularizability bridge are implemented and independently
-audited. The cache/deduplication proofs are still pending.
+**Executable Lean milestone complete:** the complement, enumeration, recursive
+search, cache/deduplication safety, collision-safe keys, and
+core-triangularizability bridge are implemented and independently audited.
+This is not a checked translation of Rust's separate reducer or solver.
 The source pin remains `2ce895eda84473762d7db36bf6c3561460992858`.
 
 ### Complement and alternating guard
@@ -768,13 +770,57 @@ axioms `propext`, `Classical.choice`, and `Quot.sound`. The bundle includes
 Source and audit hashes were checked against the current files. The full
 Lean project build passed (3089 jobs). No Rust code changed.
 
-The remaining proof unit is failure-cache and complement-deduplication
-safety, using keys with no false collisions and reusing Binar's row-space
-preservation. The converse key property is not required for correctness.
-The current model deliberately omits both caches; it makes no claim yet
-that pruning preserves the returned result. As with the iterator model,
-materialized lists describe Rust's lazy traversal order, not its allocation
-behavior. No checked translation of the Rust source is claimed.
+### Memoization and collision-safe keys
+
+[`TriangularMemo.lean`](../formal/PaulimerFormal/TriangularMemo.lean) adds a
+failure cache and a local set of previously failed complement keys. Equal
+keys must imply equal spans, including across different family lengths;
+the converse is unnecessary. Cache certificates refer to one fixed bilinear
+form and independent input families. `memoSearch_spec` proves exact equality
+with the uncached optional ordered result and preservation of cache soundness.
+The local key is recorded after recursive failure; Rust records it before
+recursion, but successful recursion returns immediately, making the timing
+difference unobservable. List-backed sets model membership, not hash-table costs.
+
+[`TriangularKeys.lean`](../formal/PaulimerFormal/TriangularKeys.lean) packs
+rows, reuses Binar's echelon reduction, removes zero rows, and flattens their
+logical bits. Span preservation and injective flattening at positive width
+prove collision safety. At width zero every span is zero, so the empty key
+is safe even for different row counts. No canonical-RREF uniqueness theorem
+is assumed. `memoizedTriangularize_eq` preserves the exact uncached answer;
+`memoized_core_none_iff` transfers the complete rejection criterion.
+
+| Target in `PaulimerFormal.Triangularization` | Project ledger entry | Result |
+| --- | --- | --- |
+| `memoSearch_spec` | 88 | Verified |
+| `subspaceKey_noFalseCollisions` | 92 | Verified |
+| `memoizedTriangularize_eq` | 93 | Verified |
+| `memoized_core_none_iff` | 94 | Verified |
+
+Every applicable action-speaks check passed with `require_nontrivial=true`
+and only `propext`, `Classical.choice`, and `Quot.sound`. The generic audit
+replayed 338 declarations, bundle SHA256
+`767f64dfc2e38751e64272da7f493851825b87413e06d0db8786587409f24fc6`.
+The concrete audits replayed 548 declarations, bundle SHA256
+`7e7f8f68993c869cd8bb405481027b8c022598a880af7141b1501e83c3c2ffbe`.
+They include the complete local dependency bodies with import lines removed
+and a recorded `set_option maxHeartbeats 1000000` prefix. The default
+200,000-heartbeat batch failed during the hypothesis-use check, after
+successful replay, axiom, shape, and non-vacuity records. No verifier code or
+audit check was changed; the finite command budget resolves that failure.
+
+Shared packing definitions were moved, without changing their names or
+proofs, into `PackedEncoding` and Binar's `Packed` module. This removes
+unrelated Pauli and solver modules from the keys' import closure.
+The source hashes match the audited snapshots. Both full project builds
+passed (3092 Paulimer jobs; 2468 Binar jobs). Executed checks cover genuine
+memoized backtracking, failure-cache reuse, flattened bit order, and zero
+width. No Rust code changed.
+
+The separate Rust reducer's byte-for-byte correspondence is not established.
+Materialized lists model lazy traversal order, not allocation behavior.
+Faithful residue extraction, the executable fix fallback, and the signed
+tableau bridge remain separate work units.
 
 ## Verification boundary
 

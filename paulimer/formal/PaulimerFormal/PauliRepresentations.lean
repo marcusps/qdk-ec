@@ -1,5 +1,6 @@
 import BinarFormal
 import PaulimerFormal.Pauli
+import PaulimerFormal.PackedEncoding
 
 /-!
 # Executable Pauli representations
@@ -51,35 +52,6 @@ theorem decodeRawPauliPhase_complexConjugate
     decodeRawPauliPhase (rawComplexConjugate phase) =
       -decodeRawPauliPhase phase := by
   fin_cases phase <;> decide
-
-/-- The Boolean representative of a binary field element. -/
-def boolOfF2 (bit : F2) : Bool :=
-  if bit = 0 then false else true
-
-@[simp]
-theorem toF2_boolOfF2 (bit : F2) :
-    Bool.toF2 (boolOfF2 bit) = bit := by
-  fin_cases bit <;> rfl
-
-/-- Pack a binary vector into BinarFormal's zero-padded representation. -/
-def packVector {m : ℕ} (vector : Fin m → F2) : PackedVec m :=
-  PackedVec.ofBoolFn m fun index =>
-    if in_range : index < m then
-      boolOfF2 (vector ⟨index, in_range⟩)
-    else
-      false
-
-@[simp]
-theorem decode_packVector {m : ℕ} (vector : Fin m → F2) :
-    (packVector vector).decode = vector := by
-  funext index
-  simp [packVector]
-
-@[simp]
-theorem packVector_decode {m : ℕ} (vector : PackedVec m) :
-    packVector vector.decode = vector := by
-  apply PackedVec.ext_of_decode
-  simp
 
 /-! ## Dense packed Paulis -/
 

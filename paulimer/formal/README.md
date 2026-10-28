@@ -124,8 +124,18 @@ soundness, complete failure characterization, and structural termination.
 Its matrix wrapper returns an invertible `Q` with unit lower-triangular
 `Q E Q^T`; rejection of a faithful core is equivalent to the existing
 `CorePresentation.IsTriangularizable` predicate being false. Four further
-action-speaks audits passed (entries 84-87). Memoization and complement
-deduplication remain unfinished; this is not verification of compiled Rust. See the
+action-speaks audits passed (entries 84-87).
+
+`TriangularMemo` proves that certified failure caching and complement
+deduplication preserve the exact optional ordered result of the uncached
+search. `TriangularKeys` supplies collision-safe flattened Boolean keys using
+Binar's verified echelon reduction, including zero ambient width. Its concrete
+memoized solver inherits the complete core criterion. Four principal audits
+passed (entries 88 and 92-94); the concrete audits use a recorded finite
+command budget of 1,000,000 heartbeats, with every audit check enabled.
+Shared packing helpers now live in `PackedEncoding` and Binar's `Packed`,
+without changed names or algorithms. The correspondence with Rust's separate
+key reducer remains an obligation; this is not verification of compiled Rust. See the
 [milestone record](../docs/lean-transvection-minimality-proof.md#pr-217-triangularizer-milestone).
 
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying

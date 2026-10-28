@@ -75,28 +75,6 @@ open BinarFormal.Packed
 
 variable {n : Nat}
 
-/-- Build a packed vector from a totalized boolean function, mirroring the common pattern
-(shared by `PackedMatrix.mulVec`, `PackedMatrix.rightMultiply`, and
-`PackedMatrix.kernelBasis` below) of writing every output bit independently as a pure
-function of its index. Bits at or beyond `n` are discarded regardless of what `f` returns
-there, so callers never need to prove a padding fact about `f` itself. -/
-def ofBoolFn (n : Nat) (f : Nat → Bool) : PackedVec n where
-  storage := BitVec.ofFnLE (fun i : Fin (capacity n) => if i.val < n then f i.val else false)
-  zero_padding := by
-    intro i hi
-    rcases Nat.lt_or_ge i (capacity n) with hic | hic
-    · rw [BitVec.getLsbD_ofFnLE, dite_eq_left hic]
-      simp only []
-      rw [ite_eq_right (by omega)]
-    · exact BitVec.getLsbD_of_ge _ i hic
-
-@[simp] theorem get_ofBoolFn (n : Nat) (f : Nat → Bool) (i : Nat) (hi : i < n) :
-    (ofBoolFn n f).get i = f i := by
-  unfold ofBoolFn get
-  rw [BitVec.getLsbD_ofFnLE, dite_eq_left (hi.trans_le (le_capacity n))]
-  simp only []
-  rw [ite_eq_left hi]
-
 /-- Whether every logical bit of `v` is `false`, mirroring `Bitwise::is_zero`. -/
 def isZero (v : PackedVec n) : Bool := v.storage == 0#(capacity n)
 
@@ -169,24 +147,6 @@ theorem get_xor (u v : PackedVec n) (i : Nat) : (u.xor v).get i = (u.get i ^^ v.
   show (u.storage ^^^ v.storage).getLsbD i = (u.get i ^^ v.get i)
   rw [BitVec.getLsbD_xor]
   rfl
-
-/-- A packed vector is determined by its decoded content: `decode` is injective. This lets
-proofs establish `Bool`-level equality of two packed vectors by instead comparing their
-`F2`-valued decodings, which is often easier to compute with (e.g. via linearity). -/
-theorem ext_of_decode {u v : PackedVec n} (h : u.decode = v.decode) : u = v := by
-  have hget : ∀ i, i < n → u.get i = v.get i := by
-    intro i hi
-    have := congrFun h ⟨i, hi⟩
-    rwa [decode_get, decode_get, Bool.toF2_injective.eq_iff] at this
-  have hstorage : u.storage = v.storage := by
-    apply BitVec.eq_of_getLsbD_eq
-    intro i hi
-    rcases Nat.lt_or_ge i n with hin | hin
-    · exact hget i hin
-    · rw [u.zero_padding i hin, v.zero_padding i hin]
-  cases u
-  cases v
-  simpa using hstorage
 
 end BinarFormal.Packed.PackedVec
 

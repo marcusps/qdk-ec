@@ -2,6 +2,7 @@ import Mathlib.Data.ZMod.Defs
 import Mathlib.Data.Matrix.Mul
 import Mathlib.LinearAlgebra.Matrix.RowCol
 import Mathlib.Data.Fintype.BigOperators
+import Batteries.Data.BitVec.Lemmas
 
 /-!
 # Packed GF(2) storage
@@ -199,6 +200,24 @@ def zero (n : Nat) : PackedVec n where
 `false`, matching the zero-padded tail. -/
 def get (v : PackedVec n) (i : Nat) : Bool := v.storage.getLsbD i
 
+/-- Build a packed vector from a Boolean function, discarding out-of-range bits. -/
+def ofBoolFn (n : Nat) (f : Nat → Bool) : PackedVec n where
+  storage := BitVec.ofFnLE (fun i : Fin (capacity n) => if i.val < n then f i.val else false)
+  zero_padding := by
+    intro i hi
+    rcases Nat.lt_or_ge i (capacity n) with hic | hic
+    · rw [BitVec.getLsbD_ofFnLE, dite_eq_left hic]
+      simp only []
+      rw [ite_eq_right (by omega)]
+    · exact BitVec.getLsbD_of_ge _ i hic
+
+@[simp] theorem get_ofBoolFn (n : Nat) (f : Nat → Bool) (i : Nat) (hi : i < n) :
+    (ofBoolFn n f).get i = f i := by
+  unfold ofBoolFn get
+  rw [BitVec.getLsbD_ofFnLE, dite_eq_left (hi.trans_le (le_capacity n))]
+  simp only []
+  rw [ite_eq_left hi]
+
 /-- Write bit `i` to `b`, for an in-range index, mirroring
 `BitwiseMut::assign_index`. -/
 def set (v : PackedVec n) (i : Nat) (h : i < n) (b : Bool) : PackedVec n where
@@ -238,6 +257,24 @@ theorem get_set_ne (v : PackedVec n) (i : Nat) (h : i < n) (b : Bool) {j : Nat}
 
 @[simp] theorem decode_get (v : PackedVec n) (i : Fin n) :
     v.decode i = Bool.toF2 (v.get i.val) := rfl
+
+/-- A packed vector is determined by its decoded content: `decode` is injective. This lets
+proofs establish `Bool`-level equality of two packed vectors by instead comparing their
+`F2`-valued decodings, which is often easier to compute with (e.g. via linearity). -/
+theorem ext_of_decode {u v : PackedVec n} (h : u.decode = v.decode) : u = v := by
+  have hget : ∀ i, i < n → u.get i = v.get i := by
+    intro i hi
+    have := congrFun h ⟨i, hi⟩
+    rwa [decode_get, decode_get, Bool.toF2_injective.eq_iff] at this
+  have hstorage : u.storage = v.storage := by
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    rcases Nat.lt_or_ge i n with hin | hin
+    · exact hget i hin
+    · rw [u.zero_padding i hin, v.zero_padding i hin]
+  cases u
+  cases v
+  simpa using hstorage
 
 @[simp] theorem decode_zero (n : Nat) : (PackedVec.zero n).decode = 0 := by
   funext i
