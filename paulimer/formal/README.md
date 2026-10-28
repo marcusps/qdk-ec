@@ -130,6 +130,14 @@ is split into sixteen first-row batches. Audit 117 passed. Exact
 minimal lengths for these actions, the 210 exceptions, and greedy
 optimality remain pending.
 
+`TwoQubitGreedy` proves that four-bit ordered selection and bounded
+execution return exactly the general `GreedyDecomposition` output.
+Ten fuel always suffices for symplectic frames, with nonzero factors,
+exact replay, and length at most nine. Fuel exhaustion is explicit,
+not an empty-factor fallback. Audit 118 passed. Execution also compared
+all 720 outputs against the general implementation and checked replay;
+this is not yet a proof of greedy minimality.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary

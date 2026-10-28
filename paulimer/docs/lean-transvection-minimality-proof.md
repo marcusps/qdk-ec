@@ -1306,6 +1306,33 @@ All constituent hashes match; the full build passed (3107 jobs).
 The successful audit's reported verification time was about 322 seconds;
 the watchdog confirmed cleanup with no surviving children.
 
+## Exact four-bit greedy refinement
+
+[`TwoQubitGreedy.lean`](../formal/PaulimerFormal/TwoQubitGreedy.lean)
+proves that the four standard codes and six ordered pair codes decode
+to precisely `GreedySearch.activeCandidates`. The pairing and moved-code
+tests agree with the general tests, so `nextCode_refines` proves exact
+ordered selection, including the hyperbolic fallback.
+
+The bounded executor returns `none` on fuel exhaustion. Using the existing
+strictly decreasing potential, `greedy_refines` proves that sufficient fuel
+returns the exact general greedy list, not merely an equivalent product.
+Ten fuel suffices for every symplectic two-qubit frame. `greedy_spec`
+also proves replay, nonzero centers, and the general upper bound nine.
+It does not yet prove optimality.
+
+Action-speaks entry **118** verified this contract, replaying 1522
+declarations with every applicable check passing and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete local-source bundle,
+with the finite 1,000,000-heartbeat prefix, has SHA256
+`6e9271d07f4df51e6d0e5fadc45f6ac261645accc1884320bef2628727162f19`.
+All constituent hashes match; the full build passed (3108 jobs).
+Execution compared all 720 outputs with `GreedyDecomposition`, replayed
+every factor list, and checked nonzero factors and the length bound.
+The observed length distribution was `[1, 15, 85, 225, 274, 120]`;
+that runtime observation is not itself a kernel-checked count or
+a minimum-length distribution.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the
