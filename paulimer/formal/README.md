@@ -258,6 +258,21 @@ axioms only. The complete 15-source bundle, with the finite
 all constituent hashes match. Element enumeration remains a separate
 refinement.
 
+`PauliGroupDecisions` proves that the executable pairwise generator
+commutation check accepts exactly abelian generated subgroups. Its
+stabilizer decision accepts exactly abelian subgroups excluding `-I`,
+and every member of an accepted group is proved Hermitian. This is the
+group-theoretic stabilizer criterion, not a separately verified
+common-eigenspace construction. Computed commutation is used, not an
+unchecked promise. Execution checked both decisions on the six
+one-qubit generator lists above.
+
+Audit **129** passed all checks, replaying 1300 declarations with standard
+axioms only. The complete 16-source bundle, with the finite
+1,000,000-heartbeat prefix, has SHA256
+`7cd546b2cc563e5fe951fccf76eb9d06922467c3ed2bce2f11f6c0eb0d149f08`;
+all constituent hashes match.
+
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:
 equal binary preimages with self-inverse rows become exactly equal signed
