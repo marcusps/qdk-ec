@@ -564,8 +564,9 @@ the final replay check alone cannot establish minimality. The
 this property, and the [memoized model](#memoization-and-collision-safe-keys)
 preserves its exact result.
 
-The other explicit obligations are faithful residue extraction by
-`row_reduce_with_transform`; correspondence of Rust's separate key reducer
+The other explicit obligations are correspondence of `row_reduce_with_transform`
+with the [verified Binar-backed extraction](#executable-residue-extraction);
+correspondence of Rust's separate key reducer
 with collision-safe keys; and the
 connection from valid Rust tableaux and quarter-turn updates to the binary
 action. The sign proof assumes equal binary **preimages**, whereas candidate
@@ -819,8 +820,46 @@ width. No Rust code changed.
 
 The separate Rust reducer's byte-for-byte correspondence is not established.
 Materialized lists model lazy traversal order, not allocation behavior.
-Faithful residue extraction, the executable fix fallback, and the signed
-tableau bridge remain separate work units.
+The executable fix fallback and signed tableau bridge remain separate work units.
+
+### Executable residue extraction
+
+[`ResidueExtraction.lean`](../formal/PaulimerFormal/ResidueExtraction.lean)
+packs `omega * (I + F)` in the existing X-then-Z index order. It retains Binar's
+pivot rows and the matching rows of its accumulated transform. The computed
+basis is independent and spans the full residue space, its pivot count equals
+the residue rank, and its retained transform satisfies `R F̂ = V`.
+`core_spec` supplies a faithful `CorePresentation` whose basis is exactly the
+computed basis and whose core is the computed product `V R^T`.
+The presentation's existential coefficient is a specification witness only:
+the basis, rank, transform, core, and search are all executable.
+
+`rankDecomposition` applies the memoized triangularizer to that computed core
+and returns the rows of `Q V`. Every returned list replays the action, has
+exactly residue-rank length, and is no longer than any other factorization.
+Rejection is equivalent to non-triangularizability of the canonical core.
+This connects the executable rank branch to the hypotheses of the
+all-dimensional residue-fix existence theorem.
+
+| Target in `PaulimerFormal.ResidueExtraction` | Project ledger entry | Result |
+| --- | --- | --- |
+| `core_spec` | 95 | Verified |
+| `rankDecomposition_some_spec` | 96 | Verified |
+| `rankDecomposition_none_iff` | 97 | Verified |
+
+All three source-mode audits replayed 1412 declarations with every applicable
+check passing and only the three standard axioms. The complete local-source
+bundle, with the same finite 1,000,000-heartbeat prefix, has SHA256
+`5144eccf4ecb2ed21a9940b249cb93c4d34934c5d4a36ffbe39d0f102860f773`.
+Source hashes match that snapshot. The full Lean project build passed
+(3093 jobs). Executed checks cover empty input, all six one-qubit binary
+symplectic actions, retained transforms, factor replay, and SWAP's rejection
+by the rank branch.
+
+The pinned Rust helper performs elimination on an augmented matrix; the Lean
+model reuses Binar's verified transform-producing reduction. Their required
+algebraic contract is proved for the executable model, not a byte-for-byte
+translation of that separate Rust loop. No Rust source changed.
 
 ## Verification boundary
 

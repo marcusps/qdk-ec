@@ -138,6 +138,15 @@ without changed names or algorithms. The correspondence with Rust's separate
 key reducer remains an obligation; this is not verification of compiled Rust. See the
 [milestone record](../docs/lean-transvection-minimality-proof.md#pr-217-triangularizer-milestone).
 
+`ResidueExtraction` computes the residue basis, rank, retained row transform,
+and `V R^T` core using Binar. It proves independence, full residue span,
+`R F̂ = V`, and existence of a faithful presentation of the computed core.
+The executable rank branch replays its input with a shortest rank-length
+factorization, or rejects exactly when the canonical core is not
+triangularizable. Action-speaks entries 95-97 verified these results.
+Noncomputable witnesses occur only in specifications, not the executable
+data. Rust's separate augmented reducer correspondence remains unproved.
+
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying
 these results to a Rust input requires a valid Clifford tableau; the Rust
 decomposition functions do not themselves call `is_valid`.

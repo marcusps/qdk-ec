@@ -15,3 +15,4 @@ import PaulimerFormal.SpanEnumeration
 import PaulimerFormal.TriangularSearch
 import PaulimerFormal.TriangularMemo
 import PaulimerFormal.TriangularKeys
+import PaulimerFormal.ResidueExtraction
