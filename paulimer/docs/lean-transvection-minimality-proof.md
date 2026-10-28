@@ -2,9 +2,9 @@
 
 The Lean development in [`../formal/`](../formal/) proves the minimal number of
 symplectic transvections needed to represent the binary symplectic action of a
-Clifford operation. The result holds in every finite dimension; finite
-enumeration is used only for the reference search, not for the mathematical
-proof.
+Clifford operation. The dimension-general result has a structural proof;
+the reference search and additional two-qubit classification use
+kernel-checked finite enumeration.
 
 The minimality theorem concerns binary symplectic actions. The
 [PR #217 refinement review](#pr-217-refinement-review) also proves the final
@@ -55,8 +55,9 @@ Lean repairs rather than formalizes the incomplete construction. It proves
 that length $r$ is equivalent to congruence triangularizability of the full
 nonsymmetric core, then supplies the bordered construction proving length
 $r+1$ in every remaining case. Lean therefore proves the fallback sufficient.
-Callan's class-A examples, confirmed by the Rust two-qubit breadth-first
-search rather than by Lean, show that it is needed: replacing it with the
+The finite Lean classification below confirms the exception counts;
+the Rust two-qubit breadth-first search also checks concrete class-A
+examples. These exceptions show that the fallback is needed: replacing it with the
 paper's non-hyperbolic criterion would reject valid inputs. This is not a proof
 of Rust's backtracking implementation.
 
@@ -1246,9 +1247,9 @@ All constituent hashes match; the full build passed (3105 jobs). Execution
 also checked all 720 frames against the full signed-tableau validity checker.
 
 Enumeration supplies the complete finite domain, not the classifications.
-The rank-three obstruction count and greedy optimality are proved
-separately below; the 210 nonhyperbolic exceptions and higher-qubit
-counterexamples remain pending.
+The rank-three obstruction count, 210 nonhyperbolic exceptions, and
+greedy optimality are proved separately below. Higher-qubit
+counterexamples remain separate.
 
 ## Four-bit dynamics and the hyperbolic count
 
@@ -1288,9 +1289,9 @@ and the assertion that **every** phase-vector transvection lowering the
 rank leaves a hyperbolic rank-two action. Surjectivity of four-bit decoding
 ensures that this quantifies over all centers, not a restricted candidate
 set. There are exactly **90** such actions. This is the obstruction
-property from #118; connecting it to exact minimal length four remains
-separate work, as do the 210 rank-plus-one exceptions. Greedy optimality
-is proved below.
+property from #118. The later classification connects it to exact
+minimal length four and proves the 210 rank-plus-one exceptions;
+greedy optimality is also proved below.
 
 The first monolithic source audit was stopped at its private-memory
 ceiling without producing a verdict. Factoring the existing enumerator
@@ -1330,9 +1331,9 @@ with the finite 1,000,000-heartbeat prefix, has SHA256
 All constituent hashes match; the full build passed (3108 jobs).
 Execution compared all 720 outputs with `GreedyDecomposition`, replayed
 every factor list, and checked nonzero factors and the length bound.
-The observed length distribution was `[1, 15, 85, 225, 274, 120]`;
-that runtime observation is not itself a kernel-checked count or
-a minimum-length distribution.
+The observed length distribution was `[1, 15, 85, 225, 274, 120]`.
+The later classification supplies its separate kernel-checked count
+and minimum-length interpretation.
 
 ## Greedy optimality on every two-qubit action
 
@@ -1370,6 +1371,41 @@ All constituent hashes match; the full build passed (3110 jobs).
 The audit reported about 380 seconds of verification. Its watchdog
 used a 480-second allowance based on the measured additional certificate
 cost, retained the same memory limits, and confirmed child cleanup.
+
+## The 210 exceptions and exact shortest-length distribution
+
+[`TwoQubitClassification.lean`](../formal/PaulimerFormal/TwoQubitClassification.lean)
+proves that a certificate entry equals `some length` exactly when there
+is a shortest factorization of that length. Shortestness forces all
+shortest factorizations to have the same length.
+
+`rankPlusOne_iff` identifies the executable nonhyperbolic exception
+predicate with existence of a shortest factorization of length
+`residueRank + 1`. Kernel reduction counts exactly **210** such actions.
+The shortest-length counts for lengths zero through five are
+**[1, 15, 85, 225, 274, 120]**.
+
+For each of the **90 rank-three obstructions**, the proof follows the
+actual first greedy step. Nonhyperbolicity forces a rank-lowering step;
+the already-proved obstruction property makes its successor hyperbolic
+of rank two. The checked rank-two hyperbolic lengths are three, so the
+original greedy length is four. Greedy optimality then proves that
+**four is the minimum**, not merely the observed output length.
+
+Action-speaks entry **120** verified `classification_spec`, replaying
+1634 declarations with every applicable check passing and only
+`propext`, `Classical.choice`, and `Quot.sound`. The complete local-source
+bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
+`a648f660988013d2ab4272f1079ea934dcbaa5d6c02e422abb4e4b59a21e054a`.
+Every constituent hash matches; the full build passed (3111 jobs).
+The audit reported about 439 seconds of verification and its watchdog
+confirmed cleanup. Existing rank counts also use `decide +kernel`
+in this bundle, preserving their statements while reducing temporary
+elaborator-cache memory.
+
+This closes the 720/210/90 counts and two-qubit greedy optimality claims
+from #118. It is not yet a proof of higher-qubit nonminimality, growing
+excess, or compiled Rust behavior.
 
 ## Verification boundary
 

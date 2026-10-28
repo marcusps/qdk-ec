@@ -51,7 +51,7 @@ set_option maxHeartbeats 1000000 in
 theorem rank_distribution :
     (List.finRange 5).map (fun rank => (frames.filter fun frame => frame.rank == rank.val).length) =
       [1, 15, 100, 300, 304] := by
-  decide
+  decide +kernel
 
 def Frame.rankThreeObstructed (frame : Frame) : Bool :=
   decide (frame.rank = 3 ∧ frame.hyperbolic = false) &&
@@ -97,22 +97,22 @@ section ObstructionCounts
 set_option maxRecDepth 4096
 set_option maxHeartbeats 1000000
 
-private theorem obstructionCount_zero : obstructionCount 0 = 0 := by decide
-private theorem obstructionCount_one : obstructionCount 1 = 6 := by decide
-private theorem obstructionCount_two : obstructionCount 2 = 10 := by decide
-private theorem obstructionCount_three : obstructionCount 3 = 10 := by decide
-private theorem obstructionCount_four : obstructionCount 4 = 3 := by decide
-private theorem obstructionCount_five : obstructionCount 5 = 3 := by decide
-private theorem obstructionCount_six : obstructionCount 6 = 3 := by decide
-private theorem obstructionCount_seven : obstructionCount 7 = 3 := by decide
-private theorem obstructionCount_eight : obstructionCount 8 = 10 := by decide
-private theorem obstructionCount_nine : obstructionCount 9 = 10 := by decide
-private theorem obstructionCount_ten : obstructionCount 10 = 10 := by decide
-private theorem obstructionCount_eleven : obstructionCount 11 = 10 := by decide
-private theorem obstructionCount_twelve : obstructionCount 12 = 3 := by decide
-private theorem obstructionCount_thirteen : obstructionCount 13 = 3 := by decide
-private theorem obstructionCount_fourteen : obstructionCount 14 = 3 := by decide
-private theorem obstructionCount_fifteen : obstructionCount 15 = 3 := by decide
+private theorem obstructionCount_zero : obstructionCount 0 = 0 := by decide +kernel
+private theorem obstructionCount_one : obstructionCount 1 = 6 := by decide +kernel
+private theorem obstructionCount_two : obstructionCount 2 = 10 := by decide +kernel
+private theorem obstructionCount_three : obstructionCount 3 = 10 := by decide +kernel
+private theorem obstructionCount_four : obstructionCount 4 = 3 := by decide +kernel
+private theorem obstructionCount_five : obstructionCount 5 = 3 := by decide +kernel
+private theorem obstructionCount_six : obstructionCount 6 = 3 := by decide +kernel
+private theorem obstructionCount_seven : obstructionCount 7 = 3 := by decide +kernel
+private theorem obstructionCount_eight : obstructionCount 8 = 10 := by decide +kernel
+private theorem obstructionCount_nine : obstructionCount 9 = 10 := by decide +kernel
+private theorem obstructionCount_ten : obstructionCount 10 = 10 := by decide +kernel
+private theorem obstructionCount_eleven : obstructionCount 11 = 10 := by decide +kernel
+private theorem obstructionCount_twelve : obstructionCount 12 = 3 := by decide +kernel
+private theorem obstructionCount_thirteen : obstructionCount 13 = 3 := by decide +kernel
+private theorem obstructionCount_fourteen : obstructionCount 14 = 3 := by decide +kernel
+private theorem obstructionCount_fifteen : obstructionCount 15 = 3 := by decide +kernel
 
 end ObstructionCounts
 
