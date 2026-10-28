@@ -36,9 +36,18 @@ and packed matrices decode to `Matrix (Fin m) (Fin n) (ZMod 2)`.
 
 The table is a reviewed source-to-model correspondence, not a theorem that
 extracts Lean from Rust. Random constructors, sparse `IndexSet`, serialization,
-parsing/formatting, resizing, direct sums/row stacking, row-space intersection,
+parsing/formatting, resizing, direct sums/general row stacking,
 `tiny_matrix`, full-rank-basis completion, Python bindings, panic behavior, and
 performance bounds are outside the current scope.
+
+Row-space intersection is verified downstream in
+[`PaulimerFormal.IntersectionExtraction`](../../paulimer/formal/PaulimerFormal/IntersectionExtraction.lean),
+reusing Binar's transform, M4RI, and echelon theorems. Its extracted rows are
+independent and span exactly the intersection, including rectangular and empty
+inputs. Binar's row materialization is proved equal to the original matrix;
+transpose blocks and M4RI's transposed rows are evaluated once rather than
+recomputed on every bit access. Paulimer audit 140 replays these dependencies
+as part of the complete phase-aware intersection proof.
 
 Local builds use the repository-local Lean installation:
 

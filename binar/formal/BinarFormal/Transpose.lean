@@ -584,8 +584,10 @@ theorem readTile_getLsbD (M : PackedMatrix m n) (blockRow blockCol offset b : Na
 the tile covering source row block `R / 64` and source column block `C / 64`, avoiding a
 separate write-then-read tiling pass. -/
 def transposeRowStorage (M : PackedMatrix m n) (R : Nat) : BitVec (capacity m) :=
+  let blocks := Vector.ofFn fun block : Fin ((capacity m + 63) / 64) =>
+    transpose64x64 (readTile M block.val (R / 64)) (R % 64)
   BitVec.ofFnLE (fun c : Fin (capacity m) =>
-    (transpose64x64 (readTile M (c.val / 64) (R / 64)) (R % 64)).getLsbD (c.val % 64))
+    (blocks[c.val / 64]'(by have := c.isLt; omega)).getLsbD (c.val % 64))
 
 theorem transposeRowStorage_getLsbD (M : PackedMatrix m n) (R C : Nat) (hC : C < capacity m) :
     (transposeRowStorage M R).getLsbD C =

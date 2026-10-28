@@ -368,6 +368,16 @@ namespace PackedMatrix
 
 variable {m n : Nat}
 
+/-- Evaluate function-backed rows once before repeated matrix access. -/
+def materialize (matrix : PackedMatrix m n) : PackedMatrix m n :=
+  let rows := Vector.ofFn matrix.rows
+  ⟨fun index => rows[index]⟩
+
+@[simp]
+theorem materialize_eq (matrix : PackedMatrix m n) : materialize matrix = matrix := by
+  cases matrix
+  simp [materialize]
+
 /-- The all-zero packed matrix, mirroring `AlignedBitMatrix::zeros`. -/
 def zero (m n : Nat) : PackedMatrix m n where
   rows _ := PackedVec.zero n

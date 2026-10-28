@@ -435,12 +435,13 @@ module trust boundary for the caching-vs-recompute note), reusing
 to a fresh `transpose_8x64` of the relevant rows of `left.transpose` (in place of
 `StripeColumnExtractor`'s cached `load_block`). -/
 def extractPattern (left : PackedMatrix m k) (colStart innerBits outputRow : Nat) : Nat :=
+  let transposed := left.transpose.materialize
   let blockIdx := outputRow / 64
   let byteIdx := outputRow % 64 / 8
   let j := outputRow % 64 % 8
   let w : Tile64 := fun row =>
     if row < innerBits then
-      readTile left.transpose ((colStart + row) / 64) blockIdx ((colStart + row) % 64)
+      readTile transposed ((colStart + row) / 64) blockIdx ((colStart + row) % 64)
     else 0#64
   ((transpose8x64 w byteIdx).extractLsb' (8 * j) 8).toNat
 
@@ -453,7 +454,7 @@ theorem extractPattern_testBit (left : PackedMatrix m k) (colStart innerBits out
     (extractPattern left colStart innerBits outputRow).testBit row
       = (decide (row < innerBits) && left.get ⟨outputRow, houtRow⟩ (colStart + row)) := by
   unfold extractPattern
-  simp only
+  simp only [PackedMatrix.materialize_eq]
   rw [BitVec.testBit_toNat, BitVec.getLsbD_extractLsb']
   rw [decide_eq_true hrow, Bool.true_and]
   set byteIdx := outputRow % 64 / 8 with hbyteIdx

@@ -341,8 +341,7 @@ or certifies that every input is compatible. `pairedVariant_exists` proves
 that lookup cannot fail on the product of two rejected rows drawn from the
 common projective space. Execution checked six cases, including the original
 counterexample, its repaired product, identical groups, and zero qubits.
-The following module verifies traversal; projective-basis extraction remains
-a separate obligation.
+The following modules verify traversal and discharge projective-basis extraction.
 
 Audit **134** passed all checks, replaying 1323 declarations with standard
 axioms only. Its complete 18-source bundle, with the finite
@@ -360,8 +359,8 @@ common projective space, without requiring independence. The traversal
 succeeds, and every returned list generates exactly the subgroup intersection.
 Eleven executable cases cover phase selection, both basis orders of the
 counterexample, all-compatible inputs, imaginary-phase cancellation, and
-zero-qubit scalar groups. Rust basis extraction, support compaction, and
-compiled-code correspondence are not included.
+zero-qubit scalar groups. Basis extraction is connected below; support
+compaction and compiled-code correspondence are not included.
 
 Audits **135–136** reached the triviality probe's heartbeat limit on the
 existential formulation, not a failed kernel proof. Audit **137** passed
@@ -376,13 +375,52 @@ the trailing rows of Binar's echelon transform, from rank to the last row,
 are an executable, independent basis of the input matrix's left kernel.
 This matches the dependency-row selection in Rust's row-space intersection.
 The result includes arbitrary rectangular matrices, empty matrices, and
-full row rank. Stacking, alpha projection, the product with the first input,
-and final pivot extraction still need to be connected to `ValidBasis`.
+full row rank. The next modules connect stacking, alpha projection, the
+product with the first input, and final pivot extraction to `ValidBasis`.
 Audit **138** passed all checks, replaying 1421 declarations with standard
 axioms only. Its complete 23-source bundle, with the finite
 1,000,000-heartbeat prefix, has SHA256
 `d77de84087a411867f4b17200a0f62f0997cbb6c4a117605710ac4b36be14598`;
 all constituent hashes match.
+
+`IntersectionExtraction.extraction_spec` proves that stacking the inputs,
+projecting the transform's dependency rows onto the first coefficient block,
+applying M4RI multiplication, and extracting the final echelon pivot rows
+produces an independent basis of the intersection of the two row spaces.
+It covers arbitrary rectangular matrices, dependent rows, zero dimensions,
+and full rank.
+
+`PauliGroupIntersection` converts those rows to zero-xz-phase Paulis and proves
+`projectiveBasis_valid`. Its `PauliIntersection.full_intersection_spec` then
+proves that the complete executable fixed-width algorithm cannot fail and
+returns generators of exactly the phase-aware subgroup intersection, without
+assuming a correct input basis. It does not model Rust's sparse support
+discovery, comparison-based early exits, final canonicalization, or compiled
+execution.
+
+The initial algorithm passed audit **139**, but its function-backed packed
+transpose repeatedly recomputed rows and blocks during execution. Binar's
+`PackedMatrix.materialize_eq` proves that storing rows changes no values;
+transpose storage now evaluates each output word once, and M4RI materializes
+the transposed rows. The existing dimension-general refinement theorems
+remain checked. Extraction also materializes its alpha and product rows.
+The complete 3130-job project build and all eleven persistent execution
+cases pass, including the original phase-cancellation counterexample,
+dependent and disjoint inputs, both empty-input orders, zero-qubit scalars,
+noncommuting groups, and odd-width rectangular extraction:
+
+```bash
+cd paulimer/formal
+lake --offline env lean --run tests/Intersection.lean
+```
+
+Audit **140** reverified the final materialized implementation with every
+check enabled, replaying 1702 declarations with standard axioms only.
+Its complete 31-source bundle, with the finite 1,000,000-heartbeat prefix,
+has SHA256
+`620af9b6a97a1842975a100214dc47700476c321ab65a54e90c64e8ca3408f4d`;
+all constituent hashes match. Audit 139 is the earlier, unmaterialized
+snapshot, not the receipt for the current source.
 
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:
