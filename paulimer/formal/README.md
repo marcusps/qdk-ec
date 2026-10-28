@@ -218,6 +218,17 @@ scalar phases, binary rank, and the structural rank sum used by `log2_size`
 under the truthful-promise condition above. Executable membership,
 factorization, and element-enumeration refinements remain separate obligations.
 
+`standardization_spec` combines the nine previously blocked standardization
+audit targets without changing their proofs or statements. Source-bundle
+action-speaks audit **126** passed all checks, replaying 1271 declarations
+with only `propext`, `Classical.choice`, and `Quot.sound`. This closes the
+old audit blocker; the memory limits and kernel checks were unchanged.
+The complete 14-source bundle, with the finite 1,000,000-heartbeat prefix,
+has SHA256
+`897611e1e20522726804196aaf8c19b3ea58b6e1c1ed200e0ec45d2079552a07`;
+all constituent hashes match. Actual subgroup cardinality and executable
+membership remain separate from the structural size-rank formula.
+
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:
 equal binary preimages with self-inverse rows become exactly equal signed

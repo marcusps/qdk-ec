@@ -3554,4 +3554,28 @@ theorem standardLog2Size_eq_semantic_ranks
     standardBinaryRank_eq_finrank_projectiveSpan,
     standardScalarPhaseRank_eq_scalarPhaseRank]
 
+theorem standardization_spec (generators : List (DensePauli m)) :
+    (∀ pauli ∈ generatedPauliGroup generators,
+      ∃ coefficients : Fin generators.length → F2,
+        pauli.projectiveRow = generatorProjectiveCombination generators coefficients ∧
+        phaseParity pauli.phase = generatorPhaseParityCombination generators coefficients) ∧
+    (∀ row, (relationPauliProduct generators row).projective = 0) ∧
+    relationScalarPhases generators ≤ scalarPhases (generatedPauliGroup generators) ∧
+    ((1 : PauliPhase) ∈ scalarPhases (generatedPauliGroup generators) ↔ HasOddRelation generators) ∧
+    standardPhaseRepresentatives generators = phaseRepresentatives (scalarPhases (generatedPauliGroup generators)) ∧
+    (∀ pivot, normalizedPivotPauliProduct generators pivot ∈ generatedPauliGroup generators) ∧
+    scalarPauliSubgroup (scalarPhases (generatedPauliGroup generators)) ≤ standardPauliGroup generators ∧
+    standardBinaryRank generators = Module.finrank F2 (projectiveSpan generators) ∧
+    standardLog2Size generators = Module.finrank F2 (projectiveSpan generators) +
+      scalarPhaseRank (scalarPhases (generatedPauliGroup generators)) :=
+  ⟨fun _ member => generatedPauliGroup_has_binary_combination generators member,
+    relationPauliProduct_projective generators,
+    relationScalarPhases_le_scalarPhases generators,
+    one_mem_scalarPhases_iff_hasOddRelation generators,
+    standardPhaseRepresentatives_eq_phaseRepresentatives generators,
+    normalizedPivotPauliProduct_mem_generatedPauliGroup generators,
+    scalarPauliSubgroup_le_standardPauliGroup generators,
+    standardBinaryRank_eq_finrank_projectiveSpan generators,
+    standardLog2Size_eq_semantic_ranks generators⟩
+
 end PaulimerFormal
