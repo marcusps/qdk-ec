@@ -1136,6 +1136,48 @@ cross-pair rejection, and three signed action-generated tableaux with
 their inverse matrices. This execution count is not a separate Lean
 enumeration-completeness theorem.
 
+## Constructive signed tableau realization
+
+[`CliffordRealization.lean`](../formal/PaulimerFormal/CliffordRealization.lean)
+constructs a phase-preserving Pauli automorphism for every valid signed
+tableau. `rotations` reverses automorphism composition so its binary action
+is the existing ordered transvection product. Applying it to the verified
+minimal decomposition of the inverse preimage matrix gives precisely the
+required binary preimages.
+
+Mathlib's `MulAut.conj` supplies Pauli conjugation, including arbitrary
+scalar phases of its conjugator. `preimages_pauli_left` proves that left
+composition is exactly `TransvectionSigns.leftMulPauli`: the sign test uses
+the standard generator, not the current preimage. The existing final
+correction theorem therefore makes the constructed signed preimages
+exactly equal to the input rows. Its same-binary and Hermiticity conditions
+are derived from the construction and validity, not additional assumptions.
+The correction itself is positive Hermitian.
+
+`valid_iff_exists_action` characterizes valid tableaux by existence of a
+phase-preserving Pauli automorphism. `realization_spec` additionally retains
+the shortest-binary-decomposition guarantee. This does not establish
+uniqueness yet, concrete unitary realization, or minimality under a cost
+model that charges for the separate Pauli correction.
+
+Action-speaks entries **111-112** verified `realization_spec` and
+`preimages_pauli_left`, replaying 1577 declarations each. All applicable
+checks passed with only `propext`, `Classical.choice`, and `Quot.sound`.
+The complete local-source bundle, with the finite 1,000,000-heartbeat
+prefix, has SHA256
+`e766ebae1cae8698c46f44d628f661e48b45694e7a86164847cd859be7c4eb05`;
+all constituent hashes match. Entry 110 was an elaboration rejection:
+concatenated source made `mul_inv_rev` ambiguous with the matrix lemma.
+Explicit `_root_.mul_inv_rev` resolved that ambiguity without changing the
+claim or disabling a check. The full build passed (3102 jobs).
+
+Execution reconstructed all 24 signed one-qubit tableaux and checked five
+rotation lists and 160 signed left-correction cases, including corrections
+with non-Hermitian scalar phases. The initial 120-second batch completed
+cases 1-16 before its watchdog stopped it; separate bounded batches
+completed 17-20 and 21-24. No runtime-success claim is made here for the
+still-pending two-qubit minimal SWAP case.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

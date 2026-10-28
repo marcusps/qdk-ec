@@ -24,3 +24,4 @@ import PaulimerFormal.GreedyDecomposition
 import PaulimerFormal.PauliExponent
 import PaulimerFormal.Clifford
 import PaulimerFormal.CliffordTableau
+import PaulimerFormal.CliffordRealization

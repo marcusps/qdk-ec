@@ -75,7 +75,7 @@ image/preimage inverses, and Hermiticity preservation. Composition satisfies
 `F_(A B) = F_B F_A` in row-vector conventions, so left composition by a
 quarter-turn gives the greedy update `F T_v`. The lifted Pauli-exponent
 automorphism projects to that transvection. Audits 106-107 passed.
-Constructing the automorphism from a validated runtime tableau remains open;
+Constructing the automorphism from validated rows is covered below;
 binary identity is not identified with signed identity.
 
 `CliffordTableau` proves that its executable validity checker accepts exactly
@@ -83,9 +83,18 @@ Hermitian rows with canonical commutation, equivalently Hermitian rows with
 a symplectic preimage matrix. The upper-triangle conditions in #217's
 `is_valid_clifford` are equivalent to this full-pair condition. Preimages
 of semantic Clifford actions are valid and their matrix is exactly the
-inverse binary action. Audits 108-109 passed. Constructive extension of
-arbitrary valid rows and its uniqueness remain open; these results do not
+inverse binary action. Audits 108-109 passed. These results do not
 verify compiled Rust or its storage layout.
+
+`CliffordRealization` constructs a phase-preserving automorphism for every
+valid signed tableau. Reversed quarter-turn products realize the minimal
+binary decomposition of its inverse preimage matrix; left Pauli conjugation
+then implements the existing final sign correction exactly. Thus binary
+replay and Hermiticity are derived rather than assumed for this construction.
+Audits 111-112 passed. All 24 signed one-qubit tableaux were reconstructed
+in bounded execution batches. Uniqueness and concrete unitary realization
+remain open. Minimality counts binary transvections, not the separate final
+Pauli correction.
 
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
