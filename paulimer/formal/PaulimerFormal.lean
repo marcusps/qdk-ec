@@ -7,6 +7,7 @@ import PaulimerFormal.PauliGroup
 import PaulimerFormal.PauliGroupCardinality
 import PaulimerFormal.PauliGroupMembership
 import PaulimerFormal.PauliGroupDecisions
+import PaulimerFormal.PauliGroupEnumeration
 import PaulimerFormal.Product
 import PaulimerFormal.Minimality
 import PaulimerFormal.UpperBound
