@@ -313,6 +313,25 @@ constituent hashes:
 | 131 | `PauliIntersectionCounterexample.counterexample` | 1310 | `ed31a3e5fb304e4507d6193af28251208dfaf3b5e40872b69630129a300094cb` |
 | 132 | `PauliIntersection.pair_rejected` | 1297 | `90159c754f8d44457d57da792ceb4d47ca621a103a10e2f5a23a5ed0209488f5` |
 
+`PauliIntersectionBasis` adds `PauliIntersection.basis_spec`, closing
+mathematical completeness of this basis repair. For any spanning
+family of the common projective row space, retain compatible rows and add
+one rejected anchor to every rejected row. The corrected rows span exactly
+the projective image of the actual subgroup intersection. Any common phase
+lifts, together with the common scalar subgroup, generate exactly that
+intersection. Both the no-rejection case and the anchored case are covered,
+including empty families. Independence and a particular choice of common
+phase are unnecessary. The anchor's corrected row is zero and can be
+omitted once the scalar subgroup is included.
+
+This is a mathematical construction with an assumed correct projective
+spanning family, not yet an execution-refinement proof for the ordered
+one-pass Rust loop. Audit **133** verified the combined construction,
+replaying 1309 declarations with standard axioms only. Its complete
+17-source bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
+`0f22e9af37cab4643b2020225c4dc08d42c0fbdf5818d8661135bf69c6aec8ca`;
+all constituent hashes match.
+
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:
 equal binary preimages with self-inverse rows become exactly equal signed
