@@ -908,6 +908,33 @@ replayed dimension-general termination and correctness proofs. Runtime cost,
 Rust reducer correspondence, and the signed tableau bridge are not proved by
 this milestone.
 
+## PR #118 projective fixed-space extraction
+
+[`CliffordFixedSpace.lean`](../formal/PaulimerFormal/CliffordFixedSpace.lean)
+computes `I + F` in X-then-Z order, calls Binar's verified packed transpose
+and kernel-basis algorithms, and converts the rows to canonical positive
+Hermitian Paulis. The kernel-to-row-action bridge proves these rows span
+exactly `Fix(F)`. They are independent and number `2m - residueRank(F)`.
+Every returned Pauli has zero xyz phase, is self-inverse, and has fixed
+projective coordinates. These claims hold for the matrix kernel independently
+of the later valid-tableau interpretation.
+
+`PaulimerFormal.CliffordFixedSpace.fixedSpace_spec` passed action-speaks as
+project ledger entry **100**, with all applicable checks passing and only
+`propext`, `Classical.choice`, and `Quot.sound`. The complete local-source
+snapshot, with the finite 1,000,000-heartbeat prefix, has SHA256
+`f0c018d12338cf5d701d5763846921c09bc10eab38d224dd8fb74544ce910526`.
+Kernel replay checked 982 declarations, the source hashes match, and the full
+project build passed (3095 jobs).
+
+The empty runtime case passed; the nonempty one-qubit identity regression
+did not finish within its monitored 120-second interpreter check. Remaining
+runtime cases are not reported as passing. The verified packed transpose
+model reconstructs output bits through its full tile kernel, so its execution
+cost must not be confused with Rust's mutable packed implementation.
+No timing bound is proved. Exact signed commutation is deliberately not
+claimed: Clifford X projectively fixes Z while conjugating it to -Z.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

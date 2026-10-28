@@ -155,6 +155,13 @@ The combined contract passed action-speaks (entry 99). Concrete SWAP fallback
 execution remains unverified within the monitored three-minute interpreter
 check; this is separate from its dimension-general kernel proof.
 
+`CliffordFixedSpace` computes Binar's kernel basis of `(I + F)^T` and
+reindexes it into positive Hermitian Paulis. The generators are independent,
+span exactly `Fix(F)`, and number `2m - residueRank(F)`. The combined theorem
+passed action-speaks (entry 100). This is the projective fixed space, not
+the exact signed centralizer. Nonempty interpreter regression checks remain
+outstanding; the one-qubit identity check exceeded its two-minute bound.
+
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying
 these results to a Rust input requires a valid Clifford tableau; the Rust
 decomposition functions do not themselves call `is_valid`.
