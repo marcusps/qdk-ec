@@ -174,8 +174,17 @@ the singleton loop followed by the lexicographic pair loop and its XOR
 cross-pairing test. It returns no vector exactly for identity; every selected
 vector has nonzero residue and meets one of the proved reduction conditions.
 Audits 102-103 passed. Execution covers the empty case, all six one-qubit
-actions, a pair-only choice, and SWAP's hyperbolic fallback. Loop termination
-and signed tableau correspondence remain separate obligations.
+actions, a pair-only choice, and SWAP's hyperbolic fallback.
+
+`GreedyDecomposition` implements the full terminating greedy loop on
+vector-backed valid action matrices. Its state conversion preserves the
+matrix, and its public equations append each chosen residue after the
+recursive result. The output replays the binary action, has between
+`residueRank(F)` and `4m + 1` factors, and consists of nonidentity positive
+Hermitian Paulis. Audit 104 passed. Full execution covers empty input, all
+six one-qubit actions, and three-factor SWAP, including factor phases.
+This is not a minimality claim for greedy decomposition or a verification
+of signed tableaux or compiled Rust.
 
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying
 these results to a Rust input requires a valid Clifford tableau; the Rust

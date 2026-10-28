@@ -989,6 +989,48 @@ execution passed the empty case, all six one-qubit symplectic actions, a
 two-qubit pair-only selection, and the SWAP hyperbolic fallback. These are
 next-step checks, not complete greedy-loop or minimal SWAP execution checks.
 
+## PR #118 complete greedy model
+
+[`GreedyDecomposition.lean`](../formal/PaulimerFormal/GreedyDecomposition.lean)
+connects the verified selection and rank transitions to a terminating
+executable loop. The well-founded potential is twice the residue rank plus
+one for a hyperbolic action. Active choices lower the rank by one; hyperbolic
+choices preserve rank but remove that extra one. Every selected step
+strictly decreases the potential.
+
+The public recursion equations return the recursive factors followed by
+the current residue, reversing the reduction sequence. Involutivity of each
+transvection then proves exact binary replay. The returned positive
+Hermitian Paulis have nonzero projective vectors and zero xyz phase.
+Their count lies between the residue rank and `4m + 1`, which is stronger
+than the implementation's `4m + 2` guard. No greedy minimality theorem is
+asserted.
+
+The executable state stores a fixed-size vector of fixed-size row vectors,
+together with its symplecticity proof. `action_store` proves that materializing
+an action preserves its matrix exactly. The initial function-valued loop
+exceeded a monitored 120-second SWAP run; materializing back into a function
+also stalled, while retaining explicit vector-backed state completed.
+With that representation, full execution passed empty input, all six
+one-qubit actions, and three-factor SWAP, checking replay, nonzero factors,
+zero xyz phase, self-inversion, and the Y-count xz phase. This does not close
+the separate minimal-search SWAP or nonempty fixed-space runtime gaps.
+
+Action-speaks verified `PaulimerFormal.GreedyDecomposition.full_spec` as
+entry **104**, replaying 897 declarations with all applicable checks passing
+and only `propext`, `Classical.choice`, and `Quot.sound`. The full build
+passed (3098 jobs). The complete local-source snapshot, with the finite
+1,000,000-heartbeat prefix, has SHA256
+`977c2ed2b1d927b27c26356f20f5b871ff4a37b1d0e9fdccf5ebd216c8347239`;
+all constituent source hashes match.
+
+The remaining implementation bridge must derive the binary action from a
+valid signed tableau and identify physical left Pauli-exponential updates
+with these row-action updates. The exact finite counts and greedy optimality
+claims for all 720 two-qubit actions remain separate enumeration obligations.
+Neither signed replay nor verification of compiled Rust follows from this
+milestone.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the
