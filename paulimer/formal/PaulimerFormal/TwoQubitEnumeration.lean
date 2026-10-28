@@ -69,18 +69,20 @@ def Frame.IsCanonical (frame : Frame) : Prop :=
   paired frame.firstZ frame.secondX = false ∧
   paired frame.firstZ frame.secondZ = false
 
-def frames : List Frame :=
-  codes.flatMap fun firstX =>
-    (codes.filter (paired firstX)).flatMap fun firstZ =>
-      (codes.filter fun secondX => !(paired firstX secondX) && !(paired firstZ secondX)).flatMap
-        fun secondX =>
-          (codes.filter fun secondZ =>
-            !(paired firstX secondZ) && !(paired firstZ secondZ) && paired secondX secondZ).map
-            fun secondZ => ⟨firstX, secondX, firstZ, secondZ⟩
+def framesFrom (firstX : BitVec 4) : List Frame :=
+  (codes.filter (paired firstX)).flatMap fun firstZ =>
+    (codes.filter fun secondX => !(paired firstX secondX) && !(paired firstZ secondX)).flatMap
+      fun secondX =>
+        (codes.filter fun secondZ =>
+          !(paired firstX secondZ) && !(paired firstZ secondZ) && paired secondX secondZ).map
+          fun secondZ => ⟨firstX, secondX, firstZ, secondZ⟩
+
+def frames : List Frame := codes.flatMap framesFrom
 
 theorem mem_frames_iff (frame : Frame) : frame ∈ frames ↔ frame.IsCanonical := by
   cases frame
-  simp [frames, Frame.IsCanonical, List.mem_flatMap, mem_codes, and_assoc, and_comm, and_left_comm]
+  simp [frames, framesFrom, Frame.IsCanonical, List.mem_flatMap, mem_codes,
+    and_assoc, and_comm, and_left_comm]
 
 theorem canonical_iff_symplectic (frame : Frame) :
     frame.IsCanonical ↔ IsSymplectic frame.matrix := by
@@ -127,7 +129,7 @@ theorem frames_length : frames.length = 720 := by decide
 
 theorem frames_nodup : frames.Nodup := by
   have distinct : codes.Nodup := by decide
-  unfold frames
+  unfold frames framesFrom
   simp only [List.nodup_flatMap]
   refine ⟨fun firstX _ => ⟨fun firstZ _ => ⟨fun secondX _ => ?_, ?_⟩, ?_⟩, ?_⟩
   · apply (distinct.filter _).map

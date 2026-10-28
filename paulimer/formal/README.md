@@ -112,15 +112,23 @@ the separate finite classification claims in #118.
 proves its cardinality is 720. Four-bit frames decode bijectively to
 binary matrices; their six pairing conditions are equivalent to
 symplecticity. The count uses ordinary kernel reduction, with a structural
-duplicate-freedom proof. Audit 115 passed. The 210/90 exception counts and
-greedy optimality are not consequences of enumeration alone and remain
-pending.
+duplicate-freedom proof. Audit 115 passed. Exception counts and greedy
+optimality require separate proofs, not enumeration alone.
 
 `TwoQubitAction` proves exact four-bit matrix action and transvection
 updates, providing a small executable representation for the remaining
 finite checks. Its hyperbolicity test is equivalent to vanishing pairing
 with every vector's image; kernel reduction counts exactly 15 nonidentity
 hyperbolic actions. Audit 116 passed.
+
+`TwoQubitRank` identifies the executable fixed-code count with the
+cardinality of the mathematical fixed space, giving exact residue rank.
+Kernel reduction proves rank distribution `[1, 15, 100, 300, 304]` and
+exactly 90 nonhyperbolic rank-three actions whose every rank-lowering
+transvection leaves a hyperbolic rank-two action. The obstruction count
+is split into sixteen first-row batches. Audit 117 passed. Exact
+minimal lengths for these actions, the 210 exceptions, and greedy
+optimality remain pending.
 
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered

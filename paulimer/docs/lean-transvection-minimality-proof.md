@@ -1245,10 +1245,10 @@ with the finite 1,000,000-heartbeat prefix, has SHA256
 All constituent hashes match; the full build passed (3105 jobs). Execution
 also checked all 720 frames against the full signed-tableau validity checker.
 
-The separate counts of 210 nonhyperbolic exceptions and 90 rank-three
-obstructions, optimality of the greedy output on this finite group, and
-higher-qubit counterexamples remain pending. Enumeration is their complete
-finite domain, not a proof of those classifications.
+Enumeration supplies the complete finite domain, not the classifications.
+The rank-three obstruction count is proved separately below; the 210
+nonhyperbolic exceptions, greedy optimality, and higher-qubit
+counterexamples remain pending.
 
 ## Four-bit dynamics and the hyperbolic count
 
@@ -1264,7 +1264,7 @@ four basis vectors. Its criterion is equivalent to
 `GreedyReduction.IsHyperbolic`; the identity-code comparison is likewise
 proved equivalent to matrix identity. Ordinary kernel reduction counts
 exactly **15 nonidentity hyperbolic actions** in the complete enumeration.
-This does not establish the remaining 210/90 nonhyperbolic classifications.
+This count alone does not establish either nonhyperbolic classification.
 
 Action-speaks entry **116** verified `TwoQubitEnumeration.action_spec`,
 replaying 1343 declarations with all applicable checks passing and only
@@ -1273,6 +1273,38 @@ bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
 `01554a4fd115acd335013d03a3cabf96b61b8ab5815545d8fa895fbb298e13de`.
 All constituent hashes match; the full build passed (3106 jobs). Execution
 confirmed the count and all 32 identity/SWAP image and update cases.
+
+## Exact ranks and the 90 rank-three obstructions
+
+[`TwoQubitRank.lean`](../formal/PaulimerFormal/TwoQubitRank.lean)
+identifies the enumerated fixed codes bijectively with the mathematical
+fixed space. Mathlib's finite-vector-space cardinality theorem gives
+`2 ^ finrank`; taking `log2` and using the residue/fixed-space dimension
+identity proves the executable rank correct for every four-bit frame.
+Ordinary kernel reduction proves rank distribution **[1, 15, 100, 300, 304]**.
+
+The obstruction checker is equivalent to rank three, nonhyperbolicity,
+and the assertion that **every** phase-vector transvection lowering the
+rank leaves a hyperbolic rank-two action. Surjectivity of four-bit decoding
+ensures that this quantifies over all centers, not a restricted candidate
+set. There are exactly **90** such actions. This is the obstruction
+property from #118; connecting it to exact minimal length four remains
+separate work, as do the 210 rank-plus-one exceptions and greedy optimality.
+
+The first monolithic source audit was stopped at its private-memory
+ceiling without producing a verdict. Factoring the existing enumerator
+by its first row allows sixteen separate `decide` proofs, recombined
+using list filter/flat-map length identities. No check or resource
+limit was relaxed.
+
+Action-speaks entry **117** verified `TwoQubitEnumeration.rank_spec`,
+replaying 1359 declarations with every applicable check passing and only
+`propext`, `Classical.choice`, and `Quot.sound`. The complete local-source
+bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
+`cb8246ab63c63e329ed04ae7d3df9f73cc891327356b7a153c804b3196c4955a`.
+All constituent hashes match; the full build passed (3107 jobs).
+The successful audit's reported verification time was about 322 seconds;
+the watchdog confirmed cleanup with no surviving children.
 
 ## Verification boundary
 
