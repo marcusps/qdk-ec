@@ -298,8 +298,8 @@ pairs subsequent rejected vectors with it. `PauliIntersection.pair_rejected`
 proves that such pairs always admit a common phase in arbitrary dimension.
 Compatibility is exactly membership of the phase difference in the sum of
 the two scalar-phase subgroups. The proof covers both sign and imaginary-phase
-mismatches. Full completeness of the repaired basis-processing loop remains
-an explicit refinement obligation; this lemma does not verify compiled Rust.
+mismatches. This lemma alone does not establish traversal completeness;
+the following modules supply that refinement, still without verifying compiled Rust.
 Rust regression tests check the original counterexample, imaginary phases,
 three rejected generators, and all 8192 pairs of phase assignments for two
 three-generator bases, alongside an exact-set intersection property.
@@ -325,7 +325,7 @@ phase are unnecessary. The anchor's corrected row is zero and can be
 omitted once the scalar subgroup is included.
 
 This is a mathematical construction with an assumed correct projective
-spanning family, not yet an execution-refinement proof for the ordered
+spanning family, rather than an execution-refinement proof for the ordered
 one-pass Rust loop. Audit **133** verified the combined construction,
 replaying 1309 declarations with standard axioms only. Its complete
 17-source bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
@@ -341,13 +341,34 @@ or certifies that every input is compatible. `pairedVariant_exists` proves
 that lookup cannot fail on the product of two rejected rows drawn from the
 common projective space. Execution checked six cases, including the original
 counterexample, its repaired product, identical groups, and zero qubits.
-The complete intersection traversal and projective-basis extraction remain
-separate obligations.
+The following module verifies traversal; projective-basis extraction remains
+a separate obligation.
 
 Audit **134** passed all checks, replaying 1323 declarations with standard
 axioms only. Its complete 18-source bundle, with the finite
 1,000,000-heartbeat prefix, has SHA256
 `2e4c628d347a7f1d5f5ee82f465f6a7f638fc18875861c140d142d0cd9bc2ef4`;
+all constituent hashes match.
+
+`PauliIntersectionLoop` adds `PauliIntersection.traversal_spec`, verifying
+the ordered one-pass traversal and the actual enumeration of common
+scalar generators. The first rejected vector becomes the anchor without
+being emitted; later rejected vectors are paired with it. Missing paired
+phases are explicit failures in the executable model, proved unreachable
+under `ValidBasis`. That precondition requires the supplied rows to span the
+common projective space, without requiring independence. The traversal
+succeeds, and every returned list generates exactly the subgroup intersection.
+Eleven executable cases cover phase selection, both basis orders of the
+counterexample, all-compatible inputs, imaginary-phase cancellation, and
+zero-qubit scalar groups. Rust basis extraction, support compaction, and
+compiled-code correspondence are not included.
+
+Audits **135–136** reached the triviality probe's heartbeat limit on the
+existential formulation, not a failed kernel proof. Audit **137** passed
+all checks on the equivalent nonfailure-and-universal-result contract,
+with unchanged finite budgets and no disabled checks. It replayed 1352
+declarations with standard axioms only. The complete 19-source bundle has SHA256
+`019fb0a378c0411752b82c1fab7cee00192b1105a5a6239074cd7a50fe066d84`;
 all constituent hashes match.
 
 The minimality theorem concerns the Clifford's binary symplectic action.
