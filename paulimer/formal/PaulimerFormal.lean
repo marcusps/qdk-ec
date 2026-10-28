@@ -12,3 +12,4 @@ import PaulimerFormal.TransvectionSigns
 import PaulimerFormal.TransvectionImplementation
 import PaulimerFormal.Triangularization
 import PaulimerFormal.SpanEnumeration
+import PaulimerFormal.TriangularSearch

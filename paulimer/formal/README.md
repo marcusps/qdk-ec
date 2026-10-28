@@ -118,8 +118,14 @@ little-endian span iterator. The iterator step preserves its running XOR
 vector; its finite trace enumerates exactly `2^n - 1` distinct nonzero span
 vectors for an independent `n`-vector family, including `n = 0`.
 Four principal targets passed action-speaks source-mode audits (entries 80-83).
-Recursive backtracking correctness, its connection to core triangularizability,
-and memoization/deduplication remain unfinished. See the
+
+`TriangularSearch` adds the uncached first-success recursive search, with
+soundness, complete failure characterization, and structural termination.
+Its matrix wrapper returns an invertible `Q` with unit lower-triangular
+`Q E Q^T`; rejection of a faithful core is equivalent to the existing
+`CorePresentation.IsTriangularizable` predicate being false. Four further
+action-speaks audits passed (entries 84-87). Memoization and complement
+deduplication remain unfinished; this is not verification of compiled Rust. See the
 [milestone record](../docs/lean-transvection-minimality-proof.md#pr-217-triangularizer-milestone).
 
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying

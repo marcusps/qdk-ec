@@ -558,12 +558,14 @@ The final Pauli is not included in the unsigned minimum rotation count.
 
 The initial congruence search must be sound **and complete**. A false rejection
 can allow a valid rank-plus-one candidate even when rank factors suffice;
-the final replay check alone cannot establish minimality.
+the final replay check alone cannot establish minimality. The
+[uncached Lean search](#uncached-recursive-search-and-core-bridge) now proves
+this property; Rust's memoization and complement deduplication are not yet
+covered.
 
 The other explicit obligations are faithful residue extraction by
 `row_reduce_with_transform`; safe subspace keys and correct
-memoization/complement deduplication; integration of the now-verified
-[span-iterator model](#pr-217-triangularizer-milestone) into the recursive search; and the
+memoization/complement deduplication; and the
 connection from valid Rust tableaux and quarter-turn updates to the binary
 action. The sign proof assumes equal binary **preimages**, whereas candidate
 validation compares **image** action matrices. Transferring between them
@@ -641,9 +643,9 @@ changed. Python tests and the full workspace Rust suite were not run.
 
 ## PR #217 triangularizer milestone
 
-**Partially complete:** the complement and enumeration proof units are
-implemented and independently audited. The recursive search, core
-triangularizability bridge, and cache/deduplication proofs are still pending.
+**Partially complete:** the complement, enumeration, uncached recursive
+search, and core-triangularizability bridge are implemented and independently
+audited. The cache/deduplication proofs are still pending.
 The source pin remains `2ce895eda84473762d7db36bf6c3561460992858`.
 
 ### Complement and alternating guard
@@ -713,13 +715,66 @@ The full pinned Lean project build passed (3088 jobs). No Rust code changed;
 the earlier pinned PR regression results were not rerun for these Lean-only
 additions.
 
-The next proof unit must implement first-success recursive backtracking and
-prove both successful triangularization and complete failure, connecting its
-ordered basis to `CorePresentation.IsTriangularizable`. Dimension decrease
-alone is not a completeness proof. After that, failure-cache entries and
-complement deduplication must be justified by keys with no false collisions,
-reusing Binar's row-space preservation. The converse key property is not
-required for correctness.
+### Uncached recursive search and core bridge
+
+[`TriangularSearch.lean`](../formal/PaulimerFormal/TriangularSearch.lean)
+implements `search` using the verified span iterator and complement routine.
+It accepts empty input before checking the alternating guard, skips
+isotropic candidates, selects the first coupling-one pivot with `List.find?`,
+and returns the first successful recursive branch with `List.findSome?`.
+The basis length decreases at every recursive call; Lean checks structural
+termination without a fuel assumption or a partial-function escape.
+
+`IsTriangularBasis` states independence, equality of the spanned subspace,
+and a unit lower-triangular Gram matrix in the returned order. The
+`triangularBasis_cons` and `triangularBasis_tail` lemmas justify prepending a
+nonisotropic pick and restricting a solution to its right-orthogonal tail.
+`search_sound` proves this specification for every successful result from
+independent input. `search_none_iff` proves complete failure: an existing
+triangular basis supplies an enumerated first vector and a valid tail in
+the exact computed complement, so neither the guard nor exhaustion can
+incorrectly reject it.
+
+`congruenceTriangularize` starts from the standard basis of a square matrix
+`E`. `gram_eq_congruence` fixes the orientation as `Q E Q^T`.
+`congruenceTriangularize_sound` proves that the returned `Q` is invertible
+and its congruence is unit lower triangular.
+`congruenceTriangularize_none_iff` characterizes failure for any square `E`,
+without requiring invertibility as an input hypothesis.
+`core_search_none_iff` specializes this to the existing
+`CorePresentation.IsTriangularizable` criterion, discharging the correct
+rejection premise for this executable Lean search model.
+
+Kernel-backed examples cover empty input, identity, alternating rejection,
+a nonsymmetric zero-diagonal guard, and genuine backtracking. In the last
+example, `E = [[1,0,0],[0,0,1],[0,1,0]]`: the first candidate's recursive
+branch fails, but the complete search returns rows `110, 101, 111`.
+The dimension-general theorems do not depend on these finite examples.
+
+| Target in `PaulimerFormal.Triangularization` | Project ledger entry | Result |
+| --- | --- | --- |
+| `search_sound` | 84 | Verified |
+| `search_none_iff` | 85 | Verified |
+| `congruenceTriangularize_sound` | 86 | Verified |
+| `core_search_none_iff` | 87 | Verified |
+
+All four action-speaks source-mode audits used `require_nontrivial=true`.
+Each replayed all 317 declarations in its complete dependency closure,
+with all applicable checks passing, no warnings, and exactly the standard
+axioms `propext`, `Classical.choice`, and `Quot.sound`. The bundle includes
+`Symplectic`, `Bilinear`, `Triangularization`, `SpanEnumeration`, `Product`,
+`Minimality`, and `TriangularSearch`; its SHA256 is
+`c15353d35e2dbb989f269389076bff1660c4656546562cfc83fd97aa71073a94`.
+Source and audit hashes were checked against the current files. The full
+Lean project build passed (3089 jobs). No Rust code changed.
+
+The remaining proof unit is failure-cache and complement-deduplication
+safety, using keys with no false collisions and reusing Binar's row-space
+preservation. The converse key property is not required for correctness.
+The current model deliberately omits both caches; it makes no claim yet
+that pruning preserves the returned result. As with the iterator model,
+materialized lists describe Rust's lazy traversal order, not its allocation
+behavior. No checked translation of the Rust source is claimed.
 
 ## Verification boundary
 
