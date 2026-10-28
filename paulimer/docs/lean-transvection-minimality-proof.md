@@ -1525,6 +1525,29 @@ All 26 constituent hashes match. Bounded execution checks also replayed
 the three-factor competitor and obtained the generic four-factor greedy
 output on three, four, and five qubits.
 
+## Exact minimum for every nonidentity hyperbolic action
+
+[`HyperbolicMinimality.lean`](../formal/PaulimerFormal/HyperbolicMinimality.lean)
+proves the dimension-general rank-plus-one claim from #118. The
+all-vector hyperbolic condition makes the residue matrix's bilinear
+form alternating. Every faithful core can be written as a congruence
+of that residue matrix using a row-reduction transform. Thus every
+congruence of the core has zero diagonal and cannot be unit lower
+triangular when the action is nonidentity.
+
+Combining this obstruction with the existing general rank/rank-plus-one
+minimum theorem proves `minimum_spec`: a shortest factorization with
+length **r + 1** exists, and every shortest factorization has this length.
+This is not restricted to two qubits. Identity is explicitly excluded,
+and hyperbolicity is not replaced by a basis-only diagonal check.
+
+Action-speaks entry **125** verified this result, replaying 303
+declarations with every applicable check passing and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete local-source bundle,
+with the finite 1,000,000-heartbeat prefix, has SHA256
+`7bb392ebd37b8fc0d13d50bbab76f443380e77531e87b6785ecd24eb6260b9fa`.
+All ten constituent hashes match the audited source.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

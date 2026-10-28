@@ -176,6 +176,13 @@ algorithm takes four steps. The proof preserves the initial X-generator
 prefix, hyperbolicity at fallback, and each update. Audit 124 passed;
 execution checks also reproduced the result on three through five qubits.
 
+`HyperbolicMinimality.minimum_spec` proves the remaining general
+rank-plus-one claim from #118: every nonidentity hyperbolic action has
+exact minimum length `residueRank + 1`. Hyperbolicity makes the residue
+form alternating, so no positive-dimensional faithful core can acquire
+a unit diagonal by congruence. The existing general upper bound attains
+the required extra factor. Audit 125 passed.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary

@@ -38,3 +38,4 @@ import PaulimerFormal.GreedyBlockSelection
 import PaulimerFormal.GreedyBlockLength
 import PaulimerFormal.SymplecticPadding
 import PaulimerFormal.GreedyPadding
+import PaulimerFormal.HyperbolicMinimality
