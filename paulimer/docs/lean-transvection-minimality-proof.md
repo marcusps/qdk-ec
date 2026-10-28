@@ -6,9 +6,11 @@ Clifford operation. The result holds in every finite dimension; finite
 enumeration is used only for the reference search, not for the mathematical
 proof.
 
-The formalization concerns binary symplectic actions. The Rust API's choice of
-Hermitian Pauli representatives, Python binding behavior, and performance
-optimizations are outside its scope.
+The minimality theorem concerns binary symplectic actions. The
+[PR #217 refinement review](#pr-217-refinement-review) also proves the final
+signed-preimage correction under explicit binary-replay and Hermiticity
+contracts. Python binding behavior and performance optimizations remain
+outside the formalization.
 
 ## Relationship to the published proof
 
@@ -328,6 +330,10 @@ The main public theorems are:
 
 ## Rust contract correspondence
 
+This section records the historical #119 review. The
+[PR #217 review below](#pr-217-refinement-review) updates the source snapshot,
+bordered acceptance path, and signed return contract.
+
 This correspondence review uses the implementation merged locally at
 `94bdf9e`, from #119 head `2d1acf5` containing #118 head `336e2c1`. The links
 below identify source-level obligations, not a Lean translation of Rust:
@@ -490,10 +496,236 @@ add replay, fixed-space, representative, and GIL checks. None of these tests
 is a Lean/Rust extraction or refinement proof, and the three-qubit test does
 not run in the default suite.
 
+## PR #217 refinement review
+
+Reviewed source: [#217](https://github.com/microsoft/qdk-ec/pull/217), head
+[`2ce895eda84473762d7db36bf6c3561460992858`](https://github.com/microsoft/qdk-ec/commit/2ce895eda84473762d7db36bf6c3561460992858),
+with reported base `50f3bff4e5923ffad9382d49d3b9d4f522a4b09a`.
+The review used an isolated checkout of that exact head, not the older Rust
+implementation on this proof branch. It does not cover later PR revisions.
+
+The principal source is
+[`transvection_exact.rs`](https://github.com/microsoft/qdk-ec/blob/2ce895eda84473762d7db36bf6c3561460992858/paulimer/src/clifford/transvection_exact.rs).
+No mathematical defect was found in its new checked-candidate or final-sign
+paths under the contracts below. This is a conditional mathematical
+refinement review, **not end-to-end verification of the Rust solver**.
+
+### New checked contracts
+
+| Source path | Lean result | Preconditions and conclusion |
+| --- | --- | --- |
+| `final_pauli_correction`, lines 125-149 | `TransvectionSigns.finalPauliCorrection_spec` | Equal binary preimage rows and self-inverse rows in both tableaux imply exact equality of every corrected signed row. The correction has zero xyz phase and is self-inverse. |
+| `verifies_bordered_decomposition`, lines 633-652 | `TransvectionRefinement.checkCandidate_iff` and `checked_candidate_spec` | The typed Boolean checker accepts exactly nonzero, rank-plus-one lists with correct ordered replay. Given a faithful core and a correct rejection of triangularizability, every accepted list is shortest. |
+| `BorderedFamily::validate` and the `QV` lift, starting at lines 514 and 616 | `TransvectionRefinement.bordered_family_spec` | The existing `IsBorderedTriangularization` postconditions imply that the lifted rows replay the target. On the rejected-core branch, their rank-plus-one length is minimal. |
+| `verified_decomposition_or_search`, starting at line 654 | `TransvectionRefinement.retained_fallback_spec` | A rank-length factorization of `F T_w`, followed by `w`, replays `F` in the returned order and is shortest on the rejected-core branch. |
+
+The sources are
+[`TransvectionSigns.lean`](../formal/PaulimerFormal/TransvectionSigns.lean) and
+[`TransvectionImplementation.lean`](../formal/PaulimerFormal/TransvectionImplementation.lean).
+They reuse the phase-aware Pauli algebra and the existing residue-core,
+bordered-factorization, and minimum-length theorems. No new axiom is introduced.
+
+The candidate checker is executable over fixed-width mathematical vectors.
+Its types replace the Rust vector-length checks; it does not model malformed
+`Vec<bool>` inputs or prove the packed matrix routines. In particular,
+`bordered_family_spec` consumes the validator's algebraic postconditions,
+not an assumption that the recursive construction always succeeds.
+
+### Why the sign correction is sufficient
+
+The algorithm compares **preimages** of the standard generators.
+Different X-preimage phases set a Z correction bit; different Z-preimage
+phases set an X bit. This agrees with `left_mul_pauli`'s support loops and
+`clifford_left_mul_eq_x`/`clifford_left_mul_eq_z`: those helpers add two to
+the opposite preimage's phase, without changing its binary coordinates.
+Testing commutation against the current preimage instead of the standard
+generator would implement a different multiplication convention.
+
+For equal binary coordinates, self-inverse Paulis have equal doubled xz
+phases. Their phases are therefore either equal or differ by two modulo
+four. The exact phase-inequality test selects precisely the rows that need
+negation. This includes odd Y weight: the proof does not assume that
+Hermitian Paulis have even **xz** phase. Rust's `xz_phase_exponent()` reduces
+its raw byte modulo four, and tableau equality also compares phases modulo
+four, matching the formal model.
+
+The result holds for any qubit count, including zero, and for any correctly
+replayed rotation list, whether constructed or found by the fallback.
+It proves equality of the stored signed tableau, not global unitary phase.
+The final Pauli is not included in the unsigned minimum rotation count.
+
+### Remaining implementation obligations
+
+The initial congruence search must be sound **and complete**. A false rejection
+can allow a valid rank-plus-one candidate even when rank factors suffice;
+the final replay check alone cannot establish minimality.
+
+The other explicit obligations are faithful residue extraction by
+`row_reduce_with_transform`; safe subspace keys and correct
+memoization/complement deduplication; integration of the now-verified
+[span-iterator model](#pr-217-triangularizer-milestone) into the recursive search; and the
+connection from valid Rust tableaux and quarter-turn updates to the binary
+action. The sign proof assumes equal binary **preimages**, whereas candidate
+validation compares **image** action matrices. Transferring between them
+requires the valid-tableau inverse-action contract.
+
+The recursive `bordered_family` and `symplectic_simplex` implementations are
+not proved to produce valid witnesses on every input. Their checked success
+path is covered; failures retain the original search. The dimension-general
+Lean residue-fix existence theorem closes the abstract existence question,
+but does not by itself prove that Rust's retained search finds that witness
+or cannot panic.
+
+`clifford_fixed_space` is the renamed projective fixed-space API. The earlier
+rank-nullity theorem still applies. It is not an exact signed centralizer,
+and its packed kernel-basis implementation remains a refinement obligation.
+Greedy termination, Python/GIL behavior, and runtime/resource bounds are
+unchanged exclusions.
+
+### Independent audit
+
+The new modules build with the pinned Lean 4.34.0 project. The principal
+targets are audited individually with action-speaks and
+`require_nontrivial=true`.
+
+The project-mode signed audit was stopped at the watchdog's private-memory
+ceiling without a verdict. The supported **source mode** instead audits the
+complete local dependency closure: source bodies are concatenated in import
+order with only import lines removed; action-speaks supplies its pinned
+Mathlib, Physlib, and Cslib environment. No declarations, hypotheses, or
+audit checks are omitted. This is a source-snapshot audit plus a separate
+project build, not a successful project-environment replay audit.
+
+| Target | Project ledger entry | Result |
+| --- | --- | --- |
+| `TransvectionSigns.finalPauliCorrection_spec` | 76 | Verified |
+| `TransvectionRefinement.checked_candidate_spec` | 77 | Verified |
+| `TransvectionRefinement.bordered_family_spec` | 78 | Verified |
+| `TransvectionRefinement.retained_fallback_spec` | 79 | Verified |
+
+Each successful result checks elaboration, kernel replay, audit integrity,
+trusted axioms, absence of proof holes, statement integrity, non-vacuity,
+and hypothesis use. The axiom set is exactly `propext`, `Classical.choice`,
+and `Quot.sound`.
+
+The signed bundle contains `Symplectic`, `Pauli`, and `TransvectionSigns`,
+and has SHA256
+`f3956bb62936704da5ae409624d165bdcd47856906edd28b864b6b85c483e43e`.
+The unsigned bundle contains `Symplectic`, `Bilinear`, `Product`, `Minimality`,
+`BorderedFactorization`, `UpperBound`, and `TransvectionImplementation`,
+and has SHA256
+`5833ebd299e6fbfafdf5f5bcb3b3d4d4f1173f323bfc1869294cea9834ca2d8f`.
+Full source snapshots and results are retained in the local project ledger;
+per-file hash manifests and watchdog logs are retained with the session
+artifacts.
+
+### Implementation checks
+
+On the pinned PR checkout, with Rust 1.96.0, two build jobs, a writable
+session-local Cargo cache, and the generated Cargo lockfile:
+
+```bash
+cargo test --locked --offline --profile ci-test -p paulimer --all-features \
+  --lib transvection_exact -- --test-threads=2
+cargo test --locked --offline --profile ci-test -p paulimer --all-features \
+  --test transvection_test -- --test-threads=2
+```
+
+The focused unit run passed 20 tests; the public integration run passed 25.
+Coverage includes malformed candidates, forced fallback, all one-/two-qubit
+signed tableaux, the independent minimum-length oracle, and seeded larger
+bordered examples. The two exhaustive three-qubit tests remained ignored.
+These are implementation regressions, not a replacement for the stated
+refinement obligations. Existing Binar PyO3 deprecation warnings were not
+changed. Python tests and the full workspace Rust suite were not run.
+
+## PR #217 triangularizer milestone
+
+**Partially complete:** the complement and enumeration proof units are
+implemented and independently audited. The recursive search, core
+triangularizability bridge, and cache/deduplication proofs are still pending.
+The source pin remains `2ce895eda84473762d7db36bf6c3561460992858`.
+
+### Complement and alternating guard
+
+[`Triangularization.lean`](../formal/PaulimerFormal/Triangularization.lean)
+models the right-orthogonal complement with coupling `y ↦ form pick y`.
+It removes the chosen coupling-one row and adds that row to every other
+coupling-one row, preserving their order. `exists_coupling_pivot` shows that
+a nonisotropic pick in the supplied span guarantees such a row exists.
+`complement_spec` proves that independent input gives independent output
+spanning exactly the intersection with the coupling kernel, with dimension
+decreased by one. It applies to any coupling-one pivot; choosing Rust's
+first such row does not require a stronger mathematical assumption.
+
+`alternatingCheck_iff` proves the exact half-matrix check equivalent to
+vanishing self-pairing on the entire span. This includes the cross-pair
+symmetry comparisons, not just zero diagonal entries. It needs neither
+independence nor nondegeneracy nor symmetry of the original form.
+
+### Exact binary enumeration
+
+[`SpanEnumeration.lean`](../formal/PaulimerFormal/SpanEnumeration.lean)
+models `SpanVectors::next`, not the older factorization reference search:
+
+- `nextBits` carries from the lowest coefficient index upward, without a
+  machine-word dimension bound.
+- `advance` performs the same successive vector XORs. `advance_spec`
+  proves that a current vector equal to the decoded coefficients remains
+  equal to the decoded next coefficients, or returns `none` on overflow.
+- `binaryStates` is a finite trace starting at all-false coefficients;
+  `CounterTrace` checks every successor transition and the final overflow.
+- `spanEnumeration_spec` proves that removing the initial state and decoding
+  yields exactly `2^n - 1` distinct vectors, with membership equivalent to
+  being nonzero and in the original independent family's span.
+
+Both the carry recursion and the trace construction are structurally
+terminating. The results are dimension-general and include empty input.
+The checked two-bit example records the order `00, 10, 01, 11`.
+
+The trace is materialized only as a semantic description; it does not model
+Rust's lazy allocation behavior. `none` represents terminal exhaustion,
+rather than exposing the mutable `exhausted` flag. Fixed-length function
+types exclude malformed runtime vector lengths. These are checked executable
+Lean models with explicit source correspondence, not a checked translation
+of Rust.
+
+### Audit record and next obligations
+
+All four targets passed action-speaks with `require_nontrivial=true`, using
+the same complete-source-closure method described above:
+
+| Target in `PaulimerFormal.Triangularization` | Project ledger entry | Result |
+| --- | --- | --- |
+| `complement_spec` | 80 | Verified |
+| `alternatingCheck_iff` | 81 | Verified |
+| `advance_spec` | 82 | Verified |
+| `spanEnumeration_spec` | 83 | Verified |
+
+Each audit replayed all 161 declarations in the bundle. All applicable
+checks passed, no warnings were reported, and the axiom set was exactly
+`propext`, `Classical.choice`, and `Quot.sound`. The unchanged dependency
+closure contains `Symplectic`, `Bilinear`, `Triangularization`, and
+`SpanEnumeration`, with bundle SHA256
+`67a632720036595e5849158a0775669348a92abdd93d7520d3fc4f55288aab16`.
+The manifests and audit hashes were checked against the current source files.
+The full pinned Lean project build passed (3088 jobs). No Rust code changed;
+the earlier pinned PR regression results were not rerun for these Lean-only
+additions.
+
+The next proof unit must implement first-success recursive backtracking and
+prove both successful triangularization and complete failure, connecting its
+ordered basis to `CorePresentation.IsTriangularizable`. Dimension decrease
+alone is not a completeness proof. After that, failure-cache entries and
+complement deduplication must be justified by keys with no false collisions,
+reusing Binar's row-space preservation. The converse key property is not
+required for correctness.
+
 ## Verification boundary
 
-The proof is mathlib-only and uses the pinned Lean and mathlib versions in the
-formal project. It contains no admitted theorem or project-defined axiom. The
+The unsigned minimality proof uses Mathlib; the signed refinement imports the
+existing Pauli model, which also has Physlib bridges. Both use the pinned
+formal-project dependencies. There is no admitted theorem or project-defined axiom. The
 main declarations depend only on Lean's standard `propext`,
 `Classical.choice`, and `Quot.sound` axioms.
 
@@ -512,6 +744,6 @@ cd paulimer/formal
 lake build
 ```
 
-The pins are Lean `4.32.2` and mathlib
-`905b95818eb32af7874a58b427f50c1711a5e96c`. On a fresh checkout,
+The pins are Lean `4.34.0` and mathlib
+`5ed2965256430c3649e86755f9576b54eca72435`. On a fresh checkout,
 `lake exe cache get` downloads the matching mathlib cache.

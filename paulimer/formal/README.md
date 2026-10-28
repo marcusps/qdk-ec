@@ -97,10 +97,30 @@ scalar phases, binary rank, and the structural rank sum used by `log2_size`
 under the truthful-promise condition above. Executable membership,
 factorization, and element-enumeration refinements remain separate obligations.
 
-The theorem concerns the Clifford's binary symplectic action. Pauli-image signs
-and global phase are outside its scope. It proves the action-level
-specification underlying the Rust algorithm, not the compiled Rust or Python
-bindings.
+The minimality theorem concerns the Clifford's binary symplectic action.
+`TransvectionSigns` additionally proves PR #217's final Pauli correction:
+equal binary preimages with self-inverse rows become exactly equal signed
+tableaux after the phase-mismatch correction, which is positive Hermitian.
+`TransvectionImplementation` verifies a typed executable candidate checker,
+minimality of accepted bordered candidates after a correct congruence-search
+rejection, and the retained fallback's factor order and minimality.
+
+These are conditional refinement contracts, not proofs of the complete Rust
+search or Python bindings. In particular, binary replay and Hermiticity of
+the rebuilt tableau remain inputs to the sign theorem. Global Clifford
+phase is not represented. See the
+[pinned PR #217 review and audit record](../docs/lean-transvection-minimality-proof.md#pr-217-refinement-review).
+
+`Triangularization` and `SpanEnumeration` cover the first two units of the
+congruence-search refinement: the exact ordered pivot-deletion/XOR complement,
+its span and dimension decrease, the half-matrix alternating guard, and the
+little-endian span iterator. The iterator step preserves its running XOR
+vector; its finite trace enumerates exactly `2^n - 1` distinct nonzero span
+vectors for an independent `n`-vector family, including `n = 0`.
+Four principal targets passed action-speaks source-mode audits (entries 80-83).
+Recursive backtracking correctness, its connection to core triangularizability,
+and memoization/deduplication remain unfinished. See the
+[milestone record](../docs/lean-transvection-minimality-proof.md#pr-217-triangularizer-milestone).
 
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying
 these results to a Rust input requires a valid Clifford tableau; the Rust
@@ -139,8 +159,9 @@ Implementation-facing matrix lemmas make the correspondence explicit:
   faithful basis to the canonical core used by the one-fix theorem.
 
 These lemmas assume the stated matrix invariants; they do not verify Rust's
-row reducer or triangularizer. The use of positive phase normalization in the
-Rust transvection pipeline, the greedy algorithm and its `4m + 2` guard,
+row reducer or triangularizer. Positive phase normalization is covered by the
+canonical Pauli model and the final-correction contract. A complete refinement
+of the Rust rotation pipeline, the greedy algorithm and its `4m + 2` guard,
 Python GIL behavior, and resource bounds remain outside the formalization.
 
 `PaulimerFormal.BinarBridge` imports the sibling `BinarFormal` project and
