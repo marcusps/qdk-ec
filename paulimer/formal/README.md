@@ -108,6 +108,14 @@ correction. Audits 113-114 passed. This closes the mathematical signed
 bridge for #119/#217, not compiled Rust, concrete unitary global phase, or
 the separate finite classification claims in #118.
 
+`TwoQubitEnumeration` lists every element of `Sp(4,2)` exactly once and
+proves its cardinality is 720. Four-bit frames decode bijectively to
+binary matrices; their six pairing conditions are equivalent to
+symplecticity. The count uses ordinary kernel reduction, with a structural
+duplicate-freedom proof. Audit 115 passed. The 210/90 exception counts and
+greedy optimality are not consequences of enumeration alone and remain
+pending.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary

@@ -1220,6 +1220,36 @@ applicable checks passed with only `propext`, `Classical.choice`, and
 Every constituent hash matches; the full build passed (3103 jobs), including
 all existing Pauli-group proofs after the witness generalization.
 
+## Complete two-qubit enumeration
+
+[`TwoQubitEnumeration.lean`](../formal/PaulimerFormal/TwoQubitEnumeration.lean)
+proves the first finite claim in #118: `Sp(4,2)` has exactly **720** elements.
+Four-bit codes decode injectively and surjectively to the two-qubit phase
+space, reusing Binar's Boolean-to-F2 interpretation. The Boolean XOR/AND
+pairing is proved equal to the existing symplectic form.
+
+The enumerator chooses two canonical X/Z pairs subject to the six required
+pairings. Its frame-to-matrix map is bijective on all binary matrices, and
+its membership condition is equivalent to symplecticity. A structural
+`List.Nodup` proof handles the nested filtered enumeration; no quadratic
+duplicate scan is part of the proof. Ordinary `decide` checks the length
+720 by kernel reduction. `enumeration_spec` proves duplicate freedom,
+length, completeness for every `SymplecticAction 2`, and cardinality; a
+Mathlib list equivalence also provides the finite indexing correspondence.
+
+Action-speaks entry **115** verified this contract, replaying 1254
+declarations with all applicable checks passing and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete local-source bundle,
+with the finite 1,000,000-heartbeat prefix, has SHA256
+`44f9b686dd4235d5f55e95a35e5d4a2f4271222841b8d944734260df0ffb4528`.
+All constituent hashes match; the full build passed (3105 jobs). Execution
+also checked all 720 frames against the full signed-tableau validity checker.
+
+The separate counts of 210 nonhyperbolic exceptions and 90 rank-three
+obstructions, optimality of the greedy output on this finite group, and
+higher-qubit counterexamples remain pending. Enumeration is their complete
+finite domain, not a proof of those classifications.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

@@ -26,3 +26,4 @@ import PaulimerFormal.Clifford
 import PaulimerFormal.CliffordTableau
 import PaulimerFormal.CliffordRealization
 import PaulimerFormal.CliffordUniqueness
+import PaulimerFormal.TwoQubitEnumeration
