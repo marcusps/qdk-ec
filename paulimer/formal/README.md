@@ -67,7 +67,8 @@ exponent, is a phase-preserving Pauli-group automorphism. The inverse uses
 the negative exponent; self-inversion is preserved, and the projective
 action is exactly the binary transvection. Audit 105 verified the combined
 contract, including the Hermitian precondition. This is an algebraic bridge;
-the concrete unitary-matrix and signed-tableau interpretations remain open.
+the concrete unitary-matrix interpretation remains open. The signed-tableau
+interpretation is established below.
 
 `Clifford` defines phase-preserving Pauli automorphisms as a subgroup of
 Mathlib's `MulAut`. It derives their symplectic binary actions, signed
@@ -92,9 +93,20 @@ binary decomposition of its inverse preimage matrix; left Pauli conjugation
 then implements the existing final sign correction exactly. Thus binary
 replay and Hermiticity are derived rather than assumed for this construction.
 Audits 111-112 passed. All 24 signed one-qubit tableaux were reconstructed
-in bounded execution batches. Uniqueness and concrete unitary realization
-remain open. Minimality counts binary transvections, not the separate final
+in bounded execution batches. Concrete unitary realization remains open.
+Minimality counts binary transvections, not the separate final
 Pauli correction.
+
+`CliffordUniqueness` proves that valid signed tableaux extend uniquely to
+phase-preserving Pauli automorphisms, using Mathlib's equalizer subgroup
+and a generalized version of the existing Pauli-group span witness proof.
+The resulting equivalence upgrades signed row reconstruction to full action
+equality. `signedDecomposition_spec` proves exact reconstruction of every
+semantic Clifford by shortest nonzero binary transvections, lifted to
+positive-Hermitian quarter-turns, and the final positive-Hermitian Pauli
+correction. Audits 113-114 passed. This closes the mathematical signed
+bridge for #119/#217, not compiled Rust, concrete unitary global phase, or
+the separate finite classification claims in #118.
 
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
@@ -140,8 +152,9 @@ minimality of accepted bordered candidates after a correct congruence-search
 rejection, and the retained fallback's factor order and minimality.
 
 These are conditional refinement contracts, not proofs of the complete Rust
-search or Python bindings. In particular, binary replay and Hermiticity of
-the rebuilt tableau remain inputs to the sign theorem. Global Clifford
+search or Python bindings. Binary replay and Hermiticity are inputs to the
+standalone sign theorem; `CliffordTableau.signedDecomposition_spec` now
+derives them for the complete semantic construction. Global Clifford
 phase is not represented. See the
 [pinned PR #217 review and audit record](../docs/lean-transvection-minimality-proof.md#pr-217-refinement-review).
 

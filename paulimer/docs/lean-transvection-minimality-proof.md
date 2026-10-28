@@ -1178,6 +1178,48 @@ cases 1-16 before its watchdog stopped it; separate bounded batches
 completed 17-20 and 21-24. No runtime-success claim is made here for the
 still-pending two-qubit minimal SWAP case.
 
+## Unique extension and full signed decomposition
+
+[`CliffordUniqueness.lean`](../formal/PaulimerFormal/CliffordUniqueness.lean)
+proves that signed standard-generator images determine a phase-preserving
+Pauli automorphism. Mathlib's `MonoidHom.eqLocus` is the subgroup where two
+actions agree. The existing Pauli-group span-to-product witness argument
+was generalized to arbitrary subgroups and row witnesses; its former
+echelon-specific theorem now specializes that same proof. Standard X/Z
+rows span the whole binary space, giving an agreeing representative for
+every projective vector. Scalar-phase preservation then recovers every
+signed Pauli.
+
+Consequently `preimages_injective` proves signed preimage uniqueness,
+`valid_iff_exists_unique_action` characterizes valid tableaux by unique
+extension, and `actionEquivValidTableau` packages the two directions as a
+Mathlib equivalence. This includes the zero-qubit case.
+
+`signedDecomposition_spec` upgrades the previous row-level reconstruction
+to equality of the full semantic Clifford action. The complete minimal
+binary search returns shortest nonzero centers. Their positive-Hermitian
+quarter-turns, in the proved reversed composition order, followed by the
+positive-Hermitian final Pauli correction on the left, give exactly the
+original action on every Pauli. This closes the mathematical signed
+bridge for #119/#217: the binary replay and Hermiticity needed by the
+correction theorem are consequences of the construction, not assumptions
+about an external rebuilt tableau.
+
+Minimality still means binary transvection count with a separate Pauli
+correction, not minimum total gate count in a different cost model.
+Concrete unitary global phase and compiled Rust execution are not
+represented. The #118 finite classification and greedy-optimality claims
+remain separate pending work.
+
+Action-speaks entries **113-114** verified `valid_iff_exists_unique_action`
+and `signedDecomposition_spec`, replaying 1751 declarations each. All
+applicable checks passed with only `propext`, `Classical.choice`, and
+`Quot.sound`. The complete local-source bundle, including the finite
+1,000,000-heartbeat prefix, has SHA256
+`0184ebbc9ecc6bce18c225a36b585143327a12ae8fcfc67091ff8dd7380c67e6`.
+Every constituent hash matches; the full build passed (3103 jobs), including
+all existing Pauli-group proofs after the witness generalization.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

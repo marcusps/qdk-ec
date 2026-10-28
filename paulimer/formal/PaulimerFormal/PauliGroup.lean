@@ -195,25 +195,17 @@ theorem echelonPauliGroup_le_generatedPauliGroup
   rintro _ ⟨row, rfl⟩
   exact echelonPauliProduct_mem_generatedPauliGroup _ row
 
-theorem exists_mem_echelonPauliGroup_projectiveRow_eq
-    (generators : List (DensePauli m))
+theorem exists_mem_subgroup_projectiveRow_eq {ι : Type*}
+    (subgroup : Subgroup (Pauli m))
+    (rows : ι → Fin (m + m) → F2)
+    (row_witness : ∀ index, ∃ pauli ∈ subgroup, pauli.projectiveRow = rows index)
     {vector : Fin (m + m) → F2}
-    (member :
-      vector ∈
-        Submodule.span F2
-          (Set.range
-            (EchelonForm.new
-              (bitMatrixFromPaulis generators)).matrix.decode)) :
-    ∃ pauli,
-      pauli ∈ echelonPauliGroup generators ∧
-      pauli.projectiveRow = vector := by
+    (member : vector ∈ Submodule.span F2 (Set.range rows)) :
+    ∃ pauli ∈ subgroup, pauli.projectiveRow = vector := by
   induction member using Submodule.span_induction with
   | mem vector member =>
       rcases member with ⟨row, rfl⟩
-      exact
-        ⟨echelonPauliProduct generators row,
-          Subgroup.subset_closure (Set.mem_range_self row),
-          echelonPauliProduct_projectiveRow generators row⟩
+      exact row_witness row
   | zero =>
       exact ⟨1, Subgroup.one_mem _, Pauli.projectiveRow_one⟩
   | add left right _ _ left_exists right_exists =>
@@ -233,6 +225,23 @@ theorem exists_mem_echelonPauliGroup_projectiveRow_eq
             Pauli.projectiveRow_one⟩
       · rw [one, one_smul]
         exact exists_pauli
+
+theorem exists_mem_echelonPauliGroup_projectiveRow_eq
+    (generators : List (DensePauli m))
+    {vector : Fin (m + m) → F2}
+    (member :
+      vector ∈
+        Submodule.span F2
+          (Set.range
+            (EchelonForm.new
+              (bitMatrixFromPaulis generators)).matrix.decode)) :
+    ∃ pauli,
+      pauli ∈ echelonPauliGroup generators ∧
+      pauli.projectiveRow = vector :=
+  exists_mem_subgroup_projectiveRow_eq (echelonPauliGroup generators) _
+    (fun row => ⟨echelonPauliProduct generators row,
+      Subgroup.subset_closure (Set.mem_range_self row),
+      echelonPauliProduct_projectiveRow generators row⟩) member
 
 theorem generatedPauliGroup_projectiveRow_mem
     (generators : List (DensePauli m))
