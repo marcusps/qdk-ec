@@ -332,6 +332,24 @@ replaying 1309 declarations with standard axioms only. Its complete
 `0f22e9af37cab4643b2020225c4dc08d42c0fbdf5818d8661135bf69c6aec8ca`;
 all constituent hashes match.
 
+`PauliIntersectionSelection` verifies executable ordered common-phase lookup
+and rejected-anchor discovery using the packed membership algorithm.
+Lookup tries the Rust `xz` phases `0, 1, 2, 3`; it succeeds exactly when a
+common representative exists and returns an actual member of both groups
+with the requested projective row. Anchor discovery returns a rejected input
+or certifies that every input is compatible. `pairedVariant_exists` proves
+that lookup cannot fail on the product of two rejected rows drawn from the
+common projective space. Execution checked six cases, including the original
+counterexample, its repaired product, identical groups, and zero qubits.
+The complete intersection traversal and projective-basis extraction remain
+separate obligations.
+
+Audit **134** passed all checks, replaying 1323 declarations with standard
+axioms only. Its complete 18-source bundle, with the finite
+1,000,000-heartbeat prefix, has SHA256
+`2e4c628d347a7f1d5f5ee82f465f6a7f638fc18875861c140d142d0cd9bc2ef4`;
+all constituent hashes match.
+
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:
 equal binary preimages with self-inverse rows become exactly equal signed
