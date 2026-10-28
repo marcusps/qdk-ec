@@ -30,3 +30,4 @@ import PaulimerFormal.TwoQubitEnumeration
 import PaulimerFormal.TwoQubitAction
 import PaulimerFormal.TwoQubitRank
 import PaulimerFormal.TwoQubitGreedy
+import PaulimerFormal.TwoQubitMinimality

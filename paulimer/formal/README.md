@@ -127,16 +127,23 @@ Kernel reduction proves rank distribution `[1, 15, 100, 300, 304]` and
 exactly 90 nonhyperbolic rank-three actions whose every rank-lowering
 transvection leaves a hyperbolic rank-two action. The obstruction count
 is split into sixteen first-row batches. Audit 117 passed. Exact
-minimal lengths for these actions, the 210 exceptions, and greedy
-optimality remain pending.
+minimal lengths for these actions and the 210 exceptions remain pending;
+greedy optimality is established below.
 
 `TwoQubitGreedy` proves that four-bit ordered selection and bounded
 execution return exactly the general `GreedyDecomposition` output.
 Ten fuel always suffices for symplectic frames, with nonzero factors,
 exact replay, and length at most nine. Fuel exhaustion is explicit,
 not an empty-factor fallback. Audit 118 passed. Execution also compared
-all 720 outputs against the general implementation and checked replay;
-this is not yet a proof of greedy minimality.
+all 720 outputs against the general implementation and checked replay.
+
+`TwoQubitMinimality` proves greedy optimality for every two-qubit
+symplectic action, against arbitrary-length transvection words.
+The 720-entry `TwoQubitDistances` certificate is checked against exact
+greedy execution, and all 11,520 transvection neighbors satisfy the
+length inequality. Reverse word induction turns this local inequality
+into a lower bound for every factorization. Audit 119 passed. The
+certificate is verified data, not an assumption about the greedy code.
 
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered

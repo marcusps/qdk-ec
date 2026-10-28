@@ -1246,8 +1246,8 @@ All constituent hashes match; the full build passed (3105 jobs). Execution
 also checked all 720 frames against the full signed-tableau validity checker.
 
 Enumeration supplies the complete finite domain, not the classifications.
-The rank-three obstruction count is proved separately below; the 210
-nonhyperbolic exceptions, greedy optimality, and higher-qubit
+The rank-three obstruction count and greedy optimality are proved
+separately below; the 210 nonhyperbolic exceptions and higher-qubit
 counterexamples remain pending.
 
 ## Four-bit dynamics and the hyperbolic count
@@ -1289,7 +1289,8 @@ rank leaves a hyperbolic rank-two action. Surjectivity of four-bit decoding
 ensures that this quantifies over all centers, not a restricted candidate
 set. There are exactly **90** such actions. This is the obstruction
 property from #118; connecting it to exact minimal length four remains
-separate work, as do the 210 rank-plus-one exceptions and greedy optimality.
+separate work, as do the 210 rank-plus-one exceptions. Greedy optimality
+is proved below.
 
 The first monolithic source audit was stopped at its private-memory
 ceiling without producing a verdict. Factoring the existing enumerator
@@ -1319,7 +1320,7 @@ strictly decreasing potential, `greedy_refines` proves that sufficient fuel
 returns the exact general greedy list, not merely an equivalent product.
 Ten fuel suffices for every symplectic two-qubit frame. `greedy_spec`
 also proves replay, nonzero centers, and the general upper bound nine.
-It does not yet prove optimality.
+Optimality requires the separate argument below.
 
 Action-speaks entry **118** verified this contract, replaying 1522
 declarations with every applicable check passing and only `propext`,
@@ -1332,6 +1333,43 @@ every factor list, and checked nonzero factors and the length bound.
 The observed length distribution was `[1, 15, 85, 225, 274, 120]`;
 that runtime observation is not itself a kernel-checked count or
 a minimum-length distribution.
+
+## Greedy optimality on every two-qubit action
+
+[`TwoQubitMinimality.lean`](../formal/PaulimerFormal/TwoQubitMinimality.lean)
+proves `greedy_shortest` for every `SymplecticAction 2`. Its comparison is
+against **all finite transvection words**, not just tested lengths or
+the greedy candidates; even zero centers are allowed in competitors.
+
+[`TwoQubitDistances.lean`](../formal/PaulimerFormal/TwoQubitDistances.lean)
+contains a generated 720-entry candidate length certificate, returning
+`none` outside its listed frames. `lengths_checked` verifies every entry
+against the exact four-bit greedy executor. The earlier refinement then
+identifies these lengths with the general greedy algorithm. The generator
+and its output are not trusted premises.
+
+For every enumerated frame and all 16 vector codes, a kernel-checked
+neighbor test proves that its length is at most the updated length plus
+one. The check also rejects missing table entries. Sixteen first-row
+batches prevent an accumulating reduction cache from exhausting memory.
+Reverse induction on an arbitrary factor list, using transvection
+involutivity and length zero at identity, proves the universal lower bound.
+Greedy replay supplies the matching factorization.
+
+The finite checks use `decide +kernel`, not `native_decide`. Direct repeated
+greedy evaluation and a monolithic neighbor check exceeded bounded
+resource checks; the checked table and first-row batches keep the
+successful module build near 100 seconds.
+
+Action-speaks entry **119** verified `greedy_shortest`, replaying 1611
+declarations with every applicable check passing and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete local-source bundle,
+with the finite 1,000,000-heartbeat prefix, has SHA256
+`f5628d79786e653cb662d3dff622d8efa0eeedb8cf1f0e91e45595edf194e5a6`.
+All constituent hashes match; the full build passed (3110 jobs).
+The audit reported about 380 seconds of verification. Its watchdog
+used a 480-second allowance based on the measured additional certificate
+cost, retained the same memory limits, and confirmed child cleanup.
 
 ## Verification boundary
 
