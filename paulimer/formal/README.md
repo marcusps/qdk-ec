@@ -156,8 +156,7 @@ from #118; higher-qubit counterexamples and growing excess are separate.
 In `X0,X1,X2,Z0,Z1,Z2` bit order, centers `[9, 61, 43]` reproduce the
 action, whereas the general greedy output is exactly `[22, 52, 34, 31]`.
 Audit 121 passed. The proof follows all four actual selection/update
-steps; it does not depend on a search oracle. Extending the witness to
-every larger dimension remains open.
+steps; it does not depend on a search oracle.
 
 `GreedyBlocks` constructs arbitrary disjoint copies using Mathlib's
 block-diagonal ring homomorphism, matrix reindexing, and single-coordinate
@@ -169,6 +168,13 @@ each step advances one unfinished block, and the sum of remaining
 local steps decreases by one. Thus greedy exceeds every shortest
 decomposition by at least `k`, for arbitrary `k`. Audit 123 passed.
 The `3k` competitor is not claimed to be shortest.
+
+`SymplecticPadding` and `GreedyPadding` extend the witness by any number
+of identity qubits. For every dimension at least three, the embedded
+three-factor word replays the padded action, whereas the actual greedy
+algorithm takes four steps. The proof preserves the initial X-generator
+prefix, hyperbolicity at fallback, and each update. Audit 124 passed;
+execution checks also reproduced the result on three through five qubits.
 
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered

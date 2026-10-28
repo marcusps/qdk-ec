@@ -1431,9 +1431,9 @@ bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
 All constituent hashes match; the full build passed (3112 jobs). Execution
 also reproduced the exact greedy list and replayed the shorter word.
 
-Padding to every larger dimension remains open. Arbitrarily growing
-excess is proved below by dimension-general selection and length proofs,
-not inferred from disjoint-copy experiments.
+Padding to every larger dimension and arbitrarily growing excess are
+proved below by dimension-general selection and length proofs, not
+inferred from disjoint-copy experiments.
 
 ## Arbitrary disjoint copies: the shorter factorization
 
@@ -1494,6 +1494,36 @@ declarations with every applicable check passing and only `propext`,
 with the finite 1,000,000-heartbeat prefix, has SHA256
 `e2d1e145adcf35186e61a72736faabd9e8461656d63730723bac533e791ebbc5`.
 All 24 constituent hashes match the audited source.
+
+## Greedy nonminimality in every dimension at least three
+
+[`SymplecticPadding.lean`](../formal/PaulimerFormal/SymplecticPadding.lean)
+constructs identity padding using Mathlib's two-block matrices and
+reindexing equivalence. It preserves symplecticity, products,
+transvections, the embedded row action, and hyperbolicity.
+
+[`GreedyPadding.lean`](../formal/PaulimerFormal/GreedyPadding.lean)
+proves that the embedded witness's three X generators are an exact
+prefix of the global standard basis. The active and fallback searches
+therefore select the same embedded vectors as the original witness.
+The four actual updates commute with padding; the resulting greedy
+length is exactly four. The embedded three-factor word reconstructs
+the same padded action.
+
+`all_dimensions` concludes that for **every n >= 3**, a symplectic
+action on **n** qubits has a valid three-factor decomposition and a
+four-factor greedy output, which is not shortest. No extra assumption
+about padding preserving the algorithm is left unproved. As before,
+three is an upper bound, not a claimed exact minimum.
+
+Action-speaks entry **124** verified this result, replaying 1126
+declarations with every applicable check passing and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete local-source bundle,
+with the finite 1,000,000-heartbeat prefix, has SHA256
+`7c64553c5e4fae46d28eb2d261ddef26e7ad7c99ed5481857ea34760954db9e3`.
+All 26 constituent hashes match. Bounded execution checks also replayed
+the three-factor competitor and obtained the generic four-factor greedy
+output on three, four, and five qubits.
 
 ## Verification boundary
 
