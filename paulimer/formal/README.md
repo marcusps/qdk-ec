@@ -371,6 +371,19 @@ declarations with standard axioms only. The complete 19-source bundle has SHA256
 `019fb0a378c0411752b82c1fab7cee00192b1105a5a6239074cd7a50fe066d84`;
 all constituent hashes match.
 
+`IntersectionKernel.kernel_spec` verifies the first extraction prerequisite:
+the trailing rows of Binar's echelon transform, from rank to the last row,
+are an executable, independent basis of the input matrix's left kernel.
+This matches the dependency-row selection in Rust's row-space intersection.
+The result includes arbitrary rectangular matrices, empty matrices, and
+full row rank. Stacking, alpha projection, the product with the first input,
+and final pivot extraction still need to be connected to `ValidBasis`.
+Audit **138** passed all checks, replaying 1421 declarations with standard
+axioms only. Its complete 23-source bundle, with the finite
+1,000,000-heartbeat prefix, has SHA256
+`d77de84087a411867f4b17200a0f62f0997cbb6c4a117605710ac4b36be14598`;
+all constituent hashes match.
+
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:
 equal binary preimages with self-inverse rows become exactly equal signed

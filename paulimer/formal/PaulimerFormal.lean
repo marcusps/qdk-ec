@@ -13,6 +13,7 @@ import PaulimerFormal.PauliIntersection
 import PaulimerFormal.PauliIntersectionBasis
 import PaulimerFormal.PauliIntersectionSelection
 import PaulimerFormal.PauliIntersectionLoop
+import PaulimerFormal.IntersectionKernel
 import PaulimerFormal.Product
 import PaulimerFormal.Minimality
 import PaulimerFormal.UpperBound
