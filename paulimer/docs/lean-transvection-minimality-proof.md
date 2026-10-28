@@ -1031,6 +1031,38 @@ claims for all 720 two-qubit actions remain separate enumeration obligations.
 Neither signed replay nor verification of compiled Rust follows from this
 milestone.
 
+## Phase-aware Pauli-exponent automorphisms
+
+[`PauliExponent.lean`](../formal/PaulimerFormal/PauliExponent.lean)
+proves that the existing branchwise `Pauli.exponentAction` is a
+multiplicative bijection for every self-inverse Pauli exponent. The inverse
+uses its negative, scalar phases are fixed pointwise, and self-inverse
+inputs remain self-inverse. `exponentEquiv` packages the action as a
+Mathlib multiplicative equivalence. Its projective action is precisely
+`x -> x T_v`, including zero centers and arbitrary input phases.
+
+The proof separates the four commutation cases and uses the canonical
+Pauli commutation and conjugation theorems; it does not assume the desired
+automorphism law. The Hermitian exponent condition is important: the
+non-Hermitian exponent `iX` gives a concrete multiplicativity failure on
+`Z * Z`. Monitored execution checked all eight signed Hermitian one-qubit
+exponents on all 16 Paulis, including 2048 products, inverse identities,
+scalar phases and binary projection, and retained that counterexample.
+
+`PaulimerFormal.Pauli.exponent_spec` passed action-speaks as entry **105**,
+replaying 1117 declarations. Every applicable check passed, including
+hypothesis-use checking, with only `propext`, `Classical.choice`, and
+`Quot.sound`. The complete source snapshot, with the finite
+1,000,000-heartbeat prefix, has SHA256
+`ae1b74b62810ac49dca03e01248024156c9af785ac70d8537a4876ef3f7f2d82`.
+Its constituent hashes match the checked files; the full build passed
+(3099 jobs).
+
+This establishes phase-aware algebraic semantics for the update. It does
+not yet prove the concrete matrix formula for quarter-turn conjugation or
+the valid-tableau extension and image/preimage conventions required by
+the remaining signed decomposition bridge.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

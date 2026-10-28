@@ -21,3 +21,4 @@ import PaulimerFormal.CliffordFixedSpace
 import PaulimerFormal.GreedyReduction
 import PaulimerFormal.GreedySearch
 import PaulimerFormal.GreedyDecomposition
+import PaulimerFormal.PauliExponent

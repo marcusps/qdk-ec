@@ -62,6 +62,13 @@ by BinarFormal. The formal `exponentAction` names Rust's branchwise update;
 interpreting it as quarter-turn conjugation for suitably normalized Hermitian
 generators remains a separate matrix-level obligation.
 
+`PauliExponent` now proves that this branchwise update, for a self-inverse
+exponent, is a phase-preserving Pauli-group automorphism. The inverse uses
+the negative exponent; self-inversion is preserved, and the projective
+action is exactly the binary transvection. Audit 105 verified the combined
+contract, including the Hermitian precondition. This is an algebraic bridge;
+the concrete unitary-matrix and signed-tableau interpretations remain open.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary
