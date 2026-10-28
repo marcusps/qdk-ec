@@ -820,7 +820,7 @@ width. No Rust code changed.
 
 The separate Rust reducer's byte-for-byte correspondence is not established.
 Materialized lists model lazy traversal order, not allocation behavior.
-The executable fix fallback and signed tableau bridge remain separate work units.
+The signed tableau bridge remains a separate work unit.
 
 ### Executable residue extraction
 
@@ -860,6 +860,53 @@ The pinned Rust helper performs elimination on an augmented matrix; the Lean
 model reuses Binar's verified transform-producing reduction. Their required
 algebraic contract is proved for the executable model, not a byte-for-byte
 translation of that separate Rust loop. No Rust source changed.
+
+### Complete executable residue-fix fallback
+
+[`ResidueFixSearch.lean`](../formal/PaulimerFormal/ResidueFixSearch.lean)
+enumerates the computed residue basis using the verified little-endian span
+iterator. `spanVectors_lift` proves exact equality with enumerating standard
+coordinates first and then lifting them, including order. `acceptsFix_iff`
+characterizes the actual nonzero, equal-rank, and successful-core checks.
+`findFix_sound` proves the returned vector satisfies those conditions;
+`findFix_complete` proves a rejected canonical core cannot exhaust the search.
+
+`minimalDecomposition` is executable recursion on valid symplectic actions,
+not a noncomputable choice of a factorization. Its termination measure is
+zero when the rank branch succeeds and one otherwise.
+`fix_enters_rank_branch` proves strict decrease on the sole recursive call,
+even though residue rank is preserved. The recursively returned factors are
+followed by the fix, in the order required to replay the original action.
+The impossible no-fix branch is eliminated by the completeness proof.
+
+`checkedDecomposition` tests the rank branch first, then validates a supplied
+candidate, otherwise uses the complete fallback. Its theorem quantifies over
+every candidate, including absent, wrong-length, zero-containing, and
+incorrect-replay candidates; it does not assume the bordered construction
+succeeds. Both solvers replay the input with globally shortest
+factorizations. `shortest_nonzero` excludes identity factors from any
+shortest factorization, and hence from the checked solver's result.
+
+The combined `PaulimerFormal.ResidueFixSearch.fullSearch_spec` passed
+action-speaks as project ledger entry **99**, with
+`require_nontrivial=true`, all applicable checks passing, and only the three
+standard axioms. Kernel replay checked all 1465 declarations in the complete
+source closure. Its snapshot, with the finite 1,000,000-heartbeat prefix, has
+SHA256
+`8918b11ba2c31998ae041a43c27514bb59a0ac1f7611521edaf30eb563a8b62b`.
+The source hashes match the snapshot and the full Lean build passed
+(3094 jobs). An earlier source audit rejected an ambiguous unqualified
+`rank`; explicit qualification resolved it without changing the claim.
+
+**Runtime boundary:** empty and one-qubit execution cases completed, but a
+single literal, kernel-certified SWAP fallback did not finish within a
+monitored 180-second Lean-interpreter run. It was stopped with no surviving
+children. No successful runtime result is claimed for that fallback or the
+remaining candidate regression batch. Those execution/fixture checks remain
+outstanding; they do not substitute for or invalidate the independently
+replayed dimension-general termination and correctness proofs. Runtime cost,
+Rust reducer correspondence, and the signed tableau bridge are not proved by
+this milestone.
 
 ## Verification boundary
 

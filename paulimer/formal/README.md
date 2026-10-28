@@ -147,6 +147,14 @@ triangularizable. Action-speaks entries 95-97 verified these results.
 Noncomputable witnesses occur only in specifications, not the executable
 data. Rust's separate augmented reducer correspondence remains unproved.
 
+`ResidueFixSearch` proves complete exhaustive fix search and implements the
+recursive fallback, terminating by whether the rank branch succeeds rather
+than by residue rank. Its total solver and checked-candidate variant return
+globally shortest factorizations; all returned centers are nonzero.
+The combined contract passed action-speaks (entry 99). Concrete SWAP fallback
+execution remains unverified within the monitored three-minute interpreter
+check; this is separate from its dimension-general kernel proof.
+
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying
 these results to a Rust input requires a valid Clifford tableau; the Rust
 decomposition functions do not themselves call `is_valid`.

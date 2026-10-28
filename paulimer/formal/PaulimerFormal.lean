@@ -16,3 +16,4 @@ import PaulimerFormal.TriangularSearch
 import PaulimerFormal.TriangularMemo
 import PaulimerFormal.TriangularKeys
 import PaulimerFormal.ResidueExtraction
+import PaulimerFormal.ResidueFixSearch
