@@ -226,8 +226,20 @@ old audit blocker; the memory limits and kernel checks were unchanged.
 The complete 14-source bundle, with the finite 1,000,000-heartbeat prefix,
 has SHA256
 `897611e1e20522726804196aaf8c19b3ea58b6e1c1ed200e0ec45d2079552a07`;
-all constituent hashes match. Actual subgroup cardinality and executable
-membership remain separate from the structural size-rank formula.
+all constituent hashes match.
+
+`PauliGroupCardinality.generatedPauliGroup_card` proves the actual
+phase-aware subgroup has cardinality `2 ^ standardLog2Size`, including
+empty input and zero qubits. Its binary-projective map is surjective
+onto the verified projective span; its kernel is equivalent to the
+scalar phase subgroup. Mathlib's kernel/index and finite-vector-space
+cardinality theorems then give the result. Audit **127** passed all
+checks, replaying 1278 declarations with standard axioms only.
+The complete 15-source bundle, with the finite 1,000,000-heartbeat prefix,
+has SHA256
+`8c28224ac0756d229ca9bed14fb6c5033f5e34db2b99903a6adb47503dbd4ee4`;
+all constituent hashes match. Executable membership and enumeration
+remain separate refinements.
 
 The minimality theorem concerns the Clifford's binary symplectic action.
 `TransvectionSigns` additionally proves PR #217's final Pauli correction:

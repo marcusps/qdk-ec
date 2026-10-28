@@ -4,6 +4,7 @@ import PaulimerFormal.Pauli
 import PaulimerFormal.PauliRepresentations
 import PaulimerFormal.PauliAlgorithms
 import PaulimerFormal.PauliGroup
+import PaulimerFormal.PauliGroupCardinality
 import PaulimerFormal.Product
 import PaulimerFormal.Minimality
 import PaulimerFormal.UpperBound
