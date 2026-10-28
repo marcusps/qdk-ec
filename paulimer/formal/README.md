@@ -507,8 +507,11 @@ check; this is separate from its dimension-general kernel proof.
 reindexes it into positive Hermitian Paulis. The generators are independent,
 span exactly `Fix(F)`, and number `2m - residueRank(F)`. The combined theorem
 passed action-speaks (entry 100). This is the projective fixed space, not
-the exact signed centralizer. Nonempty interpreter regression checks remain
-outstanding; the one-qubit identity check exceeded its two-minute bound.
+the exact signed centralizer. After packed-transpose materialization, the
+previously blocked execution checks pass for the empty action, one-qubit
+identity, X-root, and Z-root. The persistent check verifies dimension,
+positive-Hermitian generators, and their fixed-vector equations:
+`lake --offline env lean --run tests/FixedSpace.lean`.
 
 `GreedyReduction` proves the two rank transitions underlying PR #118's
 greedy loop. For `v = x + xF` with `pairing(x, xF) = 1`, the update `F T_v`
