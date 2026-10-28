@@ -167,9 +167,15 @@ greedy loop. For `v = x + xF` with `pairing(x, xF) = 1`, the update `F T_v`
 adds exactly one fixed-space dimension and drops residue rank by one. If
 every `pairing(x, xF)` is zero, any residue update preserves the fixed space
 and rank, and a nonzero residue makes the updated action nonhyperbolic.
-The combined contract passed action-speaks (entry 101). Ordered greedy
-selection, loop termination, and signed tableau correspondence remain
-separate obligations.
+The combined contract passed action-speaks (entry 101).
+
+`GreedySearch` proves complete ordered selection, including equivalence to
+the singleton loop followed by the lexicographic pair loop and its XOR
+cross-pairing test. It returns no vector exactly for identity; every selected
+vector has nonzero residue and meets one of the proved reduction conditions.
+Audits 102-103 passed. Execution covers the empty case, all six one-qubit
+actions, a pair-only choice, and SWAP's hyperbolic fallback. Loop termination
+and signed tableau correspondence remain separate obligations.
 
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying
 these results to a Rust input requires a valid Clifford tableau; the Rust

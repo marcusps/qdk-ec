@@ -961,6 +961,34 @@ Its source hashes match the checked files, and the full project build
 passed (3096 jobs). These are symbolic step theorems, not execution tests
 or a completed proof of Rust's ordered greedy loop.
 
+## PR #118 ordered greedy selection
+
+[`GreedySearch.lean`](../formal/PaulimerFormal/GreedySearch.lean)
+enumerates the standard X-then-Z vectors followed by lexicographically
+ordered pair sums. It proves equality with the two-stage loop: first search
+singletons, then search `first < second` using the cross-pairing sum.
+The sum-equals-one predicate is exactly the XOR of the two anticommutation
+bits. Full-vector self-pairing reduces to this test after all singleton
+tests fail.
+
+Reusing the alternating-span theorem proves that active search fails
+exactly for hyperbolic actions. The first moved standard-vector fallback
+then makes next-vector selection return `none` exactly for the identity
+matrix. Every returned vector has nonzero residue and is either
+self-anticommuting or comes from a hyperbolic action. These selection
+claims hold even for unchecked matrices; the rank-transition theorems
+separately require symplecticity.
+
+Action-speaks verified `selection_spec` and `findActive_eq_ordered_loops`
+as entries **102-103**, replaying 582 declarations each with all applicable
+checks passing and only the standard three axioms. Their complete local
+source bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
+`7cda99a016cf7726de3b83cd737337b6e9d92ea18326f6a673994ecc4a065825`.
+All source hashes match; the full build passed (3097 jobs). Monitored
+execution passed the empty case, all six one-qubit symplectic actions, a
+two-qubit pair-only selection, and the SWAP hyperbolic fallback. These are
+next-step checks, not complete greedy-loop or minimal SWAP execution checks.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the
