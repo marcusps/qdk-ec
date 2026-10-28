@@ -23,3 +23,4 @@ import PaulimerFormal.GreedySearch
 import PaulimerFormal.GreedyDecomposition
 import PaulimerFormal.PauliExponent
 import PaulimerFormal.Clifford
+import PaulimerFormal.CliffordTableau

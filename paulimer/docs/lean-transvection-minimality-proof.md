@@ -1097,6 +1097,45 @@ Thus no argument identifies equal binary actions with equal signed
 actions. Valid-tableau extension, runtime layout correspondence, and
 concrete unitary realization remain distinct obligations.
 
+## Signed tableau validity
+
+[`CliffordTableau.lean`](../formal/PaulimerFormal/CliffordTableau.lean)
+defines positive standard X/Z generators and signed preimage rows. Its
+computable `validCheck` accepts exactly self-inverse rows with canonical
+pairwise commutation. This is also equivalent to self-inverse rows whose
+binary row matrix is symplectic.
+
+`upperValid_iff` proves equivalence with the per-qubit and upper-triangle
+conditions inspected in #217's `generic_algos.rs:89-112` at
+`2ce895eda84473762d7db36bf6c3561460992858`: Hermitian X/Z rows, an
+anticommuting pair at each qubit, and commuting XX/XZ/ZX/ZZ pairs between
+distinct qubits. Symmetry and vanishing self-pairings recover the omitted
+half and diagonal. This proves the mathematical acceptance criterion,
+not Rust control flow, memory safety, or trait implementations.
+
+Every phase-preserving Pauli automorphism yields a valid preimage tableau,
+and `preimageMatrix_preimages` identifies its matrix with the inverse
+binary action. Constructing an automorphism from arbitrary valid rows,
+proving its uniqueness, and discharging the signed decomposition bridge
+remain subsequent obligations.
+
+Action-speaks verified `CliffordTableau.tableau_spec` and
+`CliffordTableau.preimages_spec` as entries **108-109**. Each replayed
+1196 declarations with all applicable checks passing and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete local-source bundle,
+including the finite 1,000,000-heartbeat prefix, has SHA256
+`3f0c4a8883cb16b91501feaffadb7d00ca1ff7838f0bda2d7a21bd6f23514ab1`.
+Every constituent hash matches the audited source; the full build passed
+(3101 jobs).
+
+Five kernel-checked examples cover empty and standard tableaux, negative
+Hermitian rows, zero rows, and non-Hermitian rows. Bounded execution also
+compared the full checker with a literal ordered-loop reference on all
+256 one-qubit row pairs, accepting 24, and checked a two-qubit identity,
+cross-pair rejection, and three signed action-generated tableaux with
+their inverse matrices. This execution count is not a separate Lean
+enumeration-completeness theorem.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

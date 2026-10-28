@@ -78,6 +78,15 @@ automorphism projects to that transvection. Audits 106-107 passed.
 Constructing the automorphism from a validated runtime tableau remains open;
 binary identity is not identified with signed identity.
 
+`CliffordTableau` proves that its executable validity checker accepts exactly
+Hermitian rows with canonical commutation, equivalently Hermitian rows with
+a symplectic preimage matrix. The upper-triangle conditions in #217's
+`is_valid_clifford` are equivalent to this full-pair condition. Preimages
+of semantic Clifford actions are valid and their matrix is exactly the
+inverse binary action. Audits 108-109 passed. Constructive extension of
+arbitrary valid rows and its uniqueness remain open; these results do not
+verify compiled Rust or its storage layout.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary
