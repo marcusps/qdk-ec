@@ -1435,6 +1435,35 @@ Padding to every larger dimension and proving arbitrarily growing excess
 remain open. Disjoint-copy experiments are not a substitute for a
 dimension-general proof of the actual greedy selection behavior.
 
+## Arbitrary disjoint copies: the shorter factorization
+
+[`GreedyBlocks.lean`](../formal/PaulimerFormal/GreedyBlocks.lean)
+constructs `k` disjoint copies of the three-qubit witness for every
+natural `k`, including zero. A sum/product index equivalence places
+each local coordinate in the global X-then-Z order. Mathlib's
+`blockDiagonalRingHom` and `reindexAlgEquiv` supply the matrix algebra;
+the proof identifies the assembled symplectic form and preserves
+symplecticity, identity, and multiplication.
+
+Local phase vectors embed into one block. Their embedded transvections
+equal the corresponding single-block actions, so the ordered product
+of the embedded three-factor words reconstructs the full repeated
+action. `short_factorization_spec` proves this explicit factorization
+has length **3k**. This is only an upper bound: proving that the actual
+greedy algorithm returns **4k** remains outstanding.
+
+Action-speaks entry **122** verified this contract, replaying 1026
+declarations with every applicable check passing and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete local-source bundle,
+with the finite 1,000,000-heartbeat prefix, has SHA256
+`152f26a952f2f3efd67cfd7d3bdc313eff3f179c0019852511c5468f90861bb8`.
+Every constituent hash matches; the full build passed (3113 jobs).
+Separate execution checks replayed zero, one, and two blocks using
+stored intermediate matrices and observed greedy lengths zero, four,
+and eight. An initial combined zero-through-three execution exceeded
+its 90-second bound; the three-block execution remains unverified.
+Those samples do not establish the dimension-general greedy claim.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the

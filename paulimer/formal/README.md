@@ -159,6 +159,13 @@ Audit 121 passed. The proof follows all four actual selection/update
 steps; it does not depend on a search oracle. Extending the witness to
 every larger dimension and proving arbitrarily growing excess remain open.
 
+`GreedyBlocks` constructs arbitrary disjoint copies using Mathlib's
+block-diagonal ring homomorphism, matrix reindexing, and single-coordinate
+monoid homomorphisms. It proves that `k` copies have an explicit
+`3k`-factor decomposition, including `k = 0`. Audit 122 passed.
+The corresponding dimension-general greedy-length claim `4k` remains
+open; the shorter decomposition alone does not prove growing excess.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary

@@ -33,3 +33,4 @@ import PaulimerFormal.TwoQubitGreedy
 import PaulimerFormal.TwoQubitMinimality
 import PaulimerFormal.TwoQubitClassification
 import PaulimerFormal.GreedyCounterexample
+import PaulimerFormal.GreedyBlocks
