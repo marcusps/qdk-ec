@@ -34,3 +34,5 @@ import PaulimerFormal.TwoQubitMinimality
 import PaulimerFormal.TwoQubitClassification
 import PaulimerFormal.GreedyCounterexample
 import PaulimerFormal.GreedyBlocks
+import PaulimerFormal.GreedyBlockSelection
+import PaulimerFormal.GreedyBlockLength

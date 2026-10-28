@@ -157,14 +157,18 @@ In `X0,X1,X2,Z0,Z1,Z2` bit order, centers `[9, 61, 43]` reproduce the
 action, whereas the general greedy output is exactly `[22, 52, 34, 31]`.
 Audit 121 passed. The proof follows all four actual selection/update
 steps; it does not depend on a search oracle. Extending the witness to
-every larger dimension and proving arbitrarily growing excess remain open.
+every larger dimension remains open.
 
 `GreedyBlocks` constructs arbitrary disjoint copies using Mathlib's
 block-diagonal ring homomorphism, matrix reindexing, and single-coordinate
 monoid homomorphisms. It proves that `k` copies have an explicit
 `3k`-factor decomposition, including `k = 0`. Audit 122 passed.
-The corresponding dimension-general greedy-length claim `4k` remains
-open; the shorter decomposition alone does not prove growing excess.
+`GreedyBlockSelection` and `GreedyBlockLength` prove the actual greedy
+length is exactly `4k`: selection respects the global ordered basis,
+each step advances one unfinished block, and the sum of remaining
+local steps decreases by one. Thus greedy exceeds every shortest
+decomposition by at least `k`, for arbitrary `k`. Audit 123 passed.
+The `3k` competitor is not claimed to be shortest.
 
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered

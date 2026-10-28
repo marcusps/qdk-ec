@@ -1431,9 +1431,9 @@ bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
 All constituent hashes match; the full build passed (3112 jobs). Execution
 also reproduced the exact greedy list and replayed the shorter word.
 
-Padding to every larger dimension and proving arbitrarily growing excess
-remain open. Disjoint-copy experiments are not a substitute for a
-dimension-general proof of the actual greedy selection behavior.
+Padding to every larger dimension remains open. Arbitrarily growing
+excess is proved below by dimension-general selection and length proofs,
+not inferred from disjoint-copy experiments.
 
 ## Arbitrary disjoint copies: the shorter factorization
 
@@ -1449,8 +1449,8 @@ Local phase vectors embed into one block. Their embedded transvections
 equal the corresponding single-block actions, so the ordered product
 of the embedded three-factor words reconstructs the full repeated
 action. `short_factorization_spec` proves this explicit factorization
-has length **3k**. This is only an upper bound: proving that the actual
-greedy algorithm returns **4k** remains outstanding.
+has length **3k**. This is only an upper bound on the minimum; the
+actual greedy length **4k** is proved in the next milestone.
 
 Action-speaks entry **122** verified this contract, replaying 1026
 declarations with every applicable check passing and only `propext`,
@@ -1463,6 +1463,37 @@ stored intermediate matrices and observed greedy lengths zero, four,
 and eight. An initial combined zero-through-three execution exceeded
 its 90-second bound; the three-block execution remains unverified.
 Those samples do not establish the dimension-general greedy claim.
+
+## Arbitrarily growing greedy excess
+
+[`GreedyBlockSelection.lean`](../formal/PaulimerFormal/GreedyBlockSelection.lean)
+proves the exact selection behavior for any mixture of the witness's
+four intermediate states and identity blocks. The global standard basis
+is the ordered concatenation of block X generators followed by block Z
+generators. An active block supplies the first accepted X generator.
+If no block is active, the full action is hyperbolic and fallback chooses
+the first unfinished block's moved X generator. Finished blocks contribute
+neither kind of candidate.
+
+[`GreedyBlockLength.lean`](../formal/PaulimerFormal/GreedyBlockLength.lean)
+proves that this actual selection advances exactly one block. The sum
+of remaining local steps drops by one and is zero at termination.
+Well-founded induction using the existing decomposition equations gives
+`length_states`, then `repeated_length`: **k** witness blocks produce
+exactly **4k** greedy factors, including zero blocks.
+
+Combining this equality with the explicit **3k** factorization proves
+`unbounded_excess`: for every natural gap **k**, a symplectic action on
+**3k** qubits has greedy output at least **k** longer than every shortest
+decomposition. This does not assert that the competitor is itself
+shortest, nor that these examples cover dimensions not divisible by three.
+
+Action-speaks entry **123** verified this result, replaying 1085
+declarations with every applicable check passing and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete local-source bundle,
+with the finite 1,000,000-heartbeat prefix, has SHA256
+`e2d1e145adcf35186e61a72736faabd9e8461656d63730723bac533e791ebbc5`.
+All 24 constituent hashes match the audited source.
 
 ## Verification boundary
 
