@@ -18,3 +18,4 @@ import PaulimerFormal.TriangularKeys
 import PaulimerFormal.ResidueExtraction
 import PaulimerFormal.ResidueFixSearch
 import PaulimerFormal.CliffordFixedSpace
+import PaulimerFormal.GreedyReduction

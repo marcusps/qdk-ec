@@ -162,6 +162,15 @@ passed action-speaks (entry 100). This is the projective fixed space, not
 the exact signed centralizer. Nonempty interpreter regression checks remain
 outstanding; the one-qubit identity check exceeded its two-minute bound.
 
+`GreedyReduction` proves the two rank transitions underlying PR #118's
+greedy loop. For `v = x + xF` with `pairing(x, xF) = 1`, the update `F T_v`
+adds exactly one fixed-space dimension and drops residue rank by one. If
+every `pairing(x, xF)` is zero, any residue update preserves the fixed space
+and rank, and a nonzero residue makes the updated action nonhyperbolic.
+The combined contract passed action-speaks (entry 101). Ordered greedy
+selection, loop termination, and signed tableau correspondence remain
+separate obligations.
+
 The input type `SymplecticAction m` carries a proof of symplecticity. Applying
 these results to a Rust input requires a valid Clifford tableau; the Rust
 decomposition functions do not themselves call `is_valid`.

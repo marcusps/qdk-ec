@@ -935,6 +935,32 @@ cost must not be confused with Rust's mutable packed implementation.
 No timing bound is proved. Exact signed commutation is deliberately not
 claimed: Clifford X projectively fixes Z while conjugating it to -Z.
 
+## PR #118 greedy rank transitions
+
+[`GreedyReduction.lean`](../formal/PaulimerFormal/GreedyReduction.lean)
+proves the dimension-general steps for the row-action update `F T_v`, with
+`v = x + xF`. When `pairing(x, xF) = 1`, its fixed space is exactly
+`Fix(F) + span{x}`, with `x` outside the original fixed space. Therefore
+the residue rank drops by exactly one.
+
+The hyperbolic condition is defined explicitly as
+`pairing(x, xF) = 0` for every vector `x`, and is proved equivalent to
+alternation of the image-pairing bilinear form. In this case every residue
+update preserves the fixed space and residue rank. If the residue is
+nonzero, symplectic nondegeneracy supplies a vector that pairs to one with
+it; polarization shows this vector is self-anticommuting for the updated
+action. Thus the update leaves the hyperbolic case.
+
+`PaulimerFormal.GreedyReduction.reduction_spec` passed action-speaks as
+project ledger entry **101**, replaying 134 declarations with all applicable
+checks passing and only `propext`, `Classical.choice`, and `Quot.sound`.
+The full local-source bundle, including the finite 1,000,000-heartbeat
+prefix, has SHA256
+`931bd3a5e57b1231572ed4d25ea5d14e3c62bd214626e2a78727a325165d7076`.
+Its source hashes match the checked files, and the full project build
+passed (3096 jobs). These are symbolic step theorems, not execution tests
+or a completed proof of Rust's ordered greedy loop.
+
 ## Verification boundary
 
 The unsigned minimality proof uses Mathlib; the signed refinement imports the
