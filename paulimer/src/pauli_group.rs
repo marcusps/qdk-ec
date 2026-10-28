@@ -544,9 +544,18 @@ impl BitAnd for &PauliGroup {
 
         let insensitive_intersection = phase_insensitive_intersection_of(self, other);
         let mut generators = Vec::new();
+        let mut phase_mismatch = None;
         for pauli_base in insensitive_intersection.generators {
             if let Some(phased_pauli) = common_phase_variant_of(&pauli_base, self, other) {
                 generators.push(phased_pauli);
+            } else if let Some(anchor) = &phase_mismatch {
+                let paired = &pauli_base * anchor;
+                generators.push(
+                    common_phase_variant_of(&paired, self, other)
+                        .expect("Two phase mismatches must cancel modulo the groups' scalar phases"),
+                );
+            } else {
+                phase_mismatch = Some(pauli_base);
             }
         }
 

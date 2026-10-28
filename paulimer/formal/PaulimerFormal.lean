@@ -8,6 +8,8 @@ import PaulimerFormal.PauliGroupCardinality
 import PaulimerFormal.PauliGroupMembership
 import PaulimerFormal.PauliGroupDecisions
 import PaulimerFormal.PauliGroupEnumeration
+import PaulimerFormal.PauliIntersectionCounterexample
+import PaulimerFormal.PauliIntersection
 import PaulimerFormal.Product
 import PaulimerFormal.Minimality
 import PaulimerFormal.UpperBound

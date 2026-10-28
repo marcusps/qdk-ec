@@ -463,10 +463,64 @@ fn test_pauli_group_remainder_examples() {
     assert_eq!(remainder.binary_rank(), 1);
 }
 
+#[test]
+fn test_intersection_preserves_products_of_phase_mismatches() {
+    for (first, second, expected) in [
+        (vec!["XX", "ZZ"], vec!["-XX", "-ZZ"], vec!["-YY"]),
+        (vec!["XI", "IX"], vec!["iXI", "iIX"], vec!["XX"]),
+        (
+            vec!["XII", "IXI", "IIX"],
+            vec!["-XII", "-IXI", "-IIX"],
+            vec!["XXI", "XIX"],
+        ),
+    ] {
+        let first = PauliGroup::from_strings(&first);
+        let second = PauliGroup::from_strings(&second);
+        let expected = PauliGroup::from_strings(&expected);
+        assert_eq!(&first & &second, expected);
+        assert_eq!(&second & &first, expected);
+    }
+}
+
+#[test]
+fn test_intersection_all_three_generator_phase_assignments() {
+    for basis in [["XII", "IXI", "IIX"], ["XI", "ZI", "IX"]] {
+        let groups: Vec<_> = (0_u8..64)
+            .map(|phases| {
+                let generators: Vec<_> = basis
+                    .iter()
+                    .enumerate()
+                    .map(|(index, text)| {
+                        let mut pauli = SparsePauli::from_str(text).unwrap();
+                        pauli.assign_phase_exp((phases >> (2 * index)) & 3);
+                        pauli
+                    })
+                    .collect();
+                PauliGroup::new(&generators)
+            })
+            .collect();
+        for first in &groups {
+            for second in &groups {
+                let expected: HashSet<_> = first.elements().filter(|pauli| second.contains(pauli)).collect();
+                let actual: HashSet<_> = (first & second).elements().collect();
+                assert_eq!(actual, expected, "{first} intersect {second}");
+            }
+        }
+    }
+}
+
 // Property-based tests for PauliGroup intersection (BitAnd) operation
 // These tests verify fundamental mathematical properties that should hold
 // for any correct intersection implementation.
 proptest! {
+    #[test]
+    fn test_intersection_contains_exactly_common_elements(pair in pauli_group_pairs()) {
+        let (first, second) = pair;
+        let expected: HashSet<_> = first.elements().filter(|pauli| second.contains(pauli)).collect();
+        let actual: HashSet<_> = (&first & &second).elements().collect();
+        prop_assert_eq!(actual, expected);
+    }
+
     #[test]
     fn test_intersection_is_commutative(pair in pauli_group_pairs()) {
         let (group1, group2) = pair;
