@@ -152,6 +152,13 @@ the rank-count proofs now using direct kernel reduction. Together these
 modules close the 720/210/90 counts and two-qubit greedy optimality claims
 from #118; higher-qubit counterexamples and growing excess are separate.
 
+`GreedyCounterexample` proves exact nonminimality at three qubits.
+In `X0,X1,X2,Z0,Z1,Z2` bit order, centers `[9, 61, 43]` reproduce the
+action, whereas the general greedy output is exactly `[22, 52, 34, 31]`.
+Audit 121 passed. The proof follows all four actual selection/update
+steps; it does not depend on a search oracle. Extending the witness to
+every larger dimension and proving arbitrarily growing excess remain open.
+
 `PaulimerFormal.PauliGroup` verifies phase-aware subgroup standardization. Each
 row of BinarFormal's invertible RREF transform is interpreted as the ordered
 product of the indicated input Paulis. Pivot rows retain the verified binary

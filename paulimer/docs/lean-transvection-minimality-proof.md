@@ -1404,8 +1404,36 @@ in this bundle, preserving their statements while reducing temporary
 elaborator-cache memory.
 
 This closes the 720/210/90 counts and two-qubit greedy optimality claims
-from #118. It is not yet a proof of higher-qubit nonminimality, growing
-excess, or compiled Rust behavior.
+from #118. Higher-qubit nonminimality requires the separate witness
+below; growing excess and compiled Rust behavior remain outside this result.
+
+## Explicit three-qubit greedy counterexample
+
+[`GreedyCounterexample.lean`](../formal/PaulimerFormal/GreedyCounterexample.lean)
+defines a symplectic action with binary rows `[30, 63, 18, 23, 59, 29]`.
+Bits are ordered `X0,X1,X2,Z0,Z1,Z2`. A factorization has centers
+**[9, 61, 43]**, but the general ordered greedy algorithm returns exactly
+**[22, 52, 34, 31]**. Thus greedy is not shortest.
+
+The proof checks symplecticity and the shorter word's exact matrix
+product. It then checks each generic selection and update through four
+explicit intermediate actions, using the existing recursive decomposition
+equations to derive the full output list. These are kernel checks, not
+assumptions about the Python search that located the example. This proves
+a three-factor upper bound and a four-factor greedy output; it does not
+claim here that three is itself the exact minimum.
+
+Action-speaks entry **121** verified `GreedyCounterexample.witness_spec`,
+replaying 1000 declarations with every applicable check passing and only
+`propext`, `Classical.choice`, and `Quot.sound`. The complete local-source
+bundle, with the finite 1,000,000-heartbeat prefix, has SHA256
+`6513e0977ffc330d80fc08bae04fac59d88e3e8a07f51366c8b73be702dc2978`.
+All constituent hashes match; the full build passed (3112 jobs). Execution
+also reproduced the exact greedy list and replayed the shorter word.
+
+Padding to every larger dimension and proving arbitrarily growing excess
+remain open. Disjoint-copy experiments are not a substitute for a
+dimension-general proof of the actual greedy selection behavior.
 
 ## Verification boundary
 
