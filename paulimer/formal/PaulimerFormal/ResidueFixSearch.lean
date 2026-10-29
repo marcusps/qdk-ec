@@ -14,9 +14,18 @@ open ResidueExtraction Triangularization
 open scoped Matrix
 
 def acceptsFix {m : ℕ} (action : ActionMatrix m) (fix : PhaseVector m) : Bool :=
+  let updated := readAction (storeAction (action * transvection fix))
   decide (fix ≠ 0) &&
-    decide (ResidueExtraction.rank (action * transvection fix) = ResidueExtraction.rank action) &&
-    (memoizedTriangularize (core (action * transvection fix))).isSome
+    decide (ResidueExtraction.rank updated = ResidueExtraction.rank action) &&
+    (memoizedTriangularize (core updated)).isSome
+
+theorem acceptsFix_eq {m : ℕ} (action : ActionMatrix m) (fix : PhaseVector m) :
+    acceptsFix action fix =
+      (decide (fix ≠ 0) &&
+        decide (ResidueExtraction.rank (action * transvection fix) = ResidueExtraction.rank action) &&
+        (memoizedTriangularize (core (action * transvection fix))).isSome) := by
+  unfold acceptsFix
+  rw [storeAction_eq]
 
 theorem acceptsFix_iff {m : ℕ} (target : SymplecticAction m) (fix : PhaseVector m) :
     acceptsFix (target : ActionMatrix m) fix = true ↔
@@ -28,12 +37,27 @@ theorem acceptsFix_iff {m : ℕ} (target : SymplecticAction m) (fix : PhaseVecto
   have rejection := ResidueExtraction.core_search_none_iff (target * transvectionAction fix)
   change memoizedTriangularize (core ((target : ActionMatrix m) * transvection fix)) = none ↔
     ¬(canonicalCorePresentation (target * transvectionAction fix)).IsTriangularizable at rejection
-  simp only [acceptsFix, Bool.and_eq_true, decide_eq_true_eq, rank_eq,
+  simp only [acceptsFix_eq, Bool.and_eq_true, decide_eq_true_eq, rank_eq,
     Option.isSome_iff_ne_none, and_assoc]
   exact and_congr Iff.rfl (and_congr Iff.rfl ((not_congr rejection).trans not_not))
 
 def findFix {m : ℕ} (action : ActionMatrix m) : Option (PhaseVector m) :=
-  (spanVectors (basis action)).find? (acceptsFix action)
+  let action := readAction (storeAction action)
+  (spanVectors (basis action)).findSome? fun vector =>
+    let fix := readVector (storeVector vector)
+    if acceptsFix action fix then some fix else none
+
+theorem findFix_eq {m : ℕ} (action : ActionMatrix m) :
+    findFix action = (spanVectors (basis action)).find? (acceptsFix action) := by
+  unfold findFix
+  rw [storeAction_eq]
+  dsimp only
+  generalize spanVectors (basis action) = vectors
+  induction vectors with
+  | nil => rfl
+  | cons vector vectors induction =>
+      simp only [List.findSome?, List.find?_cons, storeVector_eq]
+      cases acceptsFix action vector <;> simp_all
 
 theorem spanVectors_lift {m n : ℕ} (vectors : Matrix (Fin n) (PhaseIndex m) F2) :
     (spanVectors (1 : Matrix (Fin n) (Fin n) F2)).map (fun coefficients => coefficients ᵥ* vectors) =
@@ -62,6 +86,7 @@ theorem findFix_sound {m : ℕ} (target : SymplecticAction m) (fix : PhaseVector
       residueRank ((target * transvectionAction fix : SymplecticAction m) : ActionMatrix m) =
         residueRank (target : ActionMatrix m) ∧
       (canonicalCorePresentation (target * transvectionAction fix)).IsTriangularizable := by
+  rw [findFix_eq] at found
   have accepted := List.find?_some (p := acceptsFix (target : ActionMatrix m)) found
   obtain ⟨nonzero, same_rank, triangular⟩ := (acceptsFix_iff target fix).mp accepted
   have member := List.mem_of_find?_eq_some found
@@ -80,6 +105,7 @@ theorem findFix_complete {m : ℕ} (target : SymplecticAction m)
     exact ⟨by simpa only [familySpan, basis_span] using in_span, nonzero⟩
   have accepted := (acceptsFix_iff target fix).mpr ⟨nonzero, same_rank, triangular⟩
   intro failed
+  rw [findFix_eq] at failed
   have not_accepted := List.find?_eq_none.mp failed fix member
   simp [accepted] at not_accepted
 

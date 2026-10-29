@@ -48,15 +48,40 @@ theorem retainedTransform_mul {rows columns : ℕ} (matrix : PackedMatrix rows c
   exact congrFun (congrFun (EchelonForm.new_transform_mul_eq matrix)
     ⟨row.val, row.isLt.trans_le (EchelonForm.new_pivots_length_le matrix)⟩) column
 
+/-- Return stored data: a function-valued cache can be eta-expanded into repeated reconstruction. -/
+def storeAction {m : ℕ} (action : ActionMatrix m) : Vector (Vector F2 (m + m)) (m + m) :=
+  Vector.ofFn fun row : Fin (m + m) =>
+    Vector.ofFn fun column : Fin (m + m) =>
+      action ((phaseIndexEquiv m).symm row) ((phaseIndexEquiv m).symm column)
+
+def readAction {m : ℕ} (rows : Vector (Vector F2 (m + m)) (m + m)) : ActionMatrix m :=
+  fun row column => rows[phaseIndexEquiv m row][phaseIndexEquiv m column]
+
+@[simp]
+theorem storeAction_eq {m : ℕ} (action : ActionMatrix m) : readAction (storeAction action) = action := by
+  funext row column
+  simp [readAction, storeAction]
+
+def storeVector {m : ℕ} (vector : PhaseVector m) : Vector F2 (m + m) :=
+  Vector.ofFn (toFinVector vector)
+
+def readVector {m : ℕ} (coordinates : Vector F2 (m + m)) : PhaseVector m :=
+  ofFinVector fun index => coordinates[index]
+
+@[simp]
+theorem storeVector_eq {m : ℕ} (vector : PhaseVector m) : readVector (storeVector vector) = vector := by
+  simp [readVector, storeVector]
+
 def packedResidue {m : ℕ} (action : ActionMatrix m) : PackedActionMatrix m :=
-  ⟨fun row => packVector fun column =>
-    residueMatrix action ((phaseIndexEquiv m).symm row) ((phaseIndexEquiv m).symm column)⟩
+  (⟨fun row => packVector fun column =>
+    residueMatrix action ((phaseIndexEquiv m).symm row) ((phaseIndexEquiv m).symm column)⟩ :
+      PackedActionMatrix m).materialize
 
 @[simp]
 theorem decode_packedResidue {m : ℕ} (action : ActionMatrix m) :
     (packedResidue action).decode = fun row column =>
       residueMatrix action ((phaseIndexEquiv m).symm row) ((phaseIndexEquiv m).symm column) := by
-  simp only [packedResidue, PackedMatrix.decode, decode_packVector]
+  simp only [packedResidue, PackedMatrix.materialize_eq, PackedMatrix.decode, decode_packVector]
   rfl
 
 def rank {m : ℕ} (action : ActionMatrix m) : ℕ :=
@@ -160,8 +185,20 @@ theorem core_search_none_iff {m : ℕ} (target : SymplecticAction m) :
     presentation.isTriangularizable_iff_canonical]
 
 def rankDecomposition {m : ℕ} (action : ActionMatrix m) : Option (List (PhaseVector m)) :=
+  let action := readAction (storeAction action)
   (Triangularization.memoizedTriangularize (core action)).map fun change =>
-    List.ofFn (change * basis action)
+    ((List.ofFn (change * basis action)).map storeVector).map readVector
+
+theorem rankDecomposition_eq {m : ℕ} (action : ActionMatrix m) :
+    rankDecomposition action =
+      (Triangularization.memoizedTriangularize (core action)).map
+        (fun change => List.ofFn (change * basis action)) := by
+  unfold rankDecomposition
+  rw [storeAction_eq]
+  simp only [List.map_map, Function.comp_def, storeVector_eq]
+  congr 1
+  funext change
+  exact List.map_id _
 
 theorem rankDecomposition_some_spec {m : ℕ} (target : SymplecticAction m)
     (centers : List (PhaseVector m))
@@ -169,6 +206,7 @@ theorem rankDecomposition_some_spec {m : ℕ} (target : SymplecticAction m)
     IsFactorization target centers ∧ centers.length = residueRank (target : ActionMatrix m) ∧
       ∀ other, IsFactorization target other → centers.length ≤ other.length := by
   obtain ⟨presentation, basis_eq, core_eq⟩ := core_spec target
+  rw [rankDecomposition_eq] at returned
   obtain ⟨change, found, rfl⟩ := Option.map_eq_some_iff.mp returned
   rw [Triangularization.memoizedTriangularize_eq] at found
   obtain ⟨unit, lower⟩ := Triangularization.congruenceTriangularize_sound _ _ found
@@ -185,7 +223,7 @@ theorem rankDecomposition_some_spec {m : ℕ} (target : SymplecticAction m)
 theorem rankDecomposition_none_iff {m : ℕ} (target : SymplecticAction m) :
     rankDecomposition (target : ActionMatrix m) = none ↔
       ¬(canonicalCorePresentation target).IsTriangularizable := by
-  simp only [rankDecomposition, Option.map_eq_none_iff, core_search_none_iff]
+  simp only [rankDecomposition_eq, Option.map_eq_none_iff, core_search_none_iff]
 
 example : rank (1 : ActionMatrix 0) = 0 := by decide
 

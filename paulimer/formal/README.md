@@ -499,9 +499,41 @@ data. Rust's separate augmented reducer correspondence remains unproved.
 recursive fallback, terminating by whether the rank branch succeeds rather
 than by residue rank. Its total solver and checked-candidate variant return
 globally shortest factorizations; all returned centers are nonzero.
-The combined contract passed action-speaks (entry 99). Concrete SWAP fallback
-execution remains unverified within the monitored three-minute interpreter
-check; this is separate from its dimension-general kernel proof.
+The combined contract originally passed action-speaks (entry 99).
+The previously blocked concrete minimal-SWAP fallback now executes and passes
+exact ordered replay, length-three, and nonzero-factor checks. The measured
+solver-and-replay time was approximately 5.7 seconds, versus the earlier
+180-second timeout; this is a local execution measurement, not a general
+complexity bound.
+
+The bottleneck was repeated evaluation of function-backed matrices and
+vectors. Generated code showed that function-returning cache helpers were
+eta-expanded, rebuilding their arrays at every coordinate lookup. The model
+now stores actual vector data with separate readers, materializes packed
+residue rows, and stores returned centers before replay. Candidate storage
+stops at the first successful vector rather than eagerly evaluating every
+candidate. `storeAction_eq`, `storeVector_eq`, `rankDecomposition_eq`,
+`acceptsFix_eq`, and `findFix_eq` prove exact semantic preservation, including
+first-success selection and output order.
+
+`tests/MinimalDecomposition.lean` checks zero qubits, all six one-qubit
+actions, SWAP's recursive fallback, absent/rejected/accepted checked
+candidates, and the exact SWAP output `[ZZ, XX + ZZ, XX]` in binary-vector
+notation. All twelve checks and the complete 3131-job project build pass:
+
+```bash
+cd paulimer/formal
+lake --offline env lean --run tests/MinimalDecomposition.lean
+```
+
+Audit **143** reverified `ResidueFixSearch.fullSearch_spec` on the final
+short-circuiting implementation with every check enabled, replaying 1479
+declarations with standard axioms only. Its complete 26-source bundle, with
+the finite 1,000,000-heartbeat prefix, has SHA256
+`fef04d8b040c76442be630a8e88d439b355586f0ac396fd13d6fd1bcdf0e240a`;
+all constituent hashes match. Audit 142 passed on the preceding eager-storage
+snapshot; it is not the receipt for the final source. These results still
+do not verify compiled Rust or unitary global phase.
 
 `CliffordFixedSpace` computes Binar's kernel basis of `(I + F)^T` and
 reindexes it into positive Hermitian Paulis. The generators are independent,
