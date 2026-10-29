@@ -293,6 +293,9 @@ Thus fix-vector existence is not an open question, and the mathematical result i
 This result justifies treating candidate exhaustion as unreachable for a correct implementation on valid input.
 The Rust function uses `unreachable!` for that case.
 
+For the Lean comparator proof shared by jmbr, see
+[his review comment](https://github.com/microsoft/qdk-ec/pull/119#discussion_r4392631870).
+
 The compiled Rust solver is not extracted from Lean or verified end to end by these theorems.
 Its residue computation, enumeration, and triangularization must satisfy the formal model's contracts.
 Rust regression tests remain separate evidence: exhaustive tests cover one, two, and three qubits.
