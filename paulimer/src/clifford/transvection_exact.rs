@@ -59,13 +59,12 @@ pub struct TransvectionDecomposition {
 ///
 /// The input must be a valid Clifford, as reported by `is_valid`. An invalid tableau, such as the
 /// one produced by `CliffordUnitary::zero`, can make the residue-fix step fail and panic.
-/// The search also panics if it exhausts its candidates for a valid input.
+/// Candidate exhaustion reaches `unreachable!`. A separate Lean proof establishes residue-fix
+/// existence in every dimension, but does not verify the compiled Rust implementation.
 /// The public oracles cover complete decompositions through three qubits, not the retained search.
 /// Separate direct tests exercise the search on every rank-plus-one action in those domains.
 /// The three-qubit direct test is ignored by default.
-/// The repository contains no proof for more qubits.
-/// The open question is whether `Res(F)` always contains a fix vector of the same residue rank.
-/// See `docs/transvection-minimality-correction.md` for the evidence and its limits.
+/// See `docs/transvection-minimality-correction.md` for the proof links and implementation limits.
 ///
 /// # Running time and memory
 ///
@@ -675,13 +674,12 @@ fn verified_decomposition_or_search(
 /// Searches for a residue vector `v` such that `F·T_v` has a congruence-triangularizable residue core of
 /// the same rank, so that `F` decomposes into `rank + 1` transvections.
 ///
+/// A separate Lean proof establishes that a nonzero fix exists in every dimension.
+/// Candidate exhaustion reaches `unreachable!`; the proof does not verify compiled Rust.
 /// Direct tests exercise all 225 two-qubit and 150,255 three-qubit rank-plus-one cases.
 /// No one-qubit action needs this step. The three-qubit direct test is ignored by default.
 /// The public decomposition oracles do not exercise this retained search.
-/// The repository contains no proof for more qubits.
-/// If the search exhausts its candidates, it panics.
-/// The open question is whether `Res(F)` always contains a fix vector of the same residue rank.
-/// See `docs/transvection-minimality-correction.md` for the evidence and its limits.
+/// See `docs/transvection-minimality-correction.md` for the proof links and implementation limits.
 ///
 /// Candidates are the nonzero residue vectors in ascending binary-coordinate order. The search is
 /// exhaustive over `Res(F)`.

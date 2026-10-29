@@ -5,11 +5,17 @@ If that search rejects the residue core, the decomposer tries the algorithm belo
 The new path replaces neither the initial search nor its alternating restriction guard.
 It constructs a complete candidate, then checks that candidate before returning it.
 
-This repository does not prove that the construction succeeds for every input.
-The exhaustive residue fix search remains as a fallback for that reason.
+The compiled construction is not verified end to end.
+The exhaustive residue fix search remains as a fallback.
 If construction or verification fails, the decomposer uses that search.
-The retained search still panics if it exhausts its candidates.
-The open question is whether $\mathrm{Res}(F)$ always contains a fix vector of the same residue rank.
+Candidate exhaustion reaches `unreachable!`.
+A separate Lean proof establishes that the required residue fix exists in every dimension.
+It also proves that the formalized complete search returns such a fix, but does not verify compiled Rust.
+
+The [correction note](transvection-minimality-correction.md#residue-fix-existence-and-implementation-limits)
+links to the pinned proof and states its scope.
+The theorem does not give the Rust search a polynomial time or memory bound.
+The runtime acceptance checks below remain necessary.
 
 ## Coordinates and algorithm
 
