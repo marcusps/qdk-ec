@@ -1,6 +1,7 @@
 import PaulimerFormal.Symplectic
 import PaulimerFormal.BinarBridge
 import PaulimerFormal.Pauli
+import PaulimerFormal.PauliMatrix
 import PaulimerFormal.PauliRepresentations
 import PaulimerFormal.PauliAlgorithms
 import PaulimerFormal.PauliGroup

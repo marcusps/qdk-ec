@@ -15,6 +15,20 @@ matrices and is proved multiplicative by `oneQubitMatrix_mul`;
 symbolic X, Y, and Z generators are also proved equal to Physlib's
 corresponding matrices.
 
+`PauliMatrix` extends this interpretation to arbitrary qubit counts using
+computational-bitstring indices. Its explicit matrix flips by `x` and multiplies
+by `i^phase (-1)^(z dot input)`. `matrix_spec` proves faithfulness, identity and
+multiplication preservation, inverse/adjoint agreement, unitarity, and exact
+equivalence of symbolic order-two with matrix Hermiticity. Every one-qubit
+matrix agrees with the existing Physlib-backed interpretation after reindexing.
+Zero qubits retain scalar phases rather than collapsing them. Audit **147**
+passed every check, replaying 275 declarations with standard axioms only.
+The complete three-source bundle has SHA256
+`7564d31be8c4cbe4f6bdc45df60e4878831ff2e4b253d53469e05cf250b9a095`.
+Six exact kernel-checked phase regressions run with
+`lake --offline env lean tests/PauliMatrix.lean`; these use exact complex
+mathematics, not floating-point execution.
+
 These Pauli results verify the canonical mathematics, not yet Paulimer's
 dense or sparse compiled Rust representations. `PauliRepresentations` adds
 executable Lean models for both storage strategies: dense coordinates reuse
@@ -35,8 +49,8 @@ every exposed mathematical observation in Rust. Separate `ZMod 256` lemmas
 verify wrapping addition, negation, and Rust's exact
 `4 - (raw % 4)` complex-conjugation update after reduction modulo four. These
 results do not verify compiled Rust memory or trait implementations. The
-concrete one-qubit bridge does not yet connect symbolic Hermiticity or
-complex conjugation to matrix conjugate transpose or entrywise conjugation.
+arbitrary-qubit matrix bridge above connects symbolic Hermiticity and group
+inversion to the conjugate transpose. Entrywise complex conjugation is separate.
 
 `PaulimerFormal.PauliAlgorithms` verifies the fixed-width mathematical core of
 the standalone Pauli algorithms. Its packed X-then-Z matrix encoding decodes to
