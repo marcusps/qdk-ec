@@ -526,7 +526,7 @@ fn find_fix_vector(action: &AlignedBitMatrix, qubit_count: usize, basis: &Aligne
             return vector;
         }
     }
-    panic!("no residue fix vector exists for this non-triangularizable core")
+    unreachable!("no residue fix vector exists for this non-triangularizable core")
 }
 
 /// Converts a `2n`-bit symplectic vector into a positive Hermitian Pauli (`x`-bits in `[0, n)`,
