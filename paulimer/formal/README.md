@@ -73,16 +73,26 @@ Rust's implementation, which instead compares the leading rows of two
 echelonized matrices and first derives a runtime qubit count. Proving that
 comparator requires a canonical-RREF uniqueness theorem not currently supplied
 by BinarFormal. The formal `exponentAction` names Rust's branchwise update;
-interpreting it as quarter-turn conjugation for suitably normalized Hermitian
-generators remains a separate matrix-level obligation.
+its matrix quarter-turn interpretation is now established below.
 
 `PauliExponent` now proves that this branchwise update, for a self-inverse
 exponent, is a phase-preserving Pauli-group automorphism. The inverse uses
 the negative exponent; self-inversion is preserved, and the projective
 action is exactly the binary transvection. Audit 105 verified the combined
-contract, including the Hermitian precondition. This is an algebraic bridge;
-the concrete unitary-matrix interpretation remains open. The signed-tableau
-interpretation is established below.
+contract, including the Hermitian precondition. The signed-tableau interpretation
+is established below.
+
+`PauliQuarterTurn` proves `Pauli.quarterMatrix_spec`: the explicit
+matrix `(I + i matrix(P)) / sqrt(2)` is unitary for every self-inverse Pauli `P`
+and conjugates `matrix(Q)` to `matrix(exponentAction Q P)`, for every signed
+Pauli `Q` and every qubit count. The positive sign matches the existing action;
+no matrix-exponential theorem or approximation is assumed. Audit **148** passed
+all checks, replaying 1192 declarations with standard axioms only. Its complete
+17-source bundle has SHA256
+`263147ec90a7b142b326d8a666d20d07821ab08c7be5a2c2eea636401b335469`.
+Six kernel-checked regressions cover X/Y/Z signs, a negative exponent, commuting
+input, and zero-qubit scalar phases:
+`lake --offline env lean tests/PauliQuarterTurn.lean`.
 
 `Clifford` defines phase-preserving Pauli automorphisms as a subgroup of
 Mathlib's `MulAut`. It derives their symplectic binary actions, signed
