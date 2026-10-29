@@ -65,7 +65,8 @@ The criterion itself is algebraic and carries no dimension limit.
 Default tests compare every one- and two-qubit action with an independent shortest-path oracle.
 The ignored three-qubit test extends that comparison to $\mathrm{Sp}(6;2)$.
 Section 7 records its explicit replay run and the limits of earlier evidence.
-The repository ships no machine-checked proof artifact.
+A [separate Lean development][lean-proof-guide] proves the dimension-general result.
+This PR does not include that formal project or run it in CI.
 
 The Rust implementation therefore keeps its complete congruence search and its
 $r+1$ fallback. A rollback to the paper's non-hyperbolic branch is not warranted.
@@ -276,16 +277,26 @@ r+1 & \text{otherwise (this includes, but is strictly larger than, the hyperboli
 \end{cases}
 $$
 
-### Limits of the residue fix step
+### Residue fix existence and implementation limits
 
-Exhaustive tests cover the residue fix step for one, two, and three qubits only.
-The step succeeds on every action in these finite domains.
-The repository contains no proof for more qubits.
+The Lean development on `marcusps/qdk-ec`, branch `audit/lean-action-speaks`,
+proves that the required residue fix exists in every dimension.
+The links below pin the proof to commit `4bc76dc0547ef3d6cd5eb28eb3e3fc1d88d4e7bb`.
+The theorem [`exists_residue_fix_of_not_triangularizable`][residue-fix-proof]
+applies to any symplectic action $\mathbf F$ whose residue core is not congruence-triangularizable.
+It gives a nonzero $\mathbf w\in\operatorname{Res}(\mathbf F)$ such that
+$\mathbf F\mathbf T_{\mathbf w}$ has the same residue rank and a triangularizable core.
 
-`find_fix_vector` panics if its search exhausts all candidates.
-The open question is whether `Res(F)` always contains a fix vector of the same residue rank.
-This repository does not answer it beyond three qubits.
-So a panic on a valid input does not show that only an implementation detail is wrong.
+The theorems [`ResidueFixSearch.findFix_sound` and `findFix_complete`][residue-fix-search]
+also prove that the formalized complete search returns such a vector.
+Thus fix-vector existence is not an open question, and the mathematical result is not limited to three qubits.
+This result justifies treating candidate exhaustion as unreachable for a correct implementation on valid input.
+The Rust function uses `unreachable!` for that case.
+
+The compiled Rust solver is not extracted from Lean or verified end to end by these theorems.
+Its residue computation, enumeration, and triangularization must satisfy the formal model's contracts.
+Rust regression tests remain separate evidence: exhaustive tests cover one, two, and three qubits.
+The proof gives no polynomial bound on the search's running time or memory use.
 
 ### Implementation and evidence
 
@@ -300,7 +311,7 @@ Implementation ([`transvection_exact.rs`](../src/clifford/transvection_exact.rs)
   $\operatorname{Res}(\mathbf F)$ for a vector $\mathbf w$.
   The update $\mathbf F\mathbf T_{\mathbf w}$ must have a triangularizable residue core at the same rank.
   If the search finds one, the decomposer recurses on that update and appends $\mathbf T_{\mathbf w}$.
-  The search panics if no candidate succeeds.
+  Candidate exhaustion reaches `unreachable!`; the theorem guarantees a candidate for a correct search on valid input.
 
 The public Rust result is `TransvectionDecomposition { transvections, pauli_correction }`.
 Python returns `(transvections, pauli_correction)`.
@@ -328,7 +339,8 @@ The three-qubit oracle is ignored by default, so a passing default suite does no
 Before the replay assertion, that oracle tested factor count and Hermiticity but did not establish that the returned factors reproduced each action.
 The current oracle also replays every decomposition and compares its symplectic action with the BFS element.
 
-The repository ships no proof artifact, so the result is not machine-checked.
+The [Lean proof][lean-proof-guide] supplies dimension-general formal evidence in addition to these finite tests.
+It does not certify the compiled Rust implementation.
 
 **Why "non-alternating" is not enough.** Alternating cores are
 untriangularizable, but the explicit core in Section 4 is non-alternating and
@@ -355,7 +367,13 @@ It visits all 1,451,520 elements of $\mathrm{Sp}(6;2)$.
 An explicit run on 2026-10-04 passed with replay, tableau validity, and minimal-length assertions enabled.
 That run took 235 seconds on Linux x86_64 with an AMD EPYC 7763 and Rust 1.99.0.
 The test remains ignored by default and supplies finite-domain evidence only.
-The repository provides no formal proof command.
+To reproduce the formal checks, use the separate checkout and build instructions in the
+[pinned proof guide][lean-proof-guide].
+This PR does not add a Lean build to the Rust test suite.
+
+[lean-proof-guide]: https://github.com/marcusps/qdk-ec/blob/4bc76dc0547ef3d6cd5eb28eb3e3fc1d88d4e7bb/paulimer/docs/lean-transvection-minimality-proof.md
+[residue-fix-proof]: https://github.com/marcusps/qdk-ec/blob/4bc76dc0547ef3d6cd5eb28eb3e3fc1d88d4e7bb/paulimer/formal/PaulimerFormal/UpperBound.lean#L701-L713
+[residue-fix-search]: https://github.com/marcusps/qdk-ec/blob/4bc76dc0547ef3d6cd5eb28eb3e3fc1d88d4e7bb/paulimer/formal/PaulimerFormal/ResidueFixSearch.lean#L83-L110
 
 ### Measured search limits
 
