@@ -574,12 +574,16 @@ action. The sign proof assumes equal binary **preimages**, whereas candidate
 validation compares **image** action matrices. Transferring between them
 requires the valid-tableau inverse-action contract.
 
-The recursive `bordered_family` and `symplectic_simplex` implementations are
-not proved to produce valid witnesses on every input. Their checked success
-path is covered; failures retain the original search. The dimension-general
-Lean residue-fix existence theorem closes the abstract existence question,
-but does not by itself prove that Rust's retained search finds that witness
-or cannot panic.
+The executable Lean models of recursive `bordered_family` and
+`symplectic_simplex` now prove successful construction on independent bases
+with nondegenerate restricted forms (alternating for the simplex).
+They follow the pinned source's ordered choices and explicit complement
+formulas. The resulting candidate is always accepted after a correct
+rank-branch rejection; no constructor-success assumption is needed.
+See [constructive fast-path completion](#constructive-fast-path-completion).
+These are not mechanically checked translations of compiled Rust. In
+particular, the residue-fix existence and search proofs do not establish that
+the compiled retained search cannot panic.
 
 `clifford_fixed_space` is the renamed projective fixed-space API. The earlier
 rank-nullity theorem still applies. It is not an exact signed centralizer,
@@ -1547,6 +1551,73 @@ declarations with every applicable check passing and only `propext`,
 with the finite 1,000,000-heartbeat prefix, has SHA256
 `7bb392ebd37b8fc0d13d50bbab76f443380e77531e87b6785ecd24eb6260b9fa`.
 All ten constituent hashes match the audited source.
+
+## Constructive fast-path completion
+
+`ConstructiveSimplex.simplex_spec` proves the ordered `symplectic_simplex`
+algorithm succeeds for every independent basis with a nondegenerate alternating
+restriction. It selects the first basis vector and first coupling partner,
+deletes both in their original order, and uses exactly the projection
+`v + B(second,v) first + B(first,v) second`. Two applications of the existing
+verified complement operation establish independence and exact span; a direct
+restriction argument proves nondegeneracy is preserved. The returned ordered
+points are `[second, first + second]` followed by the recursive points shifted
+by `first`. Their count is dimension plus one, their sum is zero, they span the
+input space, their count is odd, and every pair of distinct indices pairs to one.
+Recursion decreases dimension by two, and includes the zero-dimensional case.
+Audit 144 verified the complete eight-source bundle, replaying 333 declarations
+with standard axioms only; SHA256:
+`f04f30319ced3b75988182cab24fa4b5c0548b602498243e96e61bff1b192f94`.
+
+`ConstructiveBordered.construct_spec` proves the enclosing `bordered_family`
+algorithm succeeds for every independent basis with a nondegenerate restriction,
+without requiring alternation. It reuses `GreedySearch.findActive` and its exact
+ordered singleton/pair-loop theorem. A nonisotropic selection uses the first
+coupling pivot and verified right-orthogonal complement, then prepends the
+selected vector and a zero relation bit. Otherwise the verified simplex supplies
+the vectors and an all-one relation. The proof establishes unit lower
+triangularity of the bordered Gram matrix, zero weighted relation, odd relation
+weight, and exact span. Types enforce the dimension-plus-one count and coordinate
+sizes. Structural recursion decreases dimension by one.
+
+`matrixFamily_spec` discharges the algebraic validator postconditions for every
+invertible core. `decompose_spec` then lifts the actual constructed coefficients
+through a faithful residue basis. `candidate_spec` connects this to the computed
+Binar-backed core: whenever the complete rank branch rejects, the constructed
+candidate replays the target, is globally shortest, has nonzero centers, passes
+the checker, and is returned unchanged by `checkedDecomposition`. Thus the
+verified model does not need the retained search on that branch. Output centers
+use the existing data-backed storage helpers; `decompose_eq` proves this preserves
+the exact list.
+
+The rank-branch precondition is essential: construction on a triangularizable
+core still returns dimension-plus-one vectors, which need not be shortest and
+can include zero vectors. The fast path must not replace the preceding rank
+search. These results concern the executable Lean model corresponding to
+#217 at `2ce895eda84473762d7db36bf6c3561460992858`, not compiled Rust or a
+general complexity bound.
+
+Persistent execution checks:
+
+```bash
+lake --offline env lean --run tests/ConstructiveSimplex.lean
+lake --offline env lean --run tests/ConstructiveBordered.lean
+```
+
+Six simplex regressions check exact output order, including a nonadjacent partner
+and nontrivial projected complement. Nine bordered regressions check ordered
+vectors and relations, the bordered equations and complete span, singular-input
+failure, and construction, acceptance, and replay of the three-factor SWAP
+candidate.
+
+Action-speaks audits **145-146** verified `ConstructiveBordered.construct_spec`
+and `ConstructiveBordered.candidate_spec`, respectively. Each replayed 1576
+declarations with all checks enabled and passing, and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete 30-source bundle, with the
+recorded finite 1,000,000-heartbeat prefix, has SHA256
+`67bdda1d601bcf50357be4c1a2d85e0310d80e760d8d98124528e94d34d6fd55`.
+Its hash matches both audit receipts and every constituent source hash matches
+the final implementation.
 
 ## Verification boundary
 

@@ -507,8 +507,28 @@ and singular inputs, a nonadjacent partner, and a nontrivial projection:
 Audit **144** passed all checks with 333 replayed declarations and only standard
 axioms. The complete eight-source bundle has SHA256
 `f04f30319ced3b75988182cab24fa4b5c0548b602498243e96e61bff1b192f94`.
-This verifies the executable Lean simplex, not compiled Rust; the enclosing
-bordered-family constructor is a separate proof.
+This verifies the executable Lean simplex, not compiled Rust.
+
+`ConstructiveBordered` completes the enclosing #217 fast path. `construct_spec`
+proves that ordered singleton/pair selection and complement recursion always
+produce a valid dimension-plus-one bordered family on independent bases with
+nondegenerate restrictions. `matrixFamily_spec` discharges all algebraic
+validator postconditions for invertible cores. `candidate_spec` connects the
+actual construction and lift to the computed residue core: after a rank-branch
+rejection, the candidate is shortest, replays the action, passes the checker,
+and is returned without the retained search. Stored output centers preserve
+the exact list by `decompose_eq`. Nine persistent execution checks cover both
+construction branches, odd-dimensional nonsymmetric cores, complete span and
+bordered equations, singular failure, and constructed SWAP acceptance and replay:
+`lake --offline env lean --run tests/ConstructiveBordered.lean`.
+The rank search must still run first: on a triangularizable core, the extra
+factor need not be minimal or nonzero. Rust reducer correspondence, compiled
+execution, and concrete unitary realization are not proved by these results.
+Audits **145-146** verified `construct_spec` and `candidate_spec`, replaying 1576
+declarations each with every check passing and only standard axioms. The complete
+30-source bundle has SHA256
+`67bdda1d601bcf50357be4c1a2d85e0310d80e760d8d98124528e94d34d6fd55`;
+all constituent hashes match the final sources.
 
 `ResidueFixSearch` proves complete exhaustive fix search and implements the
 recursive fallback, terminating by whether the rank branch succeeds rather
