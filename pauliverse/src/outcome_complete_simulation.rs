@@ -23,7 +23,7 @@ impl OutcomeParity {
     pub(crate) fn new(
         outcome_matrix: &AlignedBitMatrix,
         outcome_shift: &AlignedBitVec,
-        outcomes: &[crate::OutcomeId],
+        outcomes: &[OutcomeId],
     ) -> Self {
         Self {
             branch_mask: row_sum(outcome_matrix, outcomes),
