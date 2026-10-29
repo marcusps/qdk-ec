@@ -75,7 +75,7 @@ pub fn phased_action_of(
 ///
 /// Returns [`ActionError::InvalidQubits`] if `input_qubits` or `output_qubits` names a qubit twice,
 /// or if the simulation has fewer than `system_qubit_count + input_qubits.len()` qubits. Returns
-/// [`ActionError::AuxiliaryQubitsEntangled`] if the non-output system qubits remain entangled with
+/// [`ActionError::AuxiliaryQubitsEntangled`] if the auxiliary qubits remain entangled with
 /// the rest of the state.
 pub fn phased_action_from_simulation(
     simulation: &PhasedOutcomeCompleteSimulation,

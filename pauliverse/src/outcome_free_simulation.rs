@@ -80,6 +80,18 @@ impl Default for OutcomeFreeSimulation {
 }
 
 impl OutcomeFreeSimulation {
+    #[deprecated(note = "use branch_bit_count")]
+    #[must_use]
+    pub fn random_outcome_count(&self) -> usize {
+        self.branch_bit_count()
+    }
+
+    #[deprecated(note = "use outcome_introduces_branch_bit")]
+    #[must_use]
+    pub fn random_outcome_indicator(&self) -> &[bool] {
+        self.outcome_introduces_branch_bit()
+    }
+
     /// Measure a Pauli observable with an anticommuting hint for optimization.
     ///
     /// # Panics
@@ -146,26 +158,12 @@ impl OutcomeFreeSimulation {
         self.branch_bit_count
     }
 
-    /// Deprecated alias for [`Self::branch_bit_count`].
-    #[deprecated(note = "use branch_bit_count")]
-    #[must_use]
-    pub fn random_outcome_count(&self) -> usize {
-        self.branch_bit_count()
-    }
-
     /// Get indicators for which outcomes are random.
     ///
     /// Returns a slice where `[i]` is true if outcome `i` was random.
     #[must_use]
     pub fn outcome_introduces_branch_bit(&self) -> &[bool] {
         &self.outcome_introduces_branch_bit
-    }
-
-    /// Deprecated alias for [`Self::outcome_introduces_branch_bit`].
-    #[deprecated(note = "use outcome_introduces_branch_bit")]
-    #[must_use]
-    pub fn random_outcome_indicator(&self) -> &[bool] {
-        self.outcome_introduces_branch_bit()
     }
 
     fn ensure_qubit_capacity(&mut self, max_qubit_id: Option<usize>) {
@@ -183,7 +181,7 @@ impl Simulation for OutcomeFreeSimulation {
     fn allocate_random_bit(&mut self) -> OutcomeId {
         self.branch_bit_count += 1;
         self.outcome_introduces_branch_bit.push(true);
-        self.branch_bit_count - 1
+        self.outcome_introduces_branch_bit.len() - 1
     }
 
     // Growth is rare. Keeping it out of line lets the capacity check inline into every gate and measurement.
@@ -224,6 +222,9 @@ impl Simulation for OutcomeFreeSimulation {
         self.clifford.left_mul(operation, support);
     }
 
+    /// Sign-blind: this simulator tracks the state only modulo Pauli operators, so
+    /// `P` and `-P` are indistinguishable. Equivalent to
+    /// [`Simulation::is_stabilizer_up_to_sign`].
     fn is_stabilizer(&self, observable: &SparsePauli) -> bool {
         self.is_stabilizer_up_to_sign(observable)
     }

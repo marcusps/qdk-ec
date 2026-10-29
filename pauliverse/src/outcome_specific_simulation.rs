@@ -69,7 +69,7 @@ pub struct OutcomeSpecificSimulation {
     outcome_vector: Vec<bool>,
     bit_source: Box<dyn Iterator<Item = bool> + Send + Sync>,
     outcome_introduces_branch_bit: Vec<bool>, // vec(p), [j] is true iff vec(p)_j = 1/2
-    num_random_bits: usize,
+    num_branch_bits: usize,
     qubit_count: usize,
     /// Preimage of the observable being measured, reused across measurements. It has the size of `clifford`.
     preimage: DensePauli,
@@ -83,7 +83,7 @@ impl std::fmt::Debug for OutcomeSpecificSimulation {
             .field("outcome_vector", &self.outcome_vector)
             .field("bit_source", &"<bit source iterator>")
             .field("outcome_introduces_branch_bit", &self.outcome_introduces_branch_bit)
-            .field("num_random_bits", &self.num_random_bits)
+            .field("num_branch_bits", &self.num_branch_bits)
             .field("qubit_count", &self.qubit_count)
             .finish_non_exhaustive()
     }
@@ -96,6 +96,38 @@ impl Default for OutcomeSpecificSimulation {
 }
 
 impl OutcomeSpecificSimulation {
+    #[deprecated(note = "use branch_bit_count")]
+    #[must_use]
+    pub fn random_outcome_count(&self) -> usize {
+        self.branch_bit_count()
+    }
+
+    #[deprecated(note = "use outcome_introduces_branch_bit")]
+    #[must_use]
+    pub fn random_outcome_indicator(&self) -> &[bool] {
+        self.outcome_introduces_branch_bit()
+    }
+
+    #[deprecated(note = "use new_with_zero_samples")]
+    pub fn new_with_zero_outcomes(num_qubits: usize) -> Self {
+        Self::new_with_zero_samples(num_qubits)
+    }
+
+    #[deprecated(note = "use new_with_random_samples")]
+    pub fn new_with_random_outcomes(num_qubits: usize) -> Self {
+        Self::new_with_random_samples(num_qubits)
+    }
+
+    #[deprecated(note = "use new_with_seeded_random_samples")]
+    pub fn new_with_seeded_random_outcomes(num_qubits: usize, seed: u64) -> Self {
+        Self::new_with_seeded_random_samples(num_qubits, seed)
+    }
+
+    #[deprecated(note = "use with_zero_samples_and_capacity")]
+    pub fn with_zero_outcomes_and_capacity(num_qubits: usize, num_outcomes: usize) -> Self {
+        Self::with_zero_samples_and_capacity(num_qubits, num_outcomes)
+    }
+
     fn ensure_qubit_capacity(&mut self, max_qubit_id: Option<usize>) {
         if let Some(max_qubit_id) = max_qubit_id {
             self.qubit_count = std::cmp::max(self.qubit_count, max_qubit_id + 1);
@@ -119,7 +151,7 @@ impl OutcomeSpecificSimulation {
             outcome_vector: Vec::new(),
             bit_source: Box::new(bit_source),
             outcome_introduces_branch_bit: Vec::new(),
-            num_random_bits: 0,
+            num_branch_bits: 0,
             qubit_count: num_qubits,
             preimage: DensePauli::neutral_element_of_size(num_qubits),
             random_outcome_buffers: RandomOutcomeBuffers::default(),
@@ -137,7 +169,7 @@ impl OutcomeSpecificSimulation {
             outcome_vector: Vec::with_capacity(num_outcomes),
             bit_source: Box::new(bit_source),
             outcome_introduces_branch_bit: Vec::with_capacity(num_outcomes),
-            num_random_bits: 0,
+            num_branch_bits: 0,
             qubit_count: num_qubits,
             preimage: DensePauli::neutral_element_of_size(num_qubits),
             random_outcome_buffers: RandomOutcomeBuffers::default(),
@@ -158,14 +190,14 @@ impl OutcomeSpecificSimulation {
         Self::new_with_bit_source(num_qubits, SeededRandomBitIterator::new(seed))
     }
 
-    /// Create a simulation where all random outcomes are zero.
+    /// Create a simulation whose sample source always returns zero.
     ///
-    /// Useful for testing and debugging specific execution paths.
+    /// Deterministic measurements still return their actual outcomes.
     pub fn new_with_zero_samples(num_qubits: usize) -> Self {
         Self::new_with_bit_source(num_qubits, ZeroBitIterator)
     }
 
-    /// Create a simulation with zero outcomes and pre-allocated capacity.
+    /// Create a simulation with zero samples and pre-allocated capacity.
     pub fn with_zero_samples_and_capacity(num_qubits: usize, num_outcomes: usize) -> Self {
         Self::with_bit_source_and_capacity(num_qubits, ZeroBitIterator, num_outcomes)
     }
@@ -247,14 +279,7 @@ impl OutcomeSpecificSimulation {
     /// Get the number of random (non-deterministic) measurement outcomes.
     #[must_use]
     pub fn branch_bit_count(&self) -> usize {
-        self.num_random_bits
-    }
-
-    /// Deprecated alias for [`Self::branch_bit_count`].
-    #[deprecated(note = "use branch_bit_count")]
-    #[must_use]
-    pub fn random_outcome_count(&self) -> usize {
-        self.branch_bit_count()
+        self.num_branch_bits
     }
 
     /// Get indicators for which outcomes are random.
@@ -264,13 +289,6 @@ impl OutcomeSpecificSimulation {
     pub fn outcome_introduces_branch_bit(&self) -> &[bool] {
         &self.outcome_introduces_branch_bit
     }
-
-    /// Deprecated alias for [`Self::outcome_introduces_branch_bit`].
-    #[deprecated(note = "use outcome_introduces_branch_bit")]
-    #[must_use]
-    pub fn random_outcome_indicator(&self) -> &[bool] {
-        self.outcome_introduces_branch_bit()
-    }
 }
 
 impl Simulation for OutcomeSpecificSimulation {
@@ -279,8 +297,8 @@ impl Simulation for OutcomeSpecificSimulation {
 
         self.outcome_vector.push(branch_bit);
         self.outcome_introduces_branch_bit.push(true);
-        self.num_random_bits += 1;
-        self.num_random_bits - 1
+        self.num_branch_bits += 1;
+        self.outcome_introduces_branch_bit.len() - 1
     }
 
     fn conditional_pauli(&mut self, observable: &crate::Pauli, outcomes: &[OutcomeId], parity: bool) {
@@ -445,31 +463,5 @@ impl Iterator for ZeroBitIterator {
 
     fn next(&mut self) -> Option<bool> {
         Some(false)
-    }
-}
-
-impl OutcomeSpecificSimulation {
-    /// Deprecated alias for [`Self::new_with_zero_samples`].
-    #[deprecated(note = "use new_with_zero_samples")]
-    pub fn new_with_zero_outcomes(num_qubits: usize) -> Self {
-        Self::new_with_zero_samples(num_qubits)
-    }
-
-    /// Deprecated alias for [`Self::new_with_random_samples`].
-    #[deprecated(note = "use new_with_random_samples")]
-    pub fn new_with_random_outcomes(num_qubits: usize) -> Self {
-        Self::new_with_random_samples(num_qubits)
-    }
-
-    /// Deprecated alias for [`Self::new_with_seeded_random_samples`].
-    #[deprecated(note = "use new_with_seeded_random_samples")]
-    pub fn new_with_seeded_random_outcomes(num_qubits: usize, seed: u64) -> Self {
-        Self::new_with_seeded_random_samples(num_qubits, seed)
-    }
-
-    /// Deprecated alias for [`Self::with_zero_samples_and_capacity`].
-    #[deprecated(note = "use with_zero_samples_and_capacity")]
-    pub fn with_zero_outcomes_and_capacity(num_qubits: usize, num_outcomes: usize) -> Self {
-        Self::with_zero_samples_and_capacity(num_qubits, num_outcomes)
     }
 }

@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import pytest
@@ -124,6 +123,53 @@ class TestSimulationProperties:
     def test_outcome_introduces_branch_bit_is_bitvector(self, sim_class):
         sim = sim_class(3)
         assert isinstance(sim.outcome_introduces_branch_bit, BitVector)
+    @pytest.mark.parametrize("sim_class", SIMULATION_CLASSES)
+    def test_branch_bits_and_outcomes_have_distinct_counts(self, sim_class):
+        sim = sim_class(1)
+        assert sim.measure(SparsePauli("Z")) == 0
+        assert sim.allocate_random_bit() == 1
+        assert sim.outcome_count == 2
+        assert sim.branch_bit_count == 1
+        assert list(sim.outcome_introduces_branch_bit) == [False, True]
+        with pytest.warns(DeprecationWarning, match="branch_bit_count") as warnings:
+            assert sim.random_bit_count == sim.branch_bit_count
+        assert Path(warnings[0].filename) == Path(__file__)
+        with pytest.warns(DeprecationWarning, match="branch_bit_count"):
+            assert sim.random_outcome_count == sim.branch_bit_count
+        with pytest.warns(DeprecationWarning, match="branch_bit_capacity"):
+            assert sim.random_outcome_capacity == sim.branch_bit_capacity
+        with pytest.warns(DeprecationWarning, match="outcome_introduces_branch_bit"):
+            assert sim.random_outcome_indicator == sim.outcome_introduces_branch_bit
+
+    @pytest.mark.parametrize("sim_class", SIMULATION_CLASSES)
+    def test_released_capacity_keywords_remain_supported(self, sim_class):
+        sim = sim_class.with_capacity(num_qubits=1, num_outcomes=4, num_random_outcomes=2)
+        sim.reserve_outcomes(new_outcome_capacity=8, new_random_outcome_capacity=4)
+        positional = sim_class.with_capacity(1, 4, 2)
+        positional.reserve_outcomes(8, 4)
+        assert sim.outcome_capacity == positional.outcome_capacity
+        assert sim.branch_bit_capacity == positional.branch_bit_capacity
+
+    def test_zero_samples_preserve_deterministic_negative_outcome(self):
+        sim = OutcomeSpecificSimulation.with_zero_samples(1)
+        assert sim.measure(SparsePauli("-Z")) == 0
+        assert sim.allocate_random_bit() == 1
+        assert list(sim.outcome_vector) == [True, False]
+
+    def test_deprecated_sample_constructors_preserve_behavior(self):
+        with pytest.warns(DeprecationWarning, match="with_zero_samples") as warnings:
+            zero = OutcomeSpecificSimulation.with_zero_outcomes(1)
+        assert Path(warnings[0].filename) == Path(__file__)
+        zero.measure(SparsePauli("-Z"))
+        zero.allocate_random_bit()
+        assert list(zero.outcome_vector) == [True, False]
+        with pytest.warns(DeprecationWarning, match="with_seeded_random_samples"):
+            old = OutcomeSpecificSimulation.new_with_seeded_random_outcomes(1, seed=42)
+        new = OutcomeSpecificSimulation.with_seeded_random_samples(1, seed=42)
+        for _ in range(16):
+            old.allocate_random_bit()
+            new.allocate_random_bit()
+        assert old.outcome_vector == new.outcome_vector
 
 
 class TestSimulationOperations:

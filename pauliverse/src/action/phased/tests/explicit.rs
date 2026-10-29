@@ -1,5 +1,39 @@
 use super::*;
 
+#[test]
+fn native_action_checks_qubits_beyond_named_outputs() {
+    let circuit = build_circuit(|builder| builder.unitary_op(UnitaryOp::PrepareBell, &[0, 1]));
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(2);
+    circuit.simulate(&mut simulation).unwrap();
+    for action in [
+        phased_action_of(&circuit, &[], &[0]),
+        phased_action_from_simulation(&simulation, &[], &[0]),
+    ] {
+        assert!(matches!(
+            action,
+            Err(ActionError::AuxiliaryQubitsEntangled { auxiliary_qubits, .. }) if auxiliary_qubits == [1]
+        ));
+    }
+
+    simulation.unitary_op(UnitaryOp::ControlledX, &[0, 1]);
+    let action = phased_action_from_simulation(&simulation, &[], &[0]).unwrap();
+    assert_eq!(action.action().auxiliary_qubits(), [1]);
+}
+
+#[test]
+fn native_action_excludes_reference_qubits_from_auxiliary_support() {
+    let mut simulation = PhasedOutcomeCompleteSimulation::new(3);
+    simulation.unitary_op(UnitaryOp::PrepareBell, &[0, 1]);
+    let action = phased_action_from_simulation(&simulation, &[0], &[0]).unwrap();
+    assert_eq!(action.action().auxiliary_qubits(), [2]);
+
+    simulation.unitary_op(UnitaryOp::ControlledX, &[0, 2]);
+    assert!(matches!(
+        phased_action_from_simulation(&simulation, &[0], &[0]),
+        Err(ActionError::AuxiliaryQubitsEntangled { auxiliary_qubits, .. }) if auxiliary_qubits == [2]
+    ));
+}
+
 /// Conditional `±Z₀` gadget: the two signs share the same symplectic action but differ only in the
 /// branch phase of the odd branch.
 pub(super) fn signed_z_rotation(negate: bool) -> (Circuit, Vec<QubitId>, Vec<QubitId>) {
@@ -97,9 +131,9 @@ pub(super) fn permuting_distinct_angles_is_detected() {
 }
 
 mod shifted_phase_regressions {
-    use super::super::dense_reference::{C, Dense, gate_matrix};
     use super::super::*;
     use binar::{AffineMap, BitMatrix, BitVec};
+    use dense_oracle::{C, Dense, gate_matrix};
     use paulimer::core::y;
 
     const ANGLES: [f64; 5] = [0.0, 0.3, std::f64::consts::FRAC_PI_4, std::f64::consts::FRAC_PI_2, -0.6];

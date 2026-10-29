@@ -89,6 +89,18 @@ pub struct FaultySimulation {
 }
 
 impl FaultySimulation {
+    #[deprecated(note = "use branch_bit_count")]
+    #[must_use]
+    pub fn random_outcome_count(&self) -> usize {
+        self.branch_bit_count()
+    }
+
+    #[deprecated(note = "use outcome_introduces_branch_bit")]
+    #[must_use]
+    pub fn random_outcome_indicator(&self) -> &[bool] {
+        self.outcome_introduces_branch_bit()
+    }
+
     /// Create a new empty noisy simulation.
     ///
     /// Use [`reserve_qubits`](Self::reserve_qubits) to allocate qubits before use.
@@ -180,26 +192,12 @@ impl FaultySimulation {
         self.noiseless.branch_bit_count()
     }
 
-    /// Deprecated alias for [`Self::branch_bit_count`].
-    #[deprecated(note = "use branch_bit_count")]
-    #[must_use]
-    pub fn random_outcome_count(&self) -> usize {
-        self.branch_bit_count()
-    }
-
     /// Get indicators for which outcomes are random.
     ///
     /// Returns a slice where `[i]` is true if outcome `i` was random.
     #[must_use]
     pub fn outcome_introduces_branch_bit(&self) -> &[bool] {
         self.noiseless.outcome_introduces_branch_bit()
-    }
-
-    /// Deprecated alias for [`Self::outcome_introduces_branch_bit`].
-    #[deprecated(note = "use outcome_introduces_branch_bit")]
-    #[must_use]
-    pub fn random_outcome_indicator(&self) -> &[bool] {
-        self.outcome_introduces_branch_bit()
     }
 }
 

@@ -312,5 +312,10 @@ pub use clifford_impl::{
 pub use decomposition::clifford_to_pauli_exponents;
 pub use phased_clifford::PhasedCliffordUnitary;
 
+mod transvection;
+pub use transvection::{clifford_fixed_space, clifford_to_transvections};
+mod transvection_exact;
+pub use transvection_exact::{TransvectionDecomposition, clifford_to_transvections_minimal};
+
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct CliffordStringParsingError;
