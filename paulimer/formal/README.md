@@ -141,7 +141,8 @@ matrices. Its conjugation agrees with the action on every signed Pauli.
 valid signed tableau: `U† matrix(standardPauli j) U = matrix(tableau j)`.
 The minimality count is still the number of binary transvections, excluding
 the final Pauli correction. The construction chooses a unitary representative;
-it does not assert uniqueness of its global phase or verification of compiled
+the uniqueness-up-to-phase theorem below characterizes the remaining freedom,
+without recovering a circuit's original global phase or verifying compiled
 Rust. Five kernel regressions check noncommuting factor order, signed Pauli
 correction, zero-qubit phases, and signed tableau preimages:
 `lake --offline env lean tests/CliffordMatrix.lean`.
@@ -151,6 +152,26 @@ axioms. Their complete 36-source bundle has SHA256
 `fe792fd7347bf7fc1e7c97df323037db863a5bd5421a423eb5c77d6d48e20a49`;
 all source hashes match. The full 3139-job build and all seventeen matrix
 regression examples passed.
+
+`CliffordPhase` adds `CliffordMatrix.unitary_phase_unique`, which proves that
+two unitaries with the same conjugation on every Pauli differ by a unique scalar
+of norm one, for every qubit count including zero. The proof first shows that
+any matrix commuting with all Paulis is scalar: Z operators force off-diagonal
+entries to vanish, and X translations equate the diagonal entries.
+`realization_phase_unique` applies this to the constructed representative.
+`composition_phase_unique` gives the unique phase correction relating the
+product of two chosen representatives to the representative of their composed
+action. These are exact existence-and-uniqueness results, not an efficient
+phase-tracking algorithm; the tableau alone still cannot recover global phase.
+Five kernel examples cover the zero-qubit phase `i`, distinct matrices with
+identical Pauli action, and composition of noncommuting Clifford actions:
+`lake --offline env lean -DwarningAsError=true tests/CliffordPhase.lean`.
+Audits **151-152** verified general phase uniqueness and the composition
+corollary, replaying 1812 declarations each with every check passing and only
+standard axioms. The complete 37-source bundle has SHA256
+`f96212d69a01a9de912f700ba7e4a7bd2bb410176b353f53283856031b3c3782`;
+both receipt hashes and all constituent source hashes match. The five examples
+and full 3140-job build passed.
 
 `TwoQubitEnumeration` lists every element of `Sp(4,2)` exactly once and
 proves its cardinality is 720. Four-bit frames decode bijectively to

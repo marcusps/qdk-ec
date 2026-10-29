@@ -1677,9 +1677,9 @@ U^\dagger \rho(\operatorname{standardPauli}(j)) U = \rho(T_j).
 $$
 
 Thus the arbitrary-qubit concrete unitary bridge is no longer an outstanding
-obligation. This constructs a unitary representative, without asserting a
-unique global phase, minimality under a different gate-counting metric, or
-compiled Rust correctness.
+obligation. This constructs a unitary representative, without recovering an
+input circuit's global phase, asserting minimality under a different
+gate-counting metric, or verifying compiled Rust.
 
 Audit **147** verified the representation contract and its one-qubit convention
 bridge, replaying 275 declarations with standard axioms only. Its complete
@@ -1708,6 +1708,57 @@ lake --offline env lean tests/PauliMatrix.lean
 lake --offline env lean tests/PauliQuarterTurn.lean
 lake --offline env lean tests/CliffordMatrix.lean
 ```
+
+### Uniqueness up to global phase
+
+`CliffordPhase` proves the converse characterization of this freedom. For any
+two unitary matrices $U,V$ on any number of qubits, including zero,
+`CliffordMatrix.unitary_phase_unique` proves
+
+$$
+\bigl(\forall P,\ U\rho(P)U^\dagger=V\rho(P)V^\dagger\bigr)
+\ \Longrightarrow\
+\exists!\alpha\in\mathbb C,\quad |\alpha|=1\ \land\ V=\alpha U.
+$$
+
+The proof uses the explicit Pauli representation rather than assuming
+irreducibility. `scalar_of_commutes_paulis` shows that a matrix commuting with
+every Pauli is scalar: commutation with each single-qubit Z forces every
+off-diagonal entry to vanish, while commutation with X translations makes all
+diagonal entries equal. Applying this to $U^\dagger V$ supplies the scalar;
+unitarity gives its unit modulus. The zero bitstring supplies a diagonal entry
+even at zero qubits, so no positive-qubit assumption is needed.
+
+`realization_phase_unique` shows that every unitary representing a given
+semantic Clifford action is a unique unit-modulus multiple of `realize`.
+`composition_phase_unique` specializes this to products:
+
+$$
+R(A)R(B)=\omega(A,B)R(AB),\qquad |\omega(A,B)|=1.
+$$
+
+For these fixed representatives the correction is unique. This does not make
+the representatives multiplicative, recover a circuit's global phase from
+its tableau, or supply an efficient phase-update algorithm. No restriction
+to a finite set of phases is assumed.
+
+Five exact kernel examples cover self-comparison in arbitrary dimension,
+the zero-qubit scalar $i$, the distinction between $I$ and $-I$, and
+composition of noncommuting one-qubit Clifford actions:
+
+```bash
+lake --offline env lean -DwarningAsError=true tests/CliffordPhase.lean
+```
+
+Audits **151-152** verified `CliffordMatrix.unitary_phase_unique` and
+`CliffordMatrix.composition_phase_unique`, respectively. Each replayed 1812
+declarations with every check enabled and passing, and only `propext`,
+`Classical.choice`, and `Quot.sound`. The complete 37-source bundle, with the
+finite 1,000,000-heartbeat prefix, has SHA256
+`f96212d69a01a9de912f700ba7e4a7bd2bb410176b353f53283856031b3c3782`.
+Both audit receipt hashes and every constituent source hash match.
+The five examples passed with warnings treated as errors, and the full
+3140-job project build passed.
 
 ## Verification boundary
 
