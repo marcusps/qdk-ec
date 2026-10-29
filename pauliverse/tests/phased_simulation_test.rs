@@ -1,5 +1,3 @@
-mod dense_reference;
-
 #[test]
 fn specific_signed_queries_reject_imaginary_paulis_on_negative_outcomes() {
     use pauliverse::{OutcomeSpecificSimulation, Simulation};
@@ -65,7 +63,7 @@ mod dense {
     use pauliverse::{PhasedOutcomeCompleteSimulation, Simulation};
     use rand::RngExt;
 
-    use super::dense_reference::{C, Dense, close, gate_matrix, normalize, pauli_arrays, statevector, zeta8};
+    use dense_oracle::{C, Dense, close, gate_matrix, normalize, pauli_arrays, statevector, zeta8};
 
     #[derive(Clone)]
     enum Op {

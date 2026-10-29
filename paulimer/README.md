@@ -27,6 +27,10 @@ the building blocks for stabilizer quantum mechanics and quantum error correctio
   - [`separate_auxiliary_qubits`]: §4.3 auxiliary-qubit separation — factor a phased encoder whose
     auxiliary qubits are disentangled into an output ⊗ auxiliary tensor product and recover the exact
     global phase ([arXiv:2603.24717](https://arxiv.org/abs/2603.24717))
+  - [`clifford_to_transvections`] returns a greedy unsigned list of `π/4` Pauli exponents.
+  - [`clifford_to_transvections_minimal`] returns a minimum unsigned rotation list and a final Pauli correction.
+    Apply the rotations with `left_mul_pauli_exp`, then the correction with `left_mul_pauli`, to reproduce the signed tableau.
+    The minimum excludes the final Pauli. Neither API reconstructs global phase.
 
 Based on algorithms from [arXiv:2309.08676](https://arxiv.org/abs/2309.08676).
 
@@ -188,6 +192,8 @@ Key documentation:
 - [`CliffordUnitary`](src/clifford.rs) - Clifford gates and Pauli conjugation
 - [`clifford_to_pauli_exponents`](src/clifford/decomposition.rs) - Exact decomposition of a Clifford into `π/4` Pauli exponents
 - [`separate_auxiliary_qubits`](src/clifford/aux_separation.rs) - §4.3 auxiliary-qubit separation with exact global-phase recovery
+- [Greedy transvection decomposition](src/clifford/transvection.rs) - An unsigned list of `π/4` Pauli exponents.
+- [Minimal transvection decomposition](src/clifford/transvection_exact.rs) - Minimum unsigned rotations and a final Pauli for signed replay.
 - [Trait documentation](src/lib.rs) - `Pauli`, `Clifford`, and other core traits
 
 ## Contributing

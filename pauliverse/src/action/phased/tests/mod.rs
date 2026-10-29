@@ -10,8 +10,6 @@ use rand::SeedableRng;
 use std::ops::Range;
 
 mod comparison;
-#[path = "../../../../tests/dense_reference/mod.rs"]
-mod dense_reference;
 use comparison::*;
 mod preparation;
 use preparation::*;

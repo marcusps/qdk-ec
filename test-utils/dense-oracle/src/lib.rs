@@ -1,4 +1,5 @@
-#![allow(dead_code)]
+//! Dense statevector reference calculations shared by the test suites.
+
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,

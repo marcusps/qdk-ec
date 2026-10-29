@@ -49,6 +49,40 @@ def test_retrieved_angles_preserve_outcome_ids():
         assert original.output_phase_exponent(assignment) == retrieved.output_phase_exponent(assignment)
 
 
+@pytest.mark.parametrize("deterministic_prefix", [False, True])
+def test_symbolic_angle_identity_includes_owner(deterministic_prefix):
+    first_simulation = PhasedOutcomeCompleteSimulation(1)
+    second_simulation = PhasedOutcomeCompleteSimulation(1)
+    if deterministic_prefix:
+        first_simulation.measure(SparsePauli("Z_0"))
+        second_simulation.allocate_symbolic_angle()
+    first = first_simulation.allocate_symbolic_angle()
+    second = second_simulation.allocate_symbolic_angle()
+    assert first.index == 0
+    assert second.index == int(deterministic_prefix)
+    assert first != second
+    assert second != first
+
+    retrieved = first_simulation.symbolic_angles[0]
+    assert first == retrieved
+    assert hash(first) == hash(retrieved)
+    assert len({first, retrieved, second}) == 2
+    values = {first: "first", second: "second"}
+    assert values[retrieved] == "first"
+    assert values[second_simulation.symbolic_angles[-1]] == "second"
+
+    next_angle = first_simulation.allocate_symbolic_angle()
+    assert first != next_angle
+    assert len({first, next_angle}) == 2
+
+
+def test_native_action_rejects_entangled_extra_qubit():
+    simulation = PhasedOutcomeCompleteSimulation(2)
+    simulation.apply_unitary(UnitaryOpcode.PrepareBell, [0, 1])
+    with pytest.raises(ValueError, match="AuxiliaryQubitsEntangled"):
+        simulation.phased_action([], [0])
+
+
 def test_output_phase_exponent_rejects_short_assignment():
     simulation = PhasedOutcomeCompleteSimulation(2)
     assert simulation.output_phase_exponent([]) == 0
@@ -76,7 +110,7 @@ def _choi_action(build_gadget, n=1):
 
 
 class TestSymbolicAngleIdentity:
-    """A handle's identity is its index, so equal indices must compare equal."""
+    """Angle indices match across circuits, but handle identity includes ownership."""
 
     @staticmethod
     def _angles_after_measurements(measurement_count, angle_count):
@@ -95,12 +129,13 @@ class TestSymbolicAngleIdentity:
         angles = self._angles_after_measurements(2, 3)
         assert [angle.index for angle in angles] == [0, 1, 2]
 
-    def test_equal_indices_compare_equal_across_simulators(self):
+    def test_equal_indices_remain_distinct_across_simulators(self):
         few = self._angles_after_measurements(0, 2)
         many = self._angles_after_measurements(3, 2)
-        assert few[0] == many[0]
-        assert few[1] == many[1]
-        assert hash(few[0]) == hash(many[0])
+        assert few[0].index == many[0].index
+        assert few[1].index == many[1].index
+        assert few[0] != many[0]
+        assert few[1] != many[1]
 
     def test_different_indices_compare_unequal_across_simulators(self):
         few = self._angles_after_measurements(0, 2)
@@ -111,7 +146,10 @@ class TestSymbolicAngleIdentity:
     def test_angles_are_usable_as_dictionary_keys(self):
         few = self._angles_after_measurements(0, 2)
         many = self._angles_after_measurements(3, 2)
-        assert len({few[0], few[1], many[0], many[1]}) == 2
+        assert len({few[0], few[1], many[0], many[1]}) == 4
+        values = {few[0]: "first", few[1]: "second"}
+        assert values[few[0]] == "first"
+        assert many[0] not in values
 
     def test_foreign_handle_is_rejected(self):
         """A handle from another simulation addresses an unrelated outcome, so reject it."""

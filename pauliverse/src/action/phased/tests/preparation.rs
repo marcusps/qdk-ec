@@ -194,8 +194,8 @@ pub(super) fn verifies_multi_angle_state_preparation() {
 }
 
 mod encoder_phase_tests {
-    use super::super::dense_reference::{C, Dense, gate_matrix, zeta8};
     use super::*;
+    use dense_oracle::{C, Dense, gate_matrix, zeta8};
     use paulimer::{UnitaryOp, clifford::clifford_to_pauli_exponents, core::x};
     use rand::{RngExt, SeedableRng};
 
