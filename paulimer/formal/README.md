@@ -117,7 +117,8 @@ binary decomposition of its inverse preimage matrix; left Pauli conjugation
 then implements the existing final sign correction exactly. Thus binary
 replay and Hermiticity are derived rather than assumed for this construction.
 Audits 111-112 passed. All 24 signed one-qubit tableaux were reconstructed
-in bounded execution batches. Concrete unitary realization remains open.
+in bounded execution batches. Concrete unitary realization is now established
+by `CliffordMatrix` below.
 Minimality counts binary transvections, not the separate final
 Pauli correction.
 
@@ -131,6 +132,25 @@ positive-Hermitian quarter-turns, and the final positive-Hermitian Pauli
 correction. Audits 113-114 passed. This closes the mathematical signed
 bridge for #119/#217, not compiled Rust, concrete unitary global phase, or
 the separate finite classification claims in #118.
+
+`CliffordMatrix.realization_spec` constructs a concrete unitary for every
+phase-preserving Pauli automorphism. The matrix is the final Pauli correction
+times the reversed product of the shortest decomposition's quarter-turn
+matrices. Its conjugation agrees with the action on every signed Pauli.
+`tableau_realization_spec` gives the corresponding preimage statement for every
+valid signed tableau: `U† matrix(standardPauli j) U = matrix(tableau j)`.
+The minimality count is still the number of binary transvections, excluding
+the final Pauli correction. The construction chooses a unitary representative;
+it does not assert uniqueness of its global phase or verification of compiled
+Rust. Five kernel regressions check noncommuting factor order, signed Pauli
+correction, zero-qubit phases, and signed tableau preimages:
+`lake --offline env lean tests/CliffordMatrix.lean`.
+Audits **149-150** verified the action and tableau realization contracts,
+replaying 1808 declarations each with every check passing and only standard
+axioms. Their complete 36-source bundle has SHA256
+`fe792fd7347bf7fc1e7c97df323037db863a5bd5421a423eb5c77d6d48e20a49`;
+all source hashes match. The full 3139-job build and all seventeen matrix
+regression examples passed.
 
 `TwoQubitEnumeration` lists every element of `Sp(4,2)` exactly once and
 proves its cardinality is 720. Four-bit frames decode bijectively to
@@ -547,7 +567,8 @@ bordered equations, singular failure, and constructed SWAP acceptance and replay
 `lake --offline env lean --run tests/ConstructiveBordered.lean`.
 The rank search must still run first: on a triangularizable core, the extra
 factor need not be minimal or nonzero. Rust reducer correspondence, compiled
-execution, and concrete unitary realization are not proved by these results.
+execution are not proved by these results; concrete unitary realization is
+proved separately by `CliffordMatrix`.
 Audits **145-146** verified `construct_spec` and `candidate_spec`, replaying 1576
 declarations each with every check passing and only standard axioms. The complete
 30-source bundle has SHA256

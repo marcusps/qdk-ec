@@ -43,6 +43,7 @@ import PaulimerFormal.Clifford
 import PaulimerFormal.CliffordTableau
 import PaulimerFormal.CliffordRealization
 import PaulimerFormal.CliffordUniqueness
+import PaulimerFormal.CliffordMatrix
 import PaulimerFormal.TwoQubitEnumeration
 import PaulimerFormal.TwoQubitAction
 import PaulimerFormal.TwoQubitRank

@@ -1063,10 +1063,11 @@ hypothesis-use checking, with only `propext`, `Classical.choice`, and
 Its constituent hashes match the checked files; the full build passed
 (3099 jobs).
 
-This establishes phase-aware algebraic semantics for the update. It does
-not yet prove the concrete matrix formula for quarter-turn conjugation or
-the valid-tableau extension and image/preimage conventions required by
-the remaining signed decomposition bridge.
+This milestone establishes phase-aware algebraic semantics for the update.
+The subsequent tableau and signed-decomposition milestones below supply
+the image/preimage bridge, and
+[concrete unitary-matrix realization](#concrete-unitary-matrix-realization)
+now proves the quarter-turn matrix formula.
 
 ## Clifford actions and binary projection
 
@@ -1099,8 +1100,8 @@ image/preimage round trips, both binary inverse products, and a
 noncommuting composition-order sentinel. It also checked a double
 X-quarter-turn whose binary action is identity but which sends Z to -Z.
 Thus no argument identifies equal binary actions with equal signed
-actions. Valid-tableau extension, runtime layout correspondence, and
-concrete unitary realization remain distinct obligations.
+actions. The later milestones prove valid-tableau extension and concrete
+unitary realization; runtime layout correspondence remains separate.
 
 ## Signed tableau validity
 
@@ -1161,9 +1162,9 @@ The correction itself is positive Hermitian.
 
 `valid_iff_exists_action` characterizes valid tableaux by existence of a
 phase-preserving Pauli automorphism. `realization_spec` additionally retains
-the shortest-binary-decomposition guarantee. This does not establish
-uniqueness yet, concrete unitary realization, or minimality under a cost
-model that charges for the separate Pauli correction.
+the shortest-binary-decomposition guarantee. The later uniqueness and concrete
+unitary milestones extend this result. Minimality under a cost model that
+charges for the separate Pauli correction is not asserted.
 
 Action-speaks entries **111-112** verified `realization_spec` and
 `preimages_pauli_left`, replaying 1577 declarations each. All applicable
@@ -1618,6 +1619,95 @@ recorded finite 1,000,000-heartbeat prefix, has SHA256
 `67bdda1d601bcf50357be4c1a2d85e0310d80e760d8d98124528e94d34d6fd55`.
 Its hash matches both audit receipts and every constituent source hash matches
 the final implementation.
+
+## Concrete unitary-matrix realization
+
+The arbitrary-qubit matrix interpretation is now provided by three modules.
+`PauliMatrix` indexes rows and columns by `Fin m -> F2`, including the singleton
+computational basis at zero qubits. Its entry formula is
+
+$$
+\rho(i^p X^x Z^z)_{b,a}
+= \begin{cases}
+i^{p+2(z\cdot a)}, & b=a+x,\\
+0, & \text{otherwise}.
+\end{cases}
+$$
+
+`Pauli.matrix_spec` proves that this representation is injective and preserves
+identity and multiplication, that inverses map to conjugate transposes, and that
+all represented Paulis are unitary. Symbolic self-inversion is equivalent to
+matrix Hermiticity. Reindexing the one-qubit matrix gives the existing
+Physlib-backed representation for every phase and both binary coordinates.
+Scalar phases remain distinct even at zero qubits.
+
+`PauliQuarterTurn` defines the explicit normalized matrix
+
+$$
+R_P = \frac{I+i\rho(P)}{\sqrt{2}}.
+$$
+
+For every self-inverse symbolic Pauli $P$, `Pauli.quarterMatrix_spec` proves
+$R_P$ is unitary and
+
+$$
+R_P \rho(Q) R_P^\dagger = \rho(\operatorname{exponentAction}(Q,P))
+$$
+
+for every signed Pauli $Q$. The commuting case fixes $Q$; the anticommuting case
+maps it to $iPQ$, exactly as the existing symbolic action requires. The proof
+uses the involution and commutation laws, not an unproved matrix-exponential
+identity or floating-point approximation.
+
+`CliffordMatrix` then composes these concrete quarter turns in the same reversed
+list order as `CliffordAction.rotations`, and left-multiplies by the matrix of the
+final Pauli correction. `realization_spec` proves that this explicit matrix $U$
+is unitary and satisfies
+
+$$
+U\rho(Q)U^\dagger = \rho(\operatorname{image}(A,Q))
+$$
+
+for every semantic Clifford action $A$ and every signed Pauli $Q$. It retains
+the shortest nonzero binary-transvection theorem for the actual factor list.
+`tableau_realization_spec` derives, for every valid preimage tableau $T$,
+
+$$
+U^\dagger \rho(\operatorname{standardPauli}(j)) U = \rho(T_j).
+$$
+
+Thus the arbitrary-qubit concrete unitary bridge is no longer an outstanding
+obligation. This constructs a unitary representative, without asserting a
+unique global phase, minimality under a different gate-counting metric, or
+compiled Rust correctness.
+
+Audit **147** verified the representation contract and its one-qubit convention
+bridge, replaying 275 declarations with standard axioms only. Its complete
+three-source bundle has SHA256
+`7564d31be8c4cbe4f6bdc45df60e4878831ff2e4b253d53469e05cf250b9a095`.
+Audit **148** verified normalized quarter-turn conjugation, replaying 1192
+declarations with standard axioms only. Its complete 17-source bundle has SHA256
+`263147ec90a7b142b326d8a666d20d07821ab08c7be5a2c2eea636401b335469`.
+Audits **149-150** verified `CliffordMatrix.realization_spec` and
+`CliffordMatrix.tableau_realization_spec`. Each replayed 1808 declarations
+with every check enabled and passing, and only `propext`, `Classical.choice`,
+and `Quot.sound`. Their complete 36-source bundle, with the recorded finite
+1,000,000-heartbeat prefix, has SHA256
+`fe792fd7347bf7fc1e7c97df323037db863a5bd5421a423eb5c77d6d48e20a49`.
+Both audit receipt hashes and every constituent source hash match.
+The full project build passed (3139 jobs).
+
+Seventeen exact kernel-checked regression examples cover zero-qubit scalar
+phases, one-qubit Y and two-qubit YY signs, positive and negative quarter turns,
+commuting inputs, noncommuting factor order, final Pauli correction and signed
+tableau preimages. Complex matrices and square roots are exact mathematical
+objects here, not executable floating-point approximations:
+
+```bash
+lake --offline env lean tests/PauliMatrix.lean
+lake --offline env lean tests/PauliQuarterTurn.lean
+lake --offline env lean tests/CliffordMatrix.lean
+```
 
 ## Verification boundary
 
