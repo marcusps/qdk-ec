@@ -16,7 +16,8 @@
 use std::collections::HashSet;
 
 use binar::matrix::AlignedBitMatrix;
-use binar::{Bitwise, IndexSet};
+use binar::vec::AlignedBitVec;
+use binar::{Bitwise, BitwisePair, BitwisePairMut, IndexSet};
 
 use super::transvection::{assign_positive_hermitian_phase, symplectic_basis};
 use super::{Clifford, CliffordMutable, CliffordUnitary, PreimageViews};
@@ -629,6 +630,20 @@ fn bordered_decomposition(core: &AlignedBitMatrix, basis: &AlignedBitMatrix) -> 
     )
 }
 
+fn right_multiply_transvection(matrix: &mut AlignedBitMatrix, vector: &[bool], qubit_count: usize) {
+    let packed: AlignedBitVec = vector.iter().copied().collect();
+    let dual: AlignedBitVec = vector[qubit_count..]
+        .iter()
+        .chain(&vector[..qubit_count])
+        .copied()
+        .collect();
+    for row in 0..matrix.row_count() {
+        if matrix.row(row).dot(&dual.as_view()) {
+            matrix.row_mut(row).bitxor_assign(&packed.as_view());
+        }
+    }
+}
+
 fn verifies_bordered_decomposition(
     action: &AlignedBitMatrix,
     qubit_count: usize,
@@ -645,7 +660,7 @@ fn verifies_bordered_decomposition(
     }
     let mut rebuilt = AlignedBitMatrix::identity(dimension);
     for vector in vectors {
-        rebuilt = rebuilt.dot(&transvection_matrix(vector, qubit_count));
+        right_multiply_transvection(&mut rebuilt, vector, qubit_count);
     }
     rebuilt == *action
 }

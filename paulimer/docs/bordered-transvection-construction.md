@@ -87,7 +87,9 @@ These are runtime conditions, not assumptions about the recursion.
 Failure returns no candidate.
 
 After the lift through $V$, the code requires exactly $r+1$ nonzero vectors of length $2n$.
-It multiplies their transvection matrices in order, starting from the identity.
+It replays their transvections in order, starting from the identity.
+Each step uses packed row operations for the rank-one update, without constructing a transvection matrix.
+For $n$ qubits, the update takes $O(n^2)$ time per factor.
 It accepts the candidate only when that product equals the complete input action matrix.
 The Pauli conversion uses the existing positive Hermitian representative.
 This candidate check compares only the unsigned action.
