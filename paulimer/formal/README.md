@@ -495,6 +495,21 @@ triangularizable. Action-speaks entries 95-97 verified these results.
 Noncomputable witnesses occur only in specifications, not the executable
 data. Rust's separate augmented reducer correspondence remains unproved.
 
+`ConstructiveSimplex` implements #217's ordered alternating-form fast path:
+the first basis vector, first coupling partner, two-XOR projected complement,
+and recursive output `[second, first + second] ++ shiftedPoints`.
+`simplex_spec` proves success for every independent basis with a nondegenerate
+alternating restriction, with exactly dimension-plus-one points, odd length,
+zero sum, complete span, and pairing one between distinct indices. Structural
+recursion decreases dimension by two. Six execution regressions include empty
+and singular inputs, a nonadjacent partner, and a nontrivial projection:
+`lake --offline env lean --run tests/ConstructiveSimplex.lean`.
+Audit **144** passed all checks with 333 replayed declarations and only standard
+axioms. The complete eight-source bundle has SHA256
+`f04f30319ced3b75988182cab24fa4b5c0548b602498243e96e61bff1b192f94`.
+This verifies the executable Lean simplex, not compiled Rust; the enclosing
+bordered-family constructor is a separate proof.
+
 `ResidueFixSearch` proves complete exhaustive fix search and implements the
 recursive fallback, terminating by whether the rank branch succeeds rather
 than by residue rank. Its total solver and checked-candidate variant return

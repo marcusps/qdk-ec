@@ -30,6 +30,7 @@ import PaulimerFormal.TriangularMemo
 import PaulimerFormal.TriangularKeys
 import PaulimerFormal.ResidueExtraction
 import PaulimerFormal.ResidueFixSearch
+import PaulimerFormal.ConstructiveSimplex
 import PaulimerFormal.CliffordFixedSpace
 import PaulimerFormal.GreedyReduction
 import PaulimerFormal.GreedySearch
