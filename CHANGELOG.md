@@ -7,25 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `clifford_to_transvections` in paulimer, with `CliffordUnitary.to_transvections()` in the Python bindings, decomposing a Clifford's symplectic action into a linear number of Hermitian Pauli generators of `π/4` exponents. The Python method raises `ValueError` for an invalid tableau.
+- `clifford_fixed_space` in paulimer, with `CliffordUnitary.fixed_space()` in the Python bindings, returning Hermitian generators of the Pauli operators that conjugation fixes up to sign.
+- `clifford_to_transvections_minimal` returns `TransvectionDecomposition { transvections, pauli_correction }`. Python `CliffordUnitary.to_transvections_minimal()` returns `(list[SparsePauli], SparsePauli)`. Apply the rotations in order, then apply the correction with `left_mul_pauli`. The result reproduces the signed tableau, but not global phase. The rotation count is the unsigned minimum and excludes the final Pauli. The greedy API remains unsigned. Alternating restrictions skip span enumeration. The Python method raises `ValueError` for an invalid tableau.
+- `branch_bit_count`, `branch_bit_capacity`, and `outcome_introduces_branch_bit` distinguish internal branch coordinates from public outcome IDs.
+- `OutcomeSpecificSimulation` constructors with `samples` in their names distinguish the sample source from recorded outcomes. The zero source does not change deterministic outcomes.
+
 ### Deprecated
-- Simulation accessor names `random_outcome_count`, `random_outcome_capacity`, and `random_outcome_indicator` are deprecated in favor of `branch_bit_count`, `branch_bit_capacity`, and `outcome_introduces_branch_bit`. They remain available. Python `random_bit_count` also forwards to `branch_bit_count`.
-- Outcome-specific constructors with `outcomes` in their names remain available as deprecated aliases for sample-named constructors. Python aliases emit `DeprecationWarning`.
-- Existing Rust `Simulation` implementations still provide `random_outcome_capacity`, and the new `branch_bit_capacity` method forwards to it. Legacy Python capacity keywords remain accepted.
+- Use the branch coordinate accessors instead of `random_outcome_count`, `random_outcome_capacity`, `random_outcome_indicator`, and Python `random_bit_count`. The old names remain available.
+- Use the sample-source constructors instead of their `outcomes` aliases. Existing capacity keyword arguments and Rust `Simulation` implementations remain supported.
 
 ### Fixed
+- Native phased actions reject entangled auxiliary qubits outside the named input and output registers.
+- Python symbolic-angle handles compare and hash by simulation ownership and angle identity.
 - Zero-qubit phased Cliffords preserve scalar rotation phases and support amplitude queries.
 - Hinted measurements preserve branch phases for both signs of the hint.
 - Python phased simulations reject short branch assignments and symbolic-angle handles from another simulation.
 - Retrieved symbolic-angle handles retain their public outcome IDs after deterministic measurements.
 - `PhasedCliffordUnitary::state_amplitude_phase_exponent_usize` handles registers wider than `usize` without shift overflow.
 - Complemented conditional Paulis preserve the exact phase for imaginary operators.
-- Signed stabilizer queries reject imaginary Paulis and honor negative signs.
 - Deprecated Python simulation aliases identify the caller in warnings.
+- `Simulation::allocate_random_bit` now returns the public outcome ID in all pauliverse simulators.
+- `OutcomeCompleteSimulation::is_stabilizer` no longer ignores the observable's sign, so it now distinguishes `+P` from `-P` and rejects the non-Hermitian `±iP`.
+- `is_stabilizer_with_conditional_sign` now rejects observables with an imaginary phase in outcome-complete and outcome-specific simulation.
 
 ## binar [0.1.8], paulimer [0.2.9], pauliverse [0.1.7] - 2026-10-05
 
 ### Changed
-- Cut per-measurement overheads in pauliverse simulators 
+- Cut per-measurement overheads in pauliverse simulators
 
 ## binar [0.1.7], paulimer [0.2.8], pauliverse [0.1.6] - 2026-10-01
 

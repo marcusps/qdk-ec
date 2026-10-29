@@ -3,6 +3,7 @@ use std::borrow::Borrow;
 use binar::{BitMatrix, BitView, Bitwise, BitwisePairMut, IndexSet};
 use paulimer::core::{PositionedPauliObservable, x, z};
 use paulimer::{
+    PauliMutable,
     clifford::{Clifford, CliffordMutable, CliffordUnitary},
     operations::UnitaryOp,
     pauli::{Pauli, SparsePauli},
@@ -46,6 +47,79 @@ trait SimulationForTest: Simulation + Default {
 impl SimulationForTest for OutcomeCompleteSimulation {}
 impl SimulationForTest for OutcomeSpecificSimulation {}
 impl SimulationForTest for OutcomeFreeSimulation {}
+
+#[test]
+fn branch_allocation_preserves_outcome_rows_across_capacity_growth() {
+    for use_hint in [false, true] {
+        let mut simulation = OutcomeCompleteSimulation::with_capacity(1, 0, 0);
+        for branch_bit in 0..300 {
+            assert_eq!(simulation.measure(&SparsePauli::z(0, 1)), 2 * branch_bit);
+            let outcome = simulation.allocate_random_bit();
+            assert_eq!(outcome, 2 * branch_bit + 1);
+            assert_eq!(simulation.branch_bit_count(), branch_bit + 1);
+            assert_eq!(
+                simulation.outcome_matrix().row(outcome).support().collect::<Vec<_>>(),
+                vec![branch_bit]
+            );
+        }
+        let outcome = if use_hint {
+            simulation.measure_with_hint(&SparsePauli::x(0, 1), &SparsePauli::z(0, 1))
+        } else {
+            simulation.measure(&SparsePauli::x(0, 1))
+        };
+        assert_eq!(outcome, 600);
+        assert_eq!(simulation.branch_bit_count(), 301);
+        assert!(simulation.is_stabilizer_with_conditional_sign(&SparsePauli::x(0, 1), &[outcome]));
+        assert_eq!(
+            simulation.outcome_matrix().row(outcome).support().collect::<Vec<_>>(),
+            vec![300]
+        );
+        assert_eq!(
+            simulation
+                .outcome_introduces_branch_bit()
+                .iter()
+                .filter(|&&bit| bit)
+                .count(),
+            simulation.branch_bit_count()
+        );
+    }
+}
+
+#[test]
+fn zero_samples_do_not_zero_deterministic_outcomes() {
+    let mut simulation = OutcomeSpecificSimulation::new_with_zero_samples(1);
+    let negative_z: SparsePauli = "-Z".parse().unwrap();
+    assert_eq!(simulation.measure(&negative_z), 0);
+    assert_eq!(simulation.allocate_random_bit(), 1);
+    assert_eq!(simulation.outcome_vector(), &[true, false]);
+}
+
+#[test]
+#[allow(deprecated)]
+fn released_simulator_names_remain_compatible() {
+    let mut complete = OutcomeCompleteSimulation::new(1);
+    complete.measure(&SparsePauli::z(0, 1));
+    complete.allocate_random_bit();
+    assert_eq!(complete.random_outcome_count(), complete.branch_bit_count());
+    assert_eq!(complete.random_outcome_capacity(), complete.branch_bit_capacity());
+    assert_eq!(
+        complete.random_outcome_indicator(),
+        complete.outcome_introduces_branch_bit()
+    );
+    let mut old = OutcomeSpecificSimulation::new_with_seeded_random_outcomes(1, 17);
+    let mut new = OutcomeSpecificSimulation::new_with_seeded_random_samples(1, 17);
+    for _ in 0..16 {
+        old.allocate_random_bit();
+        new.allocate_random_bit();
+    }
+    assert_eq!(old.outcome_vector(), new.outcome_vector());
+    let mut zero = OutcomeSpecificSimulation::new_with_zero_outcomes(1);
+    zero.allocate_random_bit();
+    assert_eq!(zero.outcome_vector(), &[false]);
+    let zero_with_capacity = OutcomeSpecificSimulation::with_zero_outcomes_and_capacity(1, 8);
+    assert!(zero_with_capacity.outcome_capacity() >= 8);
+    assert_eq!(OutcomeSpecificSimulation::new_with_random_outcomes(1).qubit_count(), 1);
+}
 
 fn measure_and_fix(
     sim: &mut impl SimulationForTest,
@@ -571,4 +645,132 @@ fn test_compare_simulations() {
     test_sims!(choi_state_of_cx_via_measure);
     test_sims!(choi_state_of_cz_via_measure);
     test_sims!(random_and_deterministic_outcome_sequence);
+}
+
+#[test]
+fn symbolic_angle_after_deterministic_measurement_uses_public_outcome_id() {
+    fn record(simulation: &mut impl Simulation) {
+        let observable: SparsePauli = [z(0)].as_slice().into();
+        assert_eq!(simulation.measure(&observable), 0);
+        let angle = simulation.allocate_symbolic_angle();
+        assert_eq!(angle, 1);
+        simulation.symbolic_pauli_exp(&[x(0)].as_slice().into(), angle);
+        assert_eq!(simulation.measure(&observable), 2);
+    }
+
+    fn check<Simulator: Simulation>(circuit: &pauliverse::Circuit) {
+        record(&mut Simulator::default());
+        let mut replayed = Simulator::default();
+        circuit.simulate(&mut replayed).unwrap();
+        assert_eq!(replayed.outcome_count(), 3);
+    }
+
+    let mut builder = pauliverse::CircuitBuilder::new();
+    record(&mut builder);
+    let circuit = builder.into_circuit();
+
+    check::<OutcomeCompleteSimulation>(&circuit);
+    check::<OutcomeFreeSimulation>(&circuit);
+    check::<OutcomeSpecificSimulation>(&circuit);
+    check::<pauliverse::PhasedOutcomeCompleteSimulation>(&circuit);
+    check::<pauliverse::FaultySimulation>(&circuit);
+}
+
+/// Builds `-P` from a positioned observable list.
+fn negated(observable: &[PositionedPauliObservable]) -> SparsePauli {
+    let mut pauli: SparsePauli = observable.into();
+    pauli.add_assign_phase_exp(2u8);
+    pauli
+}
+
+#[test]
+fn is_stabilizer_distinguishes_eigenvalue_sign() {
+    // `is_stabilizer` means eigenvalue +1, so exactly one of `+Z` and `-Z`
+    // stabilizes a computational basis state.
+    let mut sim = OutcomeCompleteSimulation::default();
+    sim.measure_o(&[z(0)]);
+
+    assert!(sim.is_stabilizer(&[z(0)].into()));
+    assert!(!sim.is_stabilizer(&negated(&[z(0)])));
+    assert!(sim.is_stabilizer_up_to_sign(&negated(&[z(0)])));
+
+    // After X the state is |1>, so the roles swap.
+    sim.apply_pauli_o(&[x(0)]);
+    assert!(!sim.is_stabilizer(&[z(0)].into()));
+    assert!(sim.is_stabilizer(&negated(&[z(0)])));
+    assert!(sim.is_stabilizer_up_to_sign(&[z(0)].into()));
+}
+
+#[test]
+fn allocate_random_bit_returns_public_outcome_id() {
+    // A deterministic measurement appends a public outcome without consuming a
+    // random column, so the next allocation's public id outruns the column index.
+    fn check<Sim: SimulationForTest>() {
+        let mut sim = Sim::default();
+        let deterministic = sim.measure_o(&[z(0)]);
+        assert_eq!(deterministic, 0);
+
+        let allocated = sim.allocate_random_bit();
+        assert_eq!(allocated, 1, "allocator must return the public outcome id");
+    }
+
+    check::<OutcomeCompleteSimulation>();
+    check::<OutcomeSpecificSimulation>();
+    check::<OutcomeFreeSimulation>();
+}
+
+/// Builds `i*P` from a positioned observable list.
+fn imaginary(observable: &[PositionedPauliObservable]) -> SparsePauli {
+    let mut pauli: SparsePauli = observable.into();
+    pauli.add_assign_phase_exp(1u8);
+    pauli
+}
+
+#[test]
+fn minus_z_stabilizes_the_one_state() {
+    fn check<Sim: SimulationForTest>() {
+        let mut sim = Sim::default();
+        sim.unitary_op(UnitaryOp::X, &[0]);
+
+        assert!(sim.is_stabilizer(&negated(&[z(0)])));
+        assert!(!sim.is_stabilizer(&[z(0)].into()));
+    }
+
+    check::<OutcomeCompleteSimulation>();
+    check::<OutcomeSpecificSimulation>();
+}
+
+#[test]
+fn is_stabilizer_rejects_outcome_dependent_sign() {
+    let mut sim = OutcomeCompleteSimulation::default();
+    sim.unitary_op(UnitaryOp::Hadamard, &[0]);
+    sim.measure_o(&[z(0)]);
+
+    assert!(!sim.is_stabilizer(&[z(0)].into()));
+    assert!(!sim.is_stabilizer(&negated(&[z(0)])));
+}
+
+#[test]
+fn is_stabilizer_rejects_imaginary_phase() {
+    fn check<Sim: SimulationForTest>() {
+        let mut sim = Sim::default();
+        sim.measure_o(&[z(0)]);
+
+        assert!(!sim.is_stabilizer(&imaginary(&[z(0)])));
+        assert!(!sim.is_stabilizer_with_conditional_sign(&imaginary(&[z(0)]), &[]));
+    }
+
+    check::<OutcomeCompleteSimulation>();
+    check::<OutcomeSpecificSimulation>();
+
+    let mut specific = OutcomeSpecificSimulation::new_with_bit_source(1, std::iter::repeat(true));
+    specific.measure_o(&[z(0)]);
+    let odd_parity_outcome = specific.allocate_random_bit();
+    assert!(specific.outcome_vector()[odd_parity_outcome]);
+    assert!(!specific.is_stabilizer_with_conditional_sign(&imaginary(&[z(0)]), &[odd_parity_outcome]));
+
+    let mut complete = OutcomeCompleteSimulation::default();
+    complete.measure_o(&[z(0)]);
+    let conditioning_outcome = complete.allocate_random_bit();
+    assert!(!complete.is_stabilizer_with_conditional_sign(&imaginary(&[z(0)]), &[conditioning_outcome]));
 }

@@ -1,4 +1,3 @@
-mod dense_oracle;
 use dense_oracle::{Dense, close, gate_matrix, pauli_arrays, statevector};
 use paulimer::clifford::PhasedCliffordUnitary;
 use paulimer::pauli::Pauli;

@@ -49,6 +49,40 @@ def test_retrieved_angles_preserve_outcome_ids():
         assert original.output_phase_exponent(assignment) == retrieved.output_phase_exponent(assignment)
 
 
+@pytest.mark.parametrize("deterministic_prefix", [False, True])
+def test_symbolic_angle_identity_includes_owner(deterministic_prefix):
+    first_simulation = PhasedOutcomeCompleteSimulation(1)
+    second_simulation = PhasedOutcomeCompleteSimulation(1)
+    if deterministic_prefix:
+        first_simulation.measure(SparsePauli("Z_0"))
+        second_simulation.allocate_symbolic_angle()
+    first = first_simulation.allocate_symbolic_angle()
+    second = second_simulation.allocate_symbolic_angle()
+    assert first.index == 0
+    assert second.index == int(deterministic_prefix)
+    assert first != second
+    assert second != first
+
+    retrieved = first_simulation.symbolic_angles[0]
+    assert first == retrieved
+    assert hash(first) == hash(retrieved)
+    assert len({first, retrieved, second}) == 2
+    values = {first: "first", second: "second"}
+    assert values[retrieved] == "first"
+    assert values[second_simulation.symbolic_angles[-1]] == "second"
+
+    next_angle = first_simulation.allocate_symbolic_angle()
+    assert first != next_angle
+    assert len({first, next_angle}) == 2
+
+
+def test_native_action_rejects_entangled_extra_qubit():
+    simulation = PhasedOutcomeCompleteSimulation(2)
+    simulation.apply_unitary(UnitaryOpcode.PrepareBell, [0, 1])
+    with pytest.raises(ValueError, match="AuxiliaryQubitsEntangled"):
+        simulation.phased_action([], [0])
+
+
 def test_output_phase_exponent_rejects_short_assignment():
     simulation = PhasedOutcomeCompleteSimulation(2)
     assert simulation.output_phase_exponent([]) == 0

@@ -210,9 +210,10 @@ fn action_from_simulation<S: ActionSimulation>(
 
     let auxiliary_qubits: Vec<QubitId> = output_qubits
         .iter()
+        .chain(reference_qubits.iter())
         .copied()
         .collect::<IndexSet>()
-        .complement(qubit_count)
+        .complement(qubit_count.max(simulation.qubit_count()))
         .into_iter()
         .collect();
     let auxiliary_stabilizers =

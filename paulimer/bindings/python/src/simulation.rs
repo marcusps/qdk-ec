@@ -1,3 +1,4 @@
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -66,6 +67,8 @@ impl From<PhasedOutcomeCompleteSimulation> for PyPhasedOutcomeCompleteSimulation
 /// with the same `index` are required to correspond, so describing both circuits in terms of the
 /// `k`-th angle is what makes the comparison meaningful -- regardless of how the rest of each
 /// circuit is written.
+///
+/// Handles compare equal only when they identify the same angle in the same simulation.
 #[derive(Clone)]
 #[pyclass(name = "SymbolicAngle", module = "paulimer", frozen)]
 pub struct PySymbolicAngle {
@@ -90,12 +93,15 @@ impl PySymbolicAngle {
 
     #[must_use]
     pub fn __eq__(&self, other: &Self) -> bool {
-        self.outcome == other.outcome
+        Arc::ptr_eq(&self.owner, &other.owner) && self.outcome == other.outcome
     }
 
     #[must_use]
     pub fn __hash__(&self) -> u64 {
-        self.outcome as u64
+        let mut hasher = DefaultHasher::new();
+        Arc::as_ptr(&self.owner).hash(&mut hasher);
+        self.outcome.hash(&mut hasher);
+        hasher.finish()
     }
 }
 

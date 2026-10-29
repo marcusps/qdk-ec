@@ -57,10 +57,11 @@ pub fn phased_action_of(
 /// `UnitaryOp::PrepareBell`, following the same layout as [`phased_action_of`]: the reference qubit
 /// for `input_qubits[k]` is `system_qubit_count + k`, where `system_qubit_count` is one past the
 /// largest index appearing in `input_qubits` or `output_qubits`.
+/// Every other simulation qubit is auxiliary unless it is an output.
 ///
 /// # Errors
 ///
-/// Returns [`ActionError::AuxiliaryQubitsEntangled`] if the non-output system qubits remain
+/// Returns [`ActionError::AuxiliaryQubitsEntangled`] if the auxiliary qubits remain
 /// entangled with the rest of the state.
 pub fn phased_action_from_simulation(
     simulation: &PhasedOutcomeCompleteSimulation,
