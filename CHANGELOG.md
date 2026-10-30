@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use the sample-source constructors instead of their `outcomes` aliases. Existing capacity keyword arguments and Rust `Simulation` implementations remain supported.
 
 ### Fixed
+- `OutcomeCompleteSimulation::conditional_pauli` now treats repeated outcome IDs as a parity, so pairs cancel, as the other simulators and `is_stabilizer_with_conditional_sign` already did.
 - `Simulation::allocate_random_bit` now returns the public outcome ID in all pauliverse simulators.
 - `OutcomeCompleteSimulation::is_stabilizer` no longer ignores the observable's sign, so it now distinguishes `+P` from `-P` and rejects the non-Hermitian `±iP`.
 - `is_stabilizer_with_conditional_sign` now rejects observables with an imaginary phase in outcome-complete and outcome-specific simulation.
