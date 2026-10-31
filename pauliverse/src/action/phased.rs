@@ -1,6 +1,5 @@
 use super::{
     ActionError, ActionsInequivalenceReason, CircuitAction, QubitId, action_from_simulation, build_action, unit_vector,
-    zero_map,
 };
 use crate::phased_outcome_complete_simulation::phase_form_exponent;
 use crate::{PhasedOutcomeCompleteSimulation, Simulation, circuit::Circuit};
@@ -384,24 +383,12 @@ impl PhasedCircuitAction {
         other: &PhasedCircuitAction,
         self_outcomes_from_other_outcomes: Option<&AffineMap>,
     ) -> Result<(), Vec<ActionsInequivalenceReason>> {
-        let zero = zero_map(&self.action, &other.action);
-        let outcome_map = self_outcomes_from_other_outcomes.unwrap_or(&zero);
-        let self_outcomes_from_other_branch_bits = outcome_map.dot(&other.action.outcomes_from_branch_bits);
         let self_branch_bits_from_other_branch_bits = self
             .action
-            .branch_bits_from_outcomes
-            .dot(&self_outcomes_from_other_branch_bits);
+            .branch_map_with_outcome_map(&other.action, self_outcomes_from_other_outcomes)?;
 
         if !self.angle_correspondence_is_clean(other, &self_branch_bits_from_other_branch_bits) {
             return Err(vec![ActionsInequivalenceReason::SymbolicAngleMixed]);
-        }
-        if self
-            .action
-            .outcomes_from_branch_bits
-            .dot(&self_branch_bits_from_other_branch_bits)
-            != self_outcomes_from_other_branch_bits
-        {
-            return Err(vec![ActionsInequivalenceReason::RandomOutcomeCoverage]);
         }
         self.check_with_branch_map(other, &self_branch_bits_from_other_branch_bits, None)?;
         if !self.branch_map_covers_self(&self_branch_bits_from_other_branch_bits) {

@@ -366,6 +366,8 @@ impl CircuitAction {
     /// Check if two actions are equivalent when outcomes are remapped.
     /// Outcomes of self `o_self` = `A(o_other)` where A is `self_outcomes_from_other_outcomes` and `o_other` are outcomes of other.
     /// When map is none, it is assumed that zero map is used, as common for circuits with unitary action.
+    /// The map must send possible records to possible records and cover every distinct operation of
+    /// `self`. Proportional outcome operations may be compressed, preserving their summed probabilities.
     ///
     /// # Errors
     ///
@@ -377,16 +379,14 @@ impl CircuitAction {
     ) -> Result<(), Vec<ActionsInequivalenceReason>> {
         self.is_equivalent_up_to_signs(other)?;
 
-        let zero_map = zero_map(self, other);
-        let self_outcomes_from_other_outcomes = self_outcomes_from_other_outcomes.unwrap_or(&zero_map);
+        let self_branch_bits_from_other_branch_bits =
+            self.branch_map_with_outcome_map(other, self_outcomes_from_other_outcomes)?;
 
-        let self_outcomes_from_other_branch_bits =
-            self_outcomes_from_other_outcomes.dot(&other.outcomes_from_branch_bits);
-        let self_branch_bits_from_other_branch_bits = self
-            .branch_bits_from_outcomes
-            .dot(&self_outcomes_from_other_branch_bits);
-
-        let reasons = self.sign_reasons_with_branch_map(other, &self_branch_bits_from_other_branch_bits);
+        let mut reasons = self.sign_reasons_with_branch_map(other, &self_branch_bits_from_other_branch_bits);
+        let signs = self.choi_state_stabilizers.sign_from_branch_bits.matrix();
+        if (signs * self_branch_bits_from_other_branch_bits.matrix()).rank() != signs.rank() {
+            reasons.push(ActionsInequivalenceReason::RandomOutcomeCoverage);
+        }
         if reasons.is_empty() { Ok(()) } else { Err(reasons) }
     }
 
@@ -440,6 +440,26 @@ impl CircuitAction {
     #[must_use]
     pub fn outcome_count(&self) -> usize {
         self.branch_bits_from_outcomes.input_dimension()
+    }
+
+    fn branch_map_with_outcome_map(
+        &self,
+        other: &CircuitAction,
+        outcome_map: Option<&AffineMap>,
+    ) -> Result<AffineMap, Vec<ActionsInequivalenceReason>> {
+        let zero = zero_map(self, other);
+        let outcome_map = outcome_map.unwrap_or(&zero);
+        if outcome_map.input_dimension() != other.outcome_count()
+            || outcome_map.output_dimension() != self.outcome_count()
+        {
+            return Err(vec![ActionsInequivalenceReason::RandomOutcomeCoverage]);
+        }
+        let outcomes_from_other_branch_bits = outcome_map.dot(&other.outcomes_from_branch_bits);
+        let branch_map = self.branch_bits_from_outcomes.dot(&outcomes_from_other_branch_bits);
+        if self.outcomes_from_branch_bits.dot(&branch_map) != outcomes_from_other_branch_bits {
+            return Err(vec![ActionsInequivalenceReason::RandomOutcomeCoverage]);
+        }
+        Ok(branch_map)
     }
 
     fn sign_reasons_with_branch_map(

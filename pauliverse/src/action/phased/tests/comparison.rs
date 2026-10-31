@@ -188,6 +188,45 @@ pub(super) fn true_random_coordinates_must_follow_physical_records() {
 }
 
 #[test]
+fn repeated_measurement_sign_is_an_outcome_relabeling() {
+    let action = |negative| {
+        let circuit = build_circuit(|builder| {
+            builder.measure(&sparse(&[z(0)]));
+            let observable = if negative { -sparse(&[z(0)]) } else { sparse(&[z(0)]) };
+            builder.measure(&observable);
+        });
+        phased_action_of(&circuit, &[0], &[0]).expect("repeated measurement")
+    };
+    let positive = action(false);
+    let negative = action(true);
+    positive.is_equivalent(&negative).expect("outcome labels may differ");
+    negative.is_equivalent(&positive).expect("relabeling is reversible");
+}
+
+#[test]
+fn corrected_measurements_are_a_uniform_outcome_refinement() {
+    let action = |first| {
+        let circuit = build_circuit(|builder| {
+            builder.measure(&sparse(&[z(0)]));
+            let angle = builder.allocate_symbolic_angle();
+            builder.symbolic_pauli_exp(&sparse(&[z(0)]), angle);
+            builder.measure(&sparse(&[first]));
+            let last = builder.measure(&sparse(&[x(0)]));
+            builder.conditional_pauli(&sparse(&[z(0)]), &[last], false);
+        });
+        phased_action_of(&circuit, &[0], &[0]).expect("corrected measurements")
+    };
+    let independent = action(paulimer::core::y(0));
+    let repeated = action(x(0));
+    independent
+        .is_equivalent(&repeated)
+        .expect("the extra random record only refines the same operation");
+    repeated
+        .is_equivalent(&independent)
+        .expect("compression preserves the summed outcome probabilities");
+}
+
+#[test]
 pub(super) fn rotation_equals_itself() {
     let (zz, zz_input, zz_output) = zz_rotation();
     let action = phased_action_of(&zz, &zz_input, &zz_output).expect("action");
