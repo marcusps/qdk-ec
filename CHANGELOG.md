@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `clifford_to_transvections` in paulimer, with `CliffordUnitary.to_transvections()` in the Python bindings, decomposing a Clifford's symplectic action into a linear number of Hermitian Pauli generators of `π/4` exponents. The Python method raises `ValueError` for an invalid tableau.
 - `clifford_fixed_space` in paulimer, with `CliffordUnitary.fixed_space()` in the Python bindings, returning Hermitian generators of the Pauli operators that conjugation fixes up to sign.
 - `clifford_to_transvections_minimal` returns `TransvectionDecomposition { transvections, pauli_correction }`. Python `CliffordUnitary.to_transvections_minimal()` returns `(list[SparsePauli], SparsePauli)`. Apply the rotations in order, then apply the correction with `left_mul_pauli`. The result reproduces the signed tableau, but not global phase. The rotation count is the unsigned minimum and excludes the final Pauli. The greedy API remains unsigned. Alternating restrictions skip span enumeration. The Python method raises `ValueError` for an invalid tableau.
+- The minimal transvection decomposition tries a checked bordered construction before the exhaustive residue fix search. Failed candidates use the retained search. Both paths compute the final Pauli correction from their selected rotation list.
 - `branch_bit_count`, `branch_bit_capacity`, and `outcome_introduces_branch_bit` distinguish internal branch coordinates from public outcome IDs.
 - `OutcomeSpecificSimulation` constructors with `samples` in their names distinguish the sample source from recorded outcomes. The zero source does not change deterministic outcomes.
 
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PhasedCliffordUnitary::state_amplitude_phase_exponent_usize` handles registers wider than `usize` without shift overflow.
 - Complemented conditional Paulis preserve the exact phase for imaginary operators.
 - Deprecated Python simulation aliases identify the caller in warnings.
+- `OutcomeCompleteSimulation::conditional_pauli` now treats repeated outcome IDs as a parity, so pairs cancel, as the other simulators and `is_stabilizer_with_conditional_sign` already did.
 - `Simulation::allocate_random_bit` now returns the public outcome ID in all pauliverse simulators.
 - `OutcomeCompleteSimulation::is_stabilizer` no longer ignores the observable's sign, so it now distinguishes `+P` from `-P` and rejects the non-Hermitian `±iP`.
 - `is_stabilizer_with_conditional_sign` now rejects observables with an imaginary phase in outcome-complete and outcome-specific simulation.

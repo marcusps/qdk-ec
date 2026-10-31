@@ -16,7 +16,8 @@
 use std::collections::HashSet;
 
 use binar::matrix::AlignedBitMatrix;
-use binar::{Bitwise, IndexSet};
+use binar::vec::AlignedBitVec;
+use binar::{Bitwise, BitwisePair, BitwisePairMut, IndexSet};
 
 use super::transvection::{assign_positive_hermitian_phase, symplectic_basis};
 use super::{Clifford, CliffordMutable, CliffordUnitary, PreimageViews};
@@ -61,7 +62,9 @@ pub struct TransvectionDecomposition {
 /// one produced by `CliffordUnitary::zero`, can make the residue-fix step fail and panic.
 /// Candidate exhaustion reaches `unreachable!`. A separate Lean proof establishes residue-fix
 /// existence in every dimension, but does not verify the compiled Rust implementation.
-/// Exhaustive Rust tests cover the residue fix step through three qubits.
+/// The public oracles cover complete decompositions through three qubits, not the retained search.
+/// Separate direct tests exercise the search on every rank-plus-one action in those domains.
+/// The three-qubit direct test is ignored by default.
 /// See `docs/transvection-minimality-correction.md` for the proof links and implementation limits.
 ///
 /// # Running time and memory
@@ -71,6 +74,10 @@ pub struct TransvectionDecomposition {
 /// exceptional sums. The search rejects alternating restrictions without enumerating their spans,
 /// which avoids the initial exponential scan for a SWAP layer.
 /// It memoizes failed subspaces and generates candidates lazily, but it gives no polynomial bound.
+/// When the core is not triangularizable, a bordered construction supplies a candidate factorization.
+/// The code checks its dimensions, nonzero factors, factor count, and exact unsigned (symplectic) action before acceptance.
+/// Construction or verification failure uses the retained exhaustive residue search.
+/// See `docs/bordered-transvection-construction.md` for the algorithm and its measured coverage.
 /// See `docs/transvection-minimality-correction.md` for measured limits.
 /// Use [`super::clifford_to_transvections`] when a linear factor count is sufficient and strict minimality
 /// is unnecessary.
@@ -474,14 +481,209 @@ fn minimal_decomposition(action: &AlignedBitMatrix, qubit_count: usize) -> Vec<V
         return Vec::new();
     }
     let Ok(transform) = congruence_triangularize(&core) else {
-        let fix = find_fix_vector(action, qubit_count, &basis, rank);
-        let updated = action.dot(&transvection_matrix(&fix, qubit_count));
-        let mut vectors = minimal_decomposition(&updated, qubit_count);
-        vectors.push(fix);
-        return vectors;
+        // A bordered candidate can exceed the minimum, so the rank-length search must run first.
+        let candidate = bordered_decomposition(&core, &basis);
+        return verified_decomposition_or_search(action, qubit_count, &basis, candidate);
     };
     let defining = transform.dot(&basis);
     (0..rank).map(|row| matrix_row(&defining, row, dimension)).collect()
+}
+
+struct BorderedFamily {
+    vectors: Vec<Vec<bool>>,
+    relation: Vec<bool>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum BorderedFamilyIssue {
+    CoreShape,
+    VectorCount,
+    RelationLength,
+    VectorLength,
+    EvenRelation,
+    NonUnitLower,
+    NonzeroRelation,
+    MissingRank,
+}
+
+impl BorderedFamily {
+    fn is_valid(&self, core: &AlignedBitMatrix) -> bool {
+        self.validate(core).is_ok()
+    }
+
+    fn validate(&self, core: &AlignedBitMatrix) -> Result<(), Vec<BorderedFamilyIssue>> {
+        let dimension = core.row_count();
+        if core.column_count() != dimension {
+            return Err(vec![BorderedFamilyIssue::CoreShape]);
+        }
+        if self.relation.len() != self.vectors.len() {
+            return Err(vec![BorderedFamilyIssue::RelationLength]);
+        }
+        if self.vectors.iter().any(|vector| vector.len() != dimension) {
+            return Err(vec![BorderedFamilyIssue::VectorLength]);
+        }
+        let mut issues = Vec::new();
+        if self.vectors.len() != dimension + 1 {
+            issues.push(BorderedFamilyIssue::VectorCount);
+        }
+        if self.relation.iter().filter(|&&bit| bit).count() % 2 != 1 {
+            issues.push(BorderedFamilyIssue::EvenRelation);
+        }
+        let coefficients = vectors_to_matrix(&self.vectors, dimension);
+        let gram = coefficients.dot(core).dot(&coefficients.transposed());
+        let unit_lower = (0..self.vectors.len()).all(|row| {
+            (row..self.vectors.len()).all(|column| {
+                (gram.get((row, column)) ^ (self.relation[row] & self.relation[column])) == (row == column)
+            })
+        });
+        if !unit_lower {
+            issues.push(BorderedFamilyIssue::NonUnitLower);
+        }
+        let nonzero_relation = (0..dimension).any(|column| {
+            self.vectors
+                .iter()
+                .zip(&self.relation)
+                .fold(false, |sum, (vector, &selected)| sum ^ (selected & vector[column]))
+        });
+        if nonzero_relation {
+            issues.push(BorderedFamilyIssue::NonzeroRelation);
+        }
+        if row_reduce_with_transform(&coefficients).0.row_count() != dimension {
+            issues.push(BorderedFamilyIssue::MissingRank);
+        }
+        if issues.is_empty() { Ok(()) } else { Err(issues) }
+    }
+}
+
+/// Peels a non-isotropic vector, or constructs a simplex on an alternating restriction.
+fn bordered_family(core: &AlignedBitMatrix, basis: &[Vec<bool>]) -> Option<BorderedFamily> {
+    let dimension = core.row_count();
+    let coordinates = vectors_to_matrix(basis, dimension);
+    let restricted = coordinates.dot(core).dot(&coordinates.transposed());
+    let pick = (0..basis.len())
+        .find(|&index| restricted.get((index, index)))
+        .map(|index| basis[index].clone())
+        .or_else(|| {
+            (0..basis.len()).find_map(|first| {
+                (first + 1..basis.len())
+                    .find(|&second| restricted.get((first, second)) != restricted.get((second, first)))
+                    .map(|second| xor_vectors(&basis[first], &basis[second]))
+            })
+        });
+    if let Some(pick) = pick {
+        let complement = right_orthogonal_complement(core, &pick, basis)?;
+        let mut family = bordered_family(core, &complement)?;
+        family.vectors.insert(0, pick);
+        family.relation.insert(0, false);
+        Some(family)
+    } else {
+        let vectors = symplectic_simplex(core, basis)?;
+        let relation = vec![true; vectors.len()];
+        Some(BorderedFamily { vectors, relation })
+    }
+}
+
+/// Extends the simplex on a pair's orthogonal complement by two points.
+fn symplectic_simplex(core: &AlignedBitMatrix, basis: &[Vec<bool>]) -> Option<Vec<Vec<bool>>> {
+    let Some(first) = basis.first() else {
+        return Some(vec![vec![false; core.row_count()]]);
+    };
+    let partner = (1..basis.len()).find(|&index| bilinear(core, first, &basis[index]))?;
+    let second = &basis[partner];
+    let mut complement = Vec::with_capacity(basis.len() - 2);
+    for (index, vector) in basis.iter().enumerate().skip(1) {
+        if index == partner {
+            continue;
+        }
+        let mut projected = vector.clone();
+        if bilinear(core, second, vector) {
+            projected = xor_vectors(&projected, first);
+        }
+        if bilinear(core, first, vector) {
+            projected = xor_vectors(&projected, second);
+        }
+        complement.push(projected);
+    }
+    let mut vectors = vec![second.clone(), xor_vectors(first, second)];
+    vectors.extend(
+        symplectic_simplex(core, &complement)?
+            .iter()
+            .map(|vector| xor_vectors(vector, first)),
+    );
+    Some(vectors)
+}
+
+fn bordered_decomposition(core: &AlignedBitMatrix, basis: &AlignedBitMatrix) -> Option<Vec<Vec<bool>>> {
+    let rank = core.row_count();
+    let standard: Vec<Vec<bool>> = (0..rank)
+        .map(|index| (0..rank).map(|column| index == column).collect())
+        .collect();
+    let family = bordered_family(core, &standard)?;
+    if !family.is_valid(core) {
+        return None;
+    }
+    let defining = vectors_to_matrix(&family.vectors, rank).dot(basis);
+    Some(
+        (0..defining.row_count())
+            .map(|row| matrix_row(&defining, row, basis.column_count()))
+            .collect(),
+    )
+}
+
+fn right_multiply_transvection(matrix: &mut AlignedBitMatrix, vector: &[bool], qubit_count: usize) {
+    let packed: AlignedBitVec = vector.iter().copied().collect();
+    let dual: AlignedBitVec = vector[qubit_count..]
+        .iter()
+        .chain(&vector[..qubit_count])
+        .copied()
+        .collect();
+    for row in 0..matrix.row_count() {
+        if matrix.row(row).dot(&dual.as_view()) {
+            matrix.row_mut(row).bitxor_assign(&packed.as_view());
+        }
+    }
+}
+
+fn verifies_bordered_decomposition(
+    action: &AlignedBitMatrix,
+    qubit_count: usize,
+    rank: usize,
+    vectors: &[Vec<bool>],
+) -> bool {
+    let dimension = 2 * qubit_count;
+    if vectors.len() != rank + 1
+        || vectors
+            .iter()
+            .any(|vector| vector.len() != dimension || !vector.iter().any(|&bit| bit))
+    {
+        return false;
+    }
+    let mut rebuilt = AlignedBitMatrix::identity(dimension);
+    for vector in vectors {
+        right_multiply_transvection(&mut rebuilt, vector, qubit_count);
+    }
+    rebuilt == *action
+}
+
+fn verified_decomposition_or_search(
+    action: &AlignedBitMatrix,
+    qubit_count: usize,
+    basis: &AlignedBitMatrix,
+    candidate: Option<Vec<Vec<bool>>>,
+) -> Vec<Vec<bool>> {
+    let rank = basis.row_count();
+    if let Some(vectors) =
+        candidate.filter(|vectors| verifies_bordered_decomposition(action, qubit_count, rank, vectors))
+    {
+        return vectors;
+    }
+    #[cfg(test)]
+    bordered_tests::FALLBACK_CALLS.set(bordered_tests::FALLBACK_CALLS.get() + 1);
+    let fix = find_fix_vector(action, qubit_count, basis, rank);
+    let updated = action.dot(&transvection_matrix(&fix, qubit_count));
+    let mut vectors = minimal_decomposition(&updated, qubit_count);
+    vectors.push(fix);
+    vectors
 }
 
 /// Searches for a residue vector `v` such that `F·T_v` has a congruence-triangularizable residue core of
@@ -489,7 +691,9 @@ fn minimal_decomposition(action: &AlignedBitMatrix, qubit_count: usize) -> Vec<V
 ///
 /// A separate Lean proof establishes that a nonzero fix exists in every dimension.
 /// Candidate exhaustion reaches `unreachable!`; the proof does not verify compiled Rust.
-/// Exhaustive Rust tests cover this step through three qubits.
+/// Direct tests exercise all 225 two-qubit and 150,255 three-qubit rank-plus-one cases.
+/// No one-qubit action needs this step. The three-qubit direct test is ignored by default.
+/// The public decomposition oracles do not exercise this retained search.
 /// See `docs/transvection-minimality-correction.md` for the proof links and implementation limits.
 ///
 /// Candidates are the nonzero residue vectors in ascending binary-coordinate order. The search is
@@ -540,3 +744,11 @@ fn vector_to_pauli(vector: &[bool], qubit_count: usize) -> SparsePauli {
 #[cfg(test)]
 #[path = "transvection_exact_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "transvection_bordered_tests.rs"]
+mod bordered_tests;
+
+#[cfg(test)]
+#[path = "transvection_search_tests.rs"]
+mod retained_search_tests;

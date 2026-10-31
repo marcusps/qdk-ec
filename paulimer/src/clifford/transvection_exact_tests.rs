@@ -1,10 +1,49 @@
-use super::{span_vectors, subspace_key, triangularize_subspace};
+use super::{right_multiply_transvection, span_vectors, subspace_key, transvection_matrix, triangularize_subspace};
 use binar::matrix::AlignedBitMatrix;
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use std::cell::Cell;
 use std::collections::HashSet;
 
 thread_local! {
     pub(super) static SPAN_VECTOR_VISITS: Cell<usize> = const { Cell::new(0) };
+}
+
+#[test]
+fn rank_one_replay_matches_every_one_qubit_matrix_and_vector() {
+    for matrix_bits in 0..16 {
+        let mut matrix = AlignedBitMatrix::zeros(2, 2);
+        for row in 0..2 {
+            for column in 0..2 {
+                matrix.set((row, column), matrix_bits & (1 << (2 * row + column)) != 0);
+            }
+        }
+        for vector_bits in 0..4 {
+            let vector: Vec<bool> = (0..2).map(|bit| vector_bits & (1 << bit) != 0).collect();
+            let expected = matrix.dot(&transvection_matrix(&vector, 1));
+            let mut actual = matrix.clone();
+            right_multiply_transvection(&mut actual, &vector, 1);
+            assert_eq!(actual, expected);
+        }
+    }
+}
+
+#[test]
+fn rank_one_replay_matches_matrix_products_across_packed_boundaries() {
+    let mut generator = StdRng::seed_from_u64(217);
+    for qubit_count in [0, 1, 2, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256, 257] {
+        let dimension = 2 * qubit_count;
+        let mut actual = AlignedBitMatrix::random_with_rng(dimension, dimension, &mut generator);
+        let mut expected = actual.clone();
+        let mut vectors = vec![vec![false; dimension], vec![true; dimension]];
+        for _ in 0..8 {
+            vectors.push((0..dimension).map(|_| generator.random()).collect());
+        }
+        for vector in vectors {
+            expected = expected.dot(&transvection_matrix(&vector, qubit_count));
+            right_multiply_transvection(&mut actual, &vector, qubit_count);
+            assert_eq!(actual, expected, "rank-one replay differs at {qubit_count} qubits");
+        }
+    }
 }
 
 #[test]
