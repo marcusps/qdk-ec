@@ -761,7 +761,7 @@ fn phased_allocate_random_bit_returns_public_outcome_id() {
 /// outcome twice is the same as naming none. The shift term used to treat the list as a set, so a
 /// repeated outcome whose reported value is 1 applied the Pauli when it should not.
 #[test]
-fn a_repeated_outcome_is_the_parity_of_its_mentions() {
+fn phased_repeated_outcome_is_the_parity_of_its_mentions() {
     fn run(simulation: &mut impl Simulation, mentions: usize, parity: bool) -> bool {
         let x0: SparsePauli = [x(0)].as_slice().into();
         let z0: SparsePauli = [z(0)].as_slice().into();
